@@ -1,6 +1,7 @@
 import { Route, Routes } from "react-router-dom";
 import { RequireAuth } from "./auth/RequireAuth";
 import { Layout } from "./components/Layout";
+import { AccountsPage } from "./pages/AccountsPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
@@ -18,7 +19,7 @@ export default function App() {
         }
       >
         <Route index element={<DashboardPage />} />
-        <Route path="accounts" element={<PlaceholderPage title="Accounts" />} />
+        <Route path="accounts" element={<AccountsPage />} />
         <Route path="transactions" element={<PlaceholderPage title="Transactions" />} />
         <Route path="budgets" element={<PlaceholderPage title="Budgets" />} />
         <Route path="import" element={<PlaceholderPage title="Import" />} />
