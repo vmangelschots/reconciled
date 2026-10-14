@@ -31,12 +31,24 @@ covers the whole stack rather than a single component. See
 
 ## Decisions
 
-### Backend: Python + FastAPI, SQLAlchemy, Alembic
-FastAPI gives async support, automatic OpenAPI docs (useful while the
-React frontend is being built against a moving API), and Pydantic
-request/response validation. SQLAlchemy + Alembic gives versioned schema
-migrations from day one, which matters once real transaction data exists
-and later changes need to alter the schema safely.
+### Backend: Django + Django REST Framework
+Chosen for existing familiarity with Django, and it fits this app well
+independent of that: this is a CRUD- and reporting-heavy app with no
+concurrency pressure, which plays to Django's strengths. Django's ORM and
+built-in migrations give versioned schema changes without assembling a
+separate ORM and migration tool; its auth app provides the single-user
+login (a `User` plus session authentication) instead of a hand-rolled
+equivalent; and its admin site gives a free, immediately-usable back
+office for inspecting and correcting data (e.g. a stuck import session or
+a miscategorized transaction) without writing one-off scripts. Django
+REST Framework (DRF) provides the JSON API the React frontend consumes:
+serializers, viewsets/routers, and session-based authentication.
+
+Trade-off: Django does not generate OpenAPI docs for free the way FastAPI
+does - add `drf-spectacular` if interactive API docs are wanted. Django
+is also sync-first by default; this is a non-issue here since nothing in
+this app is concurrency-bound enough to need Django's async views/ORM
+support.
 
 ### Database: PostgreSQL
 Considered SQLite for zero-ops simplicity, but chose PostgreSQL:
@@ -102,15 +114,18 @@ ambiguity for a single-user, single-deployment app; a timestamp-level
 timezone model is unnecessary complexity for v1.
 
 ### Single-user auth
-One configured login (username + password, hashed; session via a signed
-HTTP-only cookie) gates the whole app. No per-resource permission model,
-consistent with the single-user/single-household non-goal above.
+Django's built-in auth app provides the user model and password hashing;
+a single `User` is created for the deployment (e.g. via `createsuperuser`
+or a bootstrap command). DRF's session authentication (Django's signed,
+HTTP-only session cookie) gates every non-login API route. No per-resource
+permission model, consistent with the single-user/single-household
+non-goal above - and no custom auth code to write or maintain.
 
 ### Deployment: docker-compose
-Three services: `db` (Postgres), `backend` (FastAPI, serves the API),
+Three services: `db` (Postgres), `backend` (Django, served via gunicorn),
 `frontend` (static React build served via nginx, or served directly by
-the backend for v1 to minimize moving parts - final choice left to
-implementation but should not block the API design). Single
+the backend via whitenoise for v1 to minimize moving parts - final choice
+left to implementation but should not block the API design). Single
 `docker-compose.yml` for self-hosting, matching the project's
 Firefly-III-style self-hosting goal.
 
@@ -135,7 +150,7 @@ Firefly-III-style self-hosting goal.
 ## Migration Plan
 
 Greenfield project - no production data or running system to migrate.
-- Initial Alembic migration creates the full v1 schema (accounts,
+- Initial Django migration(s) create the full v1 schema (accounts,
   transactions, categories, category_limits, recurring_transactions,
   import_sessions).
 - `docker-compose up` brings up `db`, `backend`, `frontend` together for

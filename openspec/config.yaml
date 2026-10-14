@@ -12,9 +12,11 @@ context: |
   Project: "reconciled" - a personal budget app, drawing on ideas from
   YNAB/Actual Budget and PocketSmith/Firefly III.
 
-  Stack: self-hosted web app. Python backend (assume FastAPI unless a design
-  argues otherwise), React frontend. Should be Docker-deployable for
-  self-hosting, in the spirit of Firefly III.
+  Stack: self-hosted web app. Django backend (Django REST Framework for the
+  API, Django's ORM/migrations/auth/admin) - chosen deliberately for
+  familiarity, don't propose swapping it for another Python framework.
+  React frontend. Should be Docker-deployable for self-hosting, in the
+  spirit of Firefly III.
 
   Budgeting model: traditional category budgeting, not zero-based envelope
   budgeting. Each category gets a monthly spending limit. On top of that,
