@@ -2,10 +2,10 @@
 
 ## 1. Project scaffolding & single-user auth
 
-- [ ] 1.1 Scaffold the Django project and a `core` app (settings configured for Postgres, Django REST Framework installed) and verify `manage.py migrate` runs cleanly against a fresh database
-- [ ] 1.2 Add a `db` Postgres service and a `backend` service to `docker-compose.yml` with a `Dockerfile` for the backend, and verify `docker compose up db backend` starts both and a `/health` endpoint on the backend returns 200
-- [ ] 1.3 Scaffold the React frontend with a basic layout/routing shell, add its `Dockerfile` and a `frontend` service to `docker-compose.yml`, and verify `docker compose up` serves the placeholder app at the frontend's published port
-- [ ] 1.4 Configure Django's built-in auth (a single `User`, created via a bootstrap management command) and a login endpoint using DRF session authentication, protecting all non-login API routes, and verify tests: an unauthenticated request to a protected route returns 401, and a correct login followed by a request using the returned session cookie succeeds
+- [x] 1.1 Scaffold the Django project and a `core` app (settings configured for Postgres, Django REST Framework installed) and verify `manage.py migrate` runs cleanly against a fresh database
+- [ ] 1.2 Add a `db` Postgres service and a `backend` service to `docker-compose.yml` with a `Dockerfile` for the backend, and verify `docker compose up db backend` starts both and a `/health` endpoint on the backend returns 200 (files written and `docker compose config` validated; actual `docker compose up` not yet run - this sandbox has no access to the Docker daemon, see session notes)
+- [ ] 1.3 Scaffold the React frontend with a basic layout/routing shell, add its `Dockerfile` and a `frontend` service to `docker-compose.yml`, and verify `docker compose up` serves the placeholder app at the frontend's published port (frontend builds cleanly with `npm run build`; `docker compose up` verification still pending for the same reason as 1.2)
+- [x] 1.4 Configure Django's built-in auth (a single `User`, created via a bootstrap management command) and a login endpoint using DRF session authentication, protecting all non-login API routes, and verify tests: an unauthenticated request to a protected route returns 401, and a correct login followed by a request using the returned session cookie succeeds
 
 ## 2. Accounts
 

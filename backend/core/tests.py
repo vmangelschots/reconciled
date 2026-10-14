@@ -1,0 +1,56 @@
+from django.contrib.auth import get_user_model
+from django.test import TestCase
+from django.urls import reverse
+from rest_framework.test import APIClient
+
+
+class HealthCheckTests(TestCase):
+    def test_health_returns_200_without_auth(self):
+        response = self.client.get("/health")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"status": "ok"})
+
+
+class AuthTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.username = "budgeter"
+        self.password = "a-strong-test-password"
+        get_user_model().objects.create_user(
+            username=self.username, password=self.password
+        )
+
+    def test_protected_route_requires_auth(self):
+        response = self.client.get(reverse("auth-me"))
+        self.assertEqual(response.status_code, 401)
+
+    def test_login_then_protected_route_succeeds(self):
+        login_response = self.client.post(
+            reverse("auth-login"),
+            {"username": self.username, "password": self.password},
+            format="json",
+        )
+        self.assertEqual(login_response.status_code, 200)
+        self.assertEqual(login_response.json(), {"username": self.username})
+
+        me_response = self.client.get(reverse("auth-me"))
+        self.assertEqual(me_response.status_code, 200)
+        self.assertEqual(me_response.json(), {"username": self.username})
+
+    def test_login_with_wrong_password_is_rejected(self):
+        response = self.client.post(
+            reverse("auth-login"),
+            {"username": self.username, "password": "wrong"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 401)
+
+    def test_logout_ends_the_session(self):
+        self.client.post(
+            reverse("auth-login"),
+            {"username": self.username, "password": self.password},
+            format="json",
+        )
+        self.client.post(reverse("auth-logout"))
+        response = self.client.get(reverse("auth-me"))
+        self.assertEqual(response.status_code, 401)
