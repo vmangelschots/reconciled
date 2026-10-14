@@ -1,0 +1,52 @@
+schema: spec-driven
+
+# Project context (optional)
+# Add only constraints that should guide OpenSpec artifacts and workflows.
+# Include constraints an agent cannot infer by reading the code.
+# Keep general project documentation and discoverable codebase facts out.
+# Example:
+#   context: |
+#     Designs and tasks must cover Windows, macOS, and Linux
+#     Write all artifacts in Spanish
+context: |
+  Project: "reconciled" - a personal budget app, drawing on ideas from
+  YNAB/Actual Budget and PocketSmith/Firefly III.
+
+  Stack: self-hosted web app. Python backend (assume FastAPI unless a design
+  argues otherwise), React frontend. Should be Docker-deployable for
+  self-hosting, in the spirit of Firefly III.
+
+  Budgeting model: traditional category budgeting, not zero-based envelope
+  budgeting. Each category gets a monthly spending limit. On top of that,
+  a PocketSmith-style cash-flow forecast projects future account balances
+  forward from recurring transactions/bills and scheduled income.
+
+  Transaction entry for v1: CSV and OFX file import (upload a bank export,
+  map columns, dedupe against existing transactions). No live bank sync
+  (e.g. Plaid/SimpleFIN) in v1 - do not propose it as in-scope work unless
+  the user asks.
+
+  Assume single-user / single-household use unless the user says otherwise -
+  no multi-tenant account system needed for v1.
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always state what is out of scope
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
+
+# Per-operation guidance (optional)
+# Add advisory guidance for how apply and archive work should be conducted.
+# This is separate from artifact rules above.
+# Example:
+#   operations:
+#     apply:
+#       guidance:
+#         - Keep test summaries concise
+#     archive:
+#       guidance:
+#         - Summarize the archive outcome before finishing
