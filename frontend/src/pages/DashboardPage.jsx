@@ -1,11 +1,21 @@
 import { useAuth } from "../auth/AuthContext";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 
 export function DashboardPage() {
   const { user } = useAuth();
   return (
-    <section>
-      <h1>Welcome, {user?.username}</h1>
-      <p>Accounts, transactions, budgets, import, and forecast views land here as later tasks build them out.</p>
+    <section className="mx-auto max-w-2xl">
+      <Card>
+        <CardHeader>
+          <CardTitle>Welcome, {user?.username}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-ink-secondary">
+            Accounts, transactions, budgets, import, and forecast views are in the
+            navigation above.
+          </p>
+        </CardContent>
+      </Card>
     </section>
   );
 }

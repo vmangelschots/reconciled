@@ -15,12 +15,13 @@
 ## 3. Theme system
 
 - [x] 3.1 Set up a minimal frontend test runner (Vitest + @testing-library/react) if not already present, and verify a trivial test runs (done in task 2.1, pulled forward - Vitest + Testing Library + jsdom + user-event configured, `npm test` runs via `vitest run`)
-- [ ] 3.2 Build `ThemeProvider` (resolves explicit localStorage choice > OS `prefers-color-scheme`, applies/removes the `dark` class on `<html>`, subscribes to OS preference changes via `matchMedia`) and a theme toggle control, and verify tests for every `ui-shell` theme scenario: no stored choice follows the OS preference, an explicit choice overrides the OS preference, and the choice persists across a simulated reload
+- [x] 3.2 Build `ThemeProvider` (resolves explicit localStorage choice > OS `prefers-color-scheme`, applies/removes the `dark` class on `<html>`, subscribes to OS preference changes via `matchMedia`) and a theme toggle control, and verify tests for every `ui-shell` theme scenario: no stored choice follows the OS preference, an explicit choice overrides the OS preference, and the choice persists across a simulated reload (3/3 passing, one test per scenario)
 
 ## 4. App shell
 
-- [ ] 4.1 Restyle `Layout` (nav, header, session controls) with the new primitives and the theme toggle, and implement the responsive collapse below the `md` breakpoint into a toggleable menu, and verify tests for the `ui-shell` navigation scenarios: links visible inline at wide width, links hidden behind a toggle below `md` with the toggle revealing them
-- [ ] 4.2 Restyle the login page with the new primitives, and verify manually that login still succeeds and failure now surfaces via a toast instead of inline text
+- [x] 4.1 Restyle `Layout` (nav, header, session controls) with the new primitives and the theme toggle, and implement the responsive collapse below the `md` breakpoint into a toggleable menu, and verify tests for the `ui-shell` navigation scenarios: links visible inline at wide width, links hidden behind a toggle below `md` with the toggle revealing them (2/2 passing; also mounted ThemeProvider + ToastProvider at the app root in main.jsx here, since the shell is the natural place for app-wide providers and later page tasks need useToast() already wired up)
+- [x] 4.2 Restyle the login page with the new primitives, and verify manually that login still succeeds and failure now surfaces via a toast instead of inline text
+- [x] 4.3 Restyle the dashboard page with the new primitives (gap in the original task breakdown - `proposal.md` listed "dashboard" as in scope but no task existed for it; adding and completing it here since it belongs with the rest of the shell work, not a later page group), and verify manually that it still shows the logged-in user
 
 ## 5. Restyle: Accounts
 
