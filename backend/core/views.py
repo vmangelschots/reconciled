@@ -1,5 +1,6 @@
 from django.contrib.auth import authenticate, login as django_login, logout as django_logout
 from django.http import JsonResponse
+from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -19,7 +20,12 @@ class CsrfView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
 
-    @ensure_csrf_cookie
+    # @ensure_csrf_cookie is written for plain view functions, where the
+    # request is the first positional argument. Applied directly to a
+    # bound instance method like this one, `self` lands in that slot
+    # instead, so it must go through method_decorator to rebind it
+    # correctly against the real request.
+    @method_decorator(ensure_csrf_cookie)
     def get(self, request):
         return Response({"detail": "CSRF cookie set"})
 

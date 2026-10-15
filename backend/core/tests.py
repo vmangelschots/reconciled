@@ -11,6 +11,20 @@ class HealthCheckTests(TestCase):
         self.assertEqual(response.json(), {"status": "ok"})
 
 
+class CsrfViewTests(TestCase):
+    def test_csrf_endpoint_returns_200_and_sets_cookie(self):
+        # Regression test: @ensure_csrf_cookie was once applied directly to
+        # the instance method instead of via method_decorator, which passed
+        # `self` where Django expected the real request and crashed with a
+        # 500 on every call. DRF's APIClient (used by the other tests in
+        # this file) disables CSRF enforcement by default, so this endpoint
+        # was never actually exercised by the rest of the suite - use
+        # Django's plain test Client here instead, which does.
+        response = self.client.get(reverse("auth-csrf"))
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("csrftoken", response.cookies)
+
+
 class AuthTests(TestCase):
     def setUp(self):
         self.client = APIClient()

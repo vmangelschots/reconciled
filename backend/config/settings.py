@@ -202,3 +202,27 @@ CSRF_TRUSTED_ORIGINS = [
 # header on unsafe requests; it must be readable by frontend JS.
 CSRF_COOKIE_HTTPONLY = False
 SESSION_COOKIE_HTTPONLY = True
+
+
+# Logging - Django's own default config only sends 500 tracebacks to
+# `mail_admins` (a no-op with no email backend configured), so with
+# DEBUG=False they vanish silently instead of reaching `docker compose
+# logs`. Send them to the console instead.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {"class": "logging.StreamHandler"},
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "INFO",
+    },
+    "loggers": {
+        "django.request": {
+            "handlers": ["console"],
+            "level": "ERROR",
+            "propagate": False,
+        },
+    },
+}
