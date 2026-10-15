@@ -1,3 +1,56 @@
+@import "tailwindcss";
+
+/* Tailwind v4 defaults `dark:` to prefers-color-scheme; redefine it to
+   match a `.dark` class on <html> instead, driven by ThemeProvider
+   (task 3.2) - explicit choice > OS preference, not OS preference only. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* App-wide design tokens (design.md's token table). Raw values live here
+   as plain CSS variables, redefined under .dark; @theme below exposes
+   them as Tailwind color utilities (bg-surface, text-ink-primary, etc.)
+   so both plain CSS and Tailwind utilities read from one source. */
+:root {
+  --background: #f9f9f7;
+  --surface: #fcfcfb;
+  --ink-primary: #0b0b0b;
+  --ink-secondary: #52514e;
+  --ink-muted: #898781;
+  --border: rgba(11, 11, 11, 0.1);
+  --accent: #4f46e5;
+  --success: #0ca30c;
+  --critical: #d03b3b;
+}
+
+.dark {
+  --background: #0d0d0d;
+  --surface: #1a1a19;
+  --ink-primary: #f0efec;
+  --ink-secondary: #c3c2b7;
+  --ink-muted: #898781;
+  --border: rgba(255, 255, 255, 0.1);
+  --accent: #818cf8;
+  --success: #0ca30c;
+  --critical: #e66767;
+}
+
+@theme {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-ink-primary: var(--ink-primary);
+  --color-ink-secondary: var(--ink-secondary);
+  --color-ink-muted: var(--ink-muted);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-success: var(--success);
+  --color-critical: var(--critical);
+}
+
+@layer base {
+  body {
+    @apply bg-background text-ink-primary;
+  }
+}
+
 :root {
   color-scheme: light dark;
   font-family: system-ui, sans-serif;

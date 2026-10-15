@@ -2,19 +2,19 @@
 
 ## 1. Tailwind & dependencies
 
-- [ ] 1.1 Add Tailwind CSS and its PostCSS tooling to the frontend, configured with `darkMode: 'class'` and the palette/radius tokens from design.md, and verify `npm run build` succeeds with Tailwind's base styles present in the output CSS
-- [ ] 1.2 Add `@radix-ui/react-dialog`, `@radix-ui/react-toast`, `@radix-ui/react-select`, `class-variance-authority`, `clsx`, `tailwind-merge`, and `lucide-react` as dependencies, and verify `npm run build` still succeeds with them imported
+- [x] 1.1 Add Tailwind CSS and its PostCSS tooling to the frontend, configured with `darkMode: 'class'` and the palette/radius tokens from design.md, and verify `npm run build` succeeds with Tailwind's base styles present in the output CSS (Tailwind v4 is current - no JS config file or separate PostCSS config needed; used its `@tailwindcss/vite` plugin and CSS-first `@theme`/`@custom-variant dark (&:where(.dark, .dark *))` instead of a `darkMode: 'class'` key, same class-based effect. Verified: preflight rules and our `--color-*` tokens both present in the built CSS)
+- [x] 1.2 Add `@radix-ui/react-dialog`, `@radix-ui/react-toast`, `@radix-ui/react-select`, `class-variance-authority`, `clsx`, `tailwind-merge`, and `lucide-react` as dependencies, and verify `npm run build` still succeeds with them imported (installed and build still succeeds; module resolution verified directly - real usage/import arrives with the components in task group 2)
 
 ## 2. Shared UI primitives
 
-- [ ] 2.1 Build `Button` (variants: default/accent, outline, ghost, destructive) and `Input` primitives per design.md's token table, and verify a small manual smoke page (or Storybook-free visual check in the running app) shows every variant in both light and dark mode
-- [ ] 2.2 Build `Select` (Radix-based) and `Card` primitives, and verify the same visual check in both themes
-- [ ] 2.3 Build `Dialog` (Radix-based) and a styled `Table` wrapper (header/row/cell components), and verify both render correctly and the dialog traps focus and closes on Escape
-- [ ] 2.4 Build the `ToastProvider` + `useToast()` hook (Radix Toast-based, success/error variants, auto-dismiss on success, persists until dismissed on error per the `ui-shell` spec), and verify a test confirming a success toast auto-dismisses after its delay and an error toast does not
+- [x] 2.1 Build `Button` (variants: default/accent, outline, ghost, destructive) and `Input` primitives per design.md's token table, and verify a small manual smoke page (or Storybook-free visual check in the running app) shows every variant in both light and dark mode (no browser/screenshot tool available in this session, so verified via component tests instead - render/click/variant-class/disabled behavior all pass - plus a successful Tailwind build; pulled task 3.1's Vitest+Testing-Library setup forward since it's needed starting here, not just at theme-system time; a real visual glance is still worth doing once pages are wired up - see group 10 note)
+- [x] 2.2 Build `Select` (Radix-based) and `Card` primitives, and verify the same visual check in both themes (verified via tests: Select opens/lists/reports a chosen value, Card renders its composed parts - required polyfilling jsdom's missing `hasPointerCapture`/`scrollIntoView` for Radix, a known, well-documented gap, not a bug in our code)
+- [x] 2.3 Build `Dialog` (Radix-based) and a styled `Table` wrapper (header/row/cell components), and verify both render correctly and the dialog traps focus and closes on Escape (tests confirm focus moves inside the dialog on open and Escape closes it; Table renders its composed parts)
+- [x] 2.4 Build the `ToastProvider` + `useToast()` hook (Radix Toast-based, success/error variants, auto-dismiss on success, persists until dismissed on error per the `ui-shell` spec), and verify a test confirming a success toast auto-dismisses after its delay and an error toast does not (3 tests: success auto-dismisses, error persists through a long delay, error dismisses manually - directly verifies the ui-shell spec's feedback scenarios, not just that the component renders)
 
 ## 3. Theme system
 
-- [ ] 3.1 Set up a minimal frontend test runner (Vitest + @testing-library/react) if not already present, and verify a trivial test runs
+- [x] 3.1 Set up a minimal frontend test runner (Vitest + @testing-library/react) if not already present, and verify a trivial test runs (done in task 2.1, pulled forward - Vitest + Testing Library + jsdom + user-event configured, `npm test` runs via `vitest run`)
 - [ ] 3.2 Build `ThemeProvider` (resolves explicit localStorage choice > OS `prefers-color-scheme`, applies/removes the `dark` class on `<html>`, subscribes to OS preference changes via `matchMedia`) and a theme toggle control, and verify tests for every `ui-shell` theme scenario: no stored choice follows the OS preference, an explicit choice overrides the OS preference, and the choice persists across a simulated reload
 
 ## 4. App shell
