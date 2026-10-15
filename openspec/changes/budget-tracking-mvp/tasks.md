@@ -46,8 +46,8 @@
 
 ## 7. End-to-end integration
 
-- [ ] 7.1 Wire `manage.py migrate` to run automatically on backend container startup, and verify that `docker compose up` against a completely fresh `db` volume results in a running stack with an up-to-date schema
-- [ ] 7.2 Verify an end-to-end smoke test against the running compose stack covering the full v1 flow: log in, create an account, import a sample CSV, confirm the resulting transactions and balance, categorize transactions and set a budget limit, view the monthly budget summary, add a recurring transaction, and view its forecast - all without errors
+- [x] 7.1 Wire `manage.py migrate` to run automatically on backend container startup, and verify that `docker compose up` against a completely fresh `db` volume results in a running stack with an up-to-date schema (an `entrypoint.sh` runs migrate before gunicorn starts; verified against a completely fresh, isolated volume - a throwaway `reconciled-verify` compose project on alternate ports, never touching the user's real stack/data - logs showed every migration applying automatically with no manual step)
+- [x] 7.2 Verify an end-to-end smoke test against the running compose stack covering the full v1 flow: log in, create an account, import a sample CSV, confirm the resulting transactions and balance, categorize transactions and set a budget limit, view the monthly budget summary, add a recurring transaction, and view its forecast - all without errors (ran the complete flow against the isolated verification stack above; every step succeeded, balance arithmetic exact at each point; verification stack fully torn down afterward, and the user's real stack rebuilt with the same entrypoint change - confirmed as a no-op migration against their already-current schema, their real data untouched throughout)
 
 ## Workflow follow-up
 
