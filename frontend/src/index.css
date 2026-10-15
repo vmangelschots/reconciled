@@ -1,6 +1,36 @@
 :root {
   color-scheme: light dark;
   font-family: system-ui, sans-serif;
+
+  --chart-surface: #fcfcfb;
+  --chart-text-primary: #0b0b0b;
+  --chart-text-secondary: #52514e;
+  --chart-text-muted: #898781;
+  --chart-gridline: #e1e0d9;
+  --chart-baseline: #c3c2b7;
+  --chart-series-1: #2a78d6;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --chart-surface: #1a1a19;
+    --chart-text-primary: #f0efec;
+    --chart-text-secondary: #c3c2b7;
+    --chart-text-muted: #898781;
+    --chart-gridline: #2c2c2a;
+    --chart-baseline: #383835;
+    --chart-series-1: #3987e5;
+  }
+}
+
+:root[data-theme="dark"] {
+  --chart-surface: #1a1a19;
+  --chart-text-primary: #f0efec;
+  --chart-text-secondary: #c3c2b7;
+  --chart-text-muted: #898781;
+  --chart-gridline: #2c2c2a;
+  --chart-baseline: #383835;
+  --chart-series-1: #3987e5;
 }
 
 body {
@@ -116,4 +146,100 @@ td {
 
 .limit-form input[type="number"] {
   width: 6rem;
+}
+
+.forecast-chart {
+  position: relative;
+  max-width: 100%;
+  margin-block-end: 1.5rem;
+}
+
+.forecast-chart svg {
+  width: 100%;
+  height: auto;
+  background: var(--chart-surface);
+  border-radius: 8px;
+}
+
+.chart-gridline {
+  stroke: var(--chart-gridline);
+  stroke-width: 1;
+}
+
+.chart-baseline {
+  stroke: var(--chart-baseline);
+  stroke-width: 1;
+}
+
+.chart-axis-label {
+  fill: var(--chart-text-muted);
+  font-size: 11px;
+}
+
+.chart-line {
+  stroke: var(--chart-series-1);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.chart-end-dot {
+  fill: var(--chart-series-1);
+  stroke: var(--chart-surface);
+  stroke-width: 2;
+}
+
+.chart-end-label {
+  fill: var(--chart-text-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.chart-crosshair {
+  stroke: var(--chart-text-muted);
+  stroke-width: 1;
+}
+
+.chart-hover-dot {
+  fill: var(--chart-series-1);
+  stroke: var(--chart-surface);
+  stroke-width: 2;
+}
+
+.chart-tooltip {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  background: var(--chart-surface);
+  border: 1px solid var(--chart-gridline);
+  border-radius: 6px;
+  padding: 0.35rem 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  pointer-events: none;
+}
+
+.chart-tooltip strong {
+  color: var(--chart-text-primary);
+}
+
+.chart-tooltip span {
+  color: var(--chart-text-secondary);
+  font-size: 0.8rem;
+}
+
+.chart-table-toggle {
+  margin-block-start: 0.5rem;
+}
+
+.horizon-presets {
+  display: flex;
+  gap: 0.5rem;
+  margin-block-end: 1rem;
+}
+
+.horizon-presets button.active {
+  font-weight: 600;
+  text-decoration: underline;
 }

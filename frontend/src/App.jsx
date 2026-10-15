@@ -4,9 +4,9 @@ import { Layout } from "./components/Layout";
 import { AccountsPage } from "./pages/AccountsPage";
 import { BudgetsPage } from "./pages/BudgetsPage";
 import { DashboardPage } from "./pages/DashboardPage";
+import { ForecastingPage } from "./pages/ForecastingPage";
 import { ImportPage } from "./pages/ImportPage";
 import { LoginPage } from "./pages/LoginPage";
-import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { TransactionsPage } from "./pages/TransactionsPage";
 
 export default function App() {
@@ -26,7 +26,7 @@ export default function App() {
         <Route path="transactions" element={<TransactionsPage />} />
         <Route path="budgets" element={<BudgetsPage />} />
         <Route path="import" element={<ImportPage />} />
-        <Route path="forecast" element={<PlaceholderPage title="Forecast" />} />
+        <Route path="forecast" element={<ForecastingPage />} />
       </Route>
     </Routes>
   );
