@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { Button } from "./ui/Button";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/Table";
 
 const WIDTH = 760;
 const HEIGHT = 280;
@@ -59,13 +61,14 @@ export function ForecastChart({ points }) {
   }
 
   return (
-    <div className="forecast-chart">
+    <div className="relative mb-6 max-w-full">
       <svg
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         role="img"
         aria-label="Projected account balance over time"
         onMouseMove={handleMove}
         onMouseLeave={() => setHoverIndex(null)}
+        className="h-auto w-full rounded-lg bg-surface"
       >
         {plot.ticks.map((tick) => (
           <g key={tick}>
@@ -126,33 +129,42 @@ export function ForecastChart({ points }) {
       </svg>
 
       {hovered && (
-        <div className="chart-tooltip" aria-hidden="true">
-          <strong>{formatCurrency(hovered.balance_cents)}</strong>
-          <span>{hovered.date}</span>
+        <div
+          className="absolute right-2 top-2 flex flex-col gap-0.5 rounded-md border border-border bg-surface px-2.5 py-1.5 pointer-events-none"
+          aria-hidden="true"
+        >
+          <strong className="text-ink-primary">{formatCurrency(hovered.balance_cents)}</strong>
+          <span className="text-xs text-ink-secondary">{hovered.date}</span>
         </div>
       )}
 
-      <button type="button" className="chart-table-toggle" onClick={() => setShowTable((v) => !v)}>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="mt-2"
+        onClick={() => setShowTable((v) => !v)}
+      >
         {showTable ? "Hide table" : "Show as table"}
-      </button>
+      </Button>
 
       {showTable && (
-        <table>
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Projected balance</th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Date</TableHead>
+              <TableHead>Projected balance</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {points.map((p) => (
-              <tr key={p.date}>
-                <td>{p.date}</td>
-                <td>{formatCurrency(p.balance_cents)}</td>
-              </tr>
+              <TableRow key={p.date}>
+                <TableCell>{p.date}</TableCell>
+                <TableCell>{formatCurrency(p.balance_cents)}</TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       )}
     </div>
   );

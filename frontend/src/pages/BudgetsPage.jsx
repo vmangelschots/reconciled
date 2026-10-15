@@ -7,6 +7,13 @@ import {
   renameCategory,
   setCategoryLimit,
 } from "../api/categories";
+import { Button } from "../components/ui/Button";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
+import { Input } from "../components/ui/Input";
+import { Label } from "../components/ui/Label";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/Table";
+import { useToast } from "../components/ui/Toast";
+import { cn } from "../lib/cn";
 
 function formatCents(cents) {
   if (cents == null) return "—";
@@ -23,14 +30,14 @@ export function BudgetsPage() {
   const [summary, setSummary] = useState(null);
   const [newCategoryName, setNewCategoryName] = useState("");
   const [editingId, setEditingId] = useState(null);
-  const [error, setError] = useState(null);
+  const toast = useToast();
 
   function reloadCategories() {
     return listCategories().then(setCategories);
   }
 
   function reloadSummary() {
-    return getBudgetSummary(month).then(setSummary).catch((e) => setError(e.message));
+    return getBudgetSummary(month).then(setSummary).catch((e) => toast.error(e.message));
   }
 
   useEffect(() => {
@@ -44,32 +51,33 @@ export function BudgetsPage() {
 
   async function handleAddCategory(event) {
     event.preventDefault();
-    setError(null);
     try {
       await createCategory(newCategoryName);
+      toast.success("Category created.");
       setNewCategoryName("");
       await reloadCategories();
       await reloadSummary();
     } catch (e) {
-      setError(e.data ? Object.values(e.data).flat().join(" ") : e.message);
+      toast.error(e.data ? Object.values(e.data).flat().join(" ") : e.message);
     }
   }
 
   async function handleRename(id, name) {
     await renameCategory(id, name);
+    toast.success("Category renamed.");
     setEditingId(null);
     await reloadCategories();
     await reloadSummary();
   }
 
   async function handleDelete(id) {
-    setError(null);
     try {
       await deleteCategory(id);
+      toast.success("Category deleted.");
       await reloadCategories();
       await reloadSummary();
     } catch (e) {
-      setError(e.data?.detail ?? e.message);
+      toast.error(e.data?.detail ?? e.message);
     }
   }
 
@@ -78,95 +86,115 @@ export function BudgetsPage() {
       month: isOverride ? month : null,
       limit_cents: Math.round(parseFloat(amountText || "0") * 100),
     });
+    toast.success("Limit updated.");
     await reloadSummary();
   }
 
   return (
-    <section>
-      <h1>Budgets</h1>
+    <section className="flex flex-col gap-6">
+      <h1 className="text-xl font-semibold text-ink-primary">Budgets</h1>
 
-      <h2>Categories</h2>
-      <form onSubmit={handleAddCategory} className="account-form">
-        <label>
-          New category
-          <input
-            value={newCategoryName}
-            onChange={(e) => setNewCategoryName(e.target.value)}
-            required
-          />
-        </label>
-        <button type="submit">Add category</button>
-      </form>
-      {error && <p role="alert">{error}</p>}
-      <ul className="category-list">
-        {categories.map((c) => (
-          <li key={c.id}>
-            {editingId === c.id ? (
-              <RenameForm
-                initialName={c.name}
-                onSave={(name) => handleRename(c.id, name)}
-                onCancel={() => setEditingId(null)}
+      <Card>
+        <CardHeader>
+          <CardTitle>Categories</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <form onSubmit={handleAddCategory} className="flex items-end gap-4">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="new-category">New category</Label>
+              <Input
+                id="new-category"
+                value={newCategoryName}
+                onChange={(e) => setNewCategoryName(e.target.value)}
+                required
               />
-            ) : (
-              <>
-                {c.name}
-                <button type="button" onClick={() => setEditingId(c.id)}>
-                  Rename
-                </button>
-                <button type="button" onClick={() => handleDelete(c.id)}>
-                  Delete
-                </button>
-              </>
-            )}
-          </li>
-        ))}
-        {categories.length === 0 && <li>No categories yet - add one above.</li>}
-      </ul>
+            </div>
+            <Button type="submit">Add category</Button>
+          </form>
 
-      <h2>Monthly summary</h2>
-      <label>
-        Month
-        <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
-      </label>
-
-      {summary && (
-        <table>
-          <thead>
-            <tr>
-              <th>Category</th>
-              <th>Limit</th>
-              <th>Spent</th>
-              <th>Remaining</th>
-              <th>Status</th>
-              <th>Set limit</th>
-            </tr>
-          </thead>
-          <tbody>
-            {summary.categories.map((row) => (
-              <tr key={row.category_id}>
-                <td>{row.category_name}</td>
-                <td>{formatCents(row.limit_cents)}</td>
-                <td>{formatCents(row.spent_cents)}</td>
-                <td>{formatCents(row.remaining_cents)}</td>
-                <td className={row.over_limit ? "over-limit" : undefined}>
-                  {row.limit_cents == null ? "No limit" : row.over_limit ? "Over limit" : "OK"}
-                </td>
-                <td>
-                  <LimitForm onSave={(amount, isOverride) => handleSetLimit(row.category_id, amount, isOverride)} />
-                </td>
-              </tr>
+          <ul className="flex flex-col gap-2">
+            {categories.map((c) => (
+              <li key={c.id} className="flex items-center gap-3">
+                {editingId === c.id ? (
+                  <RenameForm
+                    initialName={c.name}
+                    onSave={(name) => handleRename(c.id, name)}
+                    onCancel={() => setEditingId(null)}
+                  />
+                ) : (
+                  <>
+                    <span className="flex-1 text-sm text-ink-primary">{c.name}</span>
+                    <Button variant="outline" size="sm" onClick={() => setEditingId(c.id)}>
+                      Rename
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => handleDelete(c.id)}>
+                      Delete
+                    </Button>
+                  </>
+                )}
+              </li>
             ))}
-            <tr>
-              <td>Uncategorized</td>
-              <td>—</td>
-              <td>{formatCents(summary.uncategorized_spent_cents)}</td>
-              <td>—</td>
-              <td>—</td>
-              <td />
-            </tr>
-          </tbody>
-        </table>
-      )}
+            {categories.length === 0 && (
+              <li className="text-sm text-ink-secondary">No categories yet - add one above.</li>
+            )}
+          </ul>
+        </CardContent>
+      </Card>
+
+      <div className="flex flex-col gap-4">
+        <div className="flex items-end justify-between">
+          <h2 className="text-lg font-semibold text-ink-primary">Monthly summary</h2>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="summary-month">Month</Label>
+            <Input
+              id="summary-month"
+              type="month"
+              value={month}
+              onChange={(e) => setMonth(e.target.value)}
+              className="w-40"
+            />
+          </div>
+        </div>
+
+        {summary && (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Category</TableHead>
+                <TableHead>Limit</TableHead>
+                <TableHead>Spent</TableHead>
+                <TableHead>Remaining</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Set limit</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {summary.categories.map((row) => (
+                <TableRow key={row.category_id}>
+                  <TableCell>{row.category_name}</TableCell>
+                  <TableCell>{formatCents(row.limit_cents)}</TableCell>
+                  <TableCell>{formatCents(row.spent_cents)}</TableCell>
+                  <TableCell>{formatCents(row.remaining_cents)}</TableCell>
+                  <TableCell className={cn(row.over_limit && "font-semibold text-critical")}>
+                    {row.limit_cents == null ? "No limit" : row.over_limit ? "Over limit" : "OK"}
+                  </TableCell>
+                  <TableCell>
+                    <LimitForm onSave={(amount, isOverride) => handleSetLimit(row.category_id, amount, isOverride)} />
+                  </TableCell>
+                </TableRow>
+              ))}
+              <TableRow>
+                <TableCell>Uncategorized</TableCell>
+                <TableCell>—</TableCell>
+                <TableCell>{formatCents(summary.uncategorized_spent_cents)}</TableCell>
+                <TableCell>—</TableCell>
+                <TableCell>—</TableCell>
+                <TableCell />
+              </TableRow>
+            </TableBody>
+          </Table>
+        )}
+      </div>
     </section>
   );
 }
@@ -174,14 +202,14 @@ export function BudgetsPage() {
 function RenameForm({ initialName, onSave, onCancel }) {
   const [name, setName] = useState(initialName);
   return (
-    <span>
-      <input value={name} onChange={(e) => setName(e.target.value)} />
-      <button type="button" onClick={() => onSave(name)}>
+    <span className="flex flex-1 items-center gap-2">
+      <Input value={name} onChange={(e) => setName(e.target.value)} className="flex-1" />
+      <Button size="sm" onClick={() => onSave(name)}>
         Save
-      </button>
-      <button type="button" onClick={onCancel}>
+      </Button>
+      <Button variant="outline" size="sm" onClick={onCancel}>
         Cancel
-      </button>
+      </Button>
     </span>
   );
 }
@@ -190,15 +218,16 @@ function LimitForm({ onSave }) {
   const [amount, setAmount] = useState("");
   const [isOverride, setIsOverride] = useState(false);
   return (
-    <span className="limit-form">
-      <input
+    <span className="flex items-center gap-2">
+      <Input
         type="number"
         step="0.01"
         value={amount}
         onChange={(e) => setAmount(e.target.value)}
         placeholder="amount"
+        className="w-24"
       />
-      <label>
+      <label className="flex items-center gap-1 whitespace-nowrap text-xs text-ink-secondary">
         <input
           type="checkbox"
           checked={isOverride}
@@ -206,9 +235,9 @@ function LimitForm({ onSave }) {
         />
         this month only
       </label>
-      <button type="button" onClick={() => onSave(amount, isOverride)}>
+      <Button size="sm" onClick={() => onSave(amount, isOverride)}>
         Set
-      </button>
+      </Button>
     </span>
   );
 }

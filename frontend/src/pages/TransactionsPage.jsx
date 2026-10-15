@@ -7,6 +7,16 @@ import {
   listTransactions,
   updateTransaction,
 } from "../api/transactions";
+import { Button } from "../components/ui/Button";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
+import { Input } from "../components/ui/Input";
+import { Label } from "../components/ui/Label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/Select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/Table";
+import { useToast } from "../components/ui/Toast";
+
+const UNCATEGORIZED = "uncategorized";
+const ALL_CATEGORIES = "all";
 
 function formatCents(cents) {
   return (cents / 100).toLocaleString(undefined, {
@@ -20,10 +30,10 @@ export function TransactionsPage() {
   const [categories, setCategories] = useState([]);
   const [accountId, setAccountId] = useState(null);
   const [transactions, setTransactions] = useState([]);
-  const [filters, setFilters] = useState({ dateFrom: "", dateTo: "", category: "", search: "" });
+  const [filters, setFilters] = useState({ dateFrom: "", dateTo: "", category: ALL_CATEGORIES, search: "" });
   const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const toast = useToast();
 
   useEffect(() => {
     Promise.all([listAccounts(), listCategories()]).then(([accts, cats]) => {
@@ -36,18 +46,18 @@ export function TransactionsPage() {
   function reload() {
     if (!accountId) {
       setLoading(false);
-      return;
+      return undefined;
     }
     setLoading(true);
     return listTransactions({
       account: accountId,
       date_from: filters.dateFrom,
       date_to: filters.dateTo,
-      category: filters.category,
+      category: filters.category === ALL_CATEGORIES ? "" : filters.category,
       search: filters.search,
     })
       .then(setTransactions)
-      .catch((e) => setError(e.message))
+      .catch((e) => toast.error(e.message))
       .finally(() => setLoading(false));
   }
 
@@ -58,17 +68,20 @@ export function TransactionsPage() {
 
   async function handleCreate(values) {
     await createTransaction({ ...values, account: accountId });
+    toast.success("Transaction added.");
     await reload();
   }
 
   async function handleSave(id, values) {
     await updateTransaction(id, values);
+    toast.success("Transaction updated.");
     setEditingId(null);
     await reload();
   }
 
   async function handleDelete(id) {
     await deleteTransaction(id);
+    toast.success("Transaction deleted.");
     await reload();
   }
 
@@ -79,90 +92,109 @@ export function TransactionsPage() {
   if (accounts.length === 0) {
     return (
       <section>
-        <h1>Transactions</h1>
-        <p>Add an account first.</p>
+        <h1 className="text-xl font-semibold text-ink-primary">Transactions</h1>
+        <p className="mt-2 text-sm text-ink-secondary">Add an account first.</p>
       </section>
     );
   }
 
   return (
-    <section>
-      <h1>Transactions</h1>
+    <section className="flex flex-col gap-6">
+      <h1 className="text-xl font-semibold text-ink-primary">Transactions</h1>
 
-      <label>
-        Account
-        <select value={accountId ?? ""} onChange={(e) => setAccountId(Number(e.target.value))}>
-          {accounts.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.name}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <fieldset className="transaction-filters">
-        <legend>Filters</legend>
-        <label>
-          From
-          <input
-            type="date"
-            value={filters.dateFrom}
-            onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
-          />
-        </label>
-        <label>
-          To
-          <input
-            type="date"
-            value={filters.dateTo}
-            onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
-          />
-        </label>
-        <label>
-          Category
-          <select
-            value={filters.category}
-            onChange={(e) => setFilters({ ...filters, category: e.target.value })}
-          >
-            <option value="">All</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
+      <div className="flex flex-col gap-1.5">
+        <Label>Account</Label>
+        <Select value={accountId != null ? String(accountId) : ""} onValueChange={(v) => setAccountId(Number(v))}>
+          <SelectTrigger className="w-56" aria-label="Account">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {accounts.map((a) => (
+              <SelectItem key={a.id} value={String(a.id)}>
+                {a.name}
+              </SelectItem>
             ))}
-          </select>
-        </label>
-        <label>
-          Search
-          <input
-            value={filters.search}
-            onChange={(e) => setFilters({ ...filters, search: e.target.value })}
-          />
-        </label>
-      </fieldset>
+          </SelectContent>
+        </Select>
+      </div>
 
-      <h2>Add transaction</h2>
-      <TransactionForm categories={categories} onSubmit={handleCreate} submitLabel="Add transaction" />
+      <Card>
+        <CardHeader>
+          <CardTitle>Filters</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-end gap-4">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="date-from">From</Label>
+            <Input
+              id="date-from"
+              type="date"
+              value={filters.dateFrom}
+              onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="date-to">To</Label>
+            <Input
+              id="date-to"
+              type="date"
+              value={filters.dateTo}
+              onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>Category</Label>
+            <Select value={filters.category} onValueChange={(v) => setFilters({ ...filters, category: v })}>
+              <SelectTrigger className="w-40" aria-label="Filter by category">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_CATEGORIES}>All</SelectItem>
+                {categories.map((c) => (
+                  <SelectItem key={c.id} value={String(c.id)}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="search">Search</Label>
+            <Input
+              id="search"
+              value={filters.search}
+              onChange={(e) => setFilters({ ...filters, search: e.target.value })}
+            />
+          </div>
+        </CardContent>
+      </Card>
 
-      {error && <p role="alert">{error}</p>}
+      <Card>
+        <CardHeader>
+          <CardTitle>Add transaction</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <TransactionForm categories={categories} onSubmit={handleCreate} submitLabel="Add transaction" />
+        </CardContent>
+      </Card>
+
       {loading ? (
-        <p>Loading...</p>
+        <p className="text-sm text-ink-secondary">Loading...</p>
       ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Payee</th>
-              <th>Category</th>
-              <th>Amount</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Date</TableHead>
+              <TableHead>Payee</TableHead>
+              <TableHead>Category</TableHead>
+              <TableHead>Amount</TableHead>
+              <TableHead />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {transactions.map((t) =>
               editingId === t.id ? (
-                <tr key={t.id}>
-                  <td colSpan={5}>
+                <TableRow key={t.id}>
+                  <TableCell colSpan={5}>
                     <TransactionForm
                       initialValues={t}
                       categories={categories}
@@ -170,32 +202,34 @@ export function TransactionsPage() {
                       onSubmit={(values) => handleSave(t.id, values)}
                       onCancel={() => setEditingId(null)}
                     />
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ) : (
-                <tr key={t.id}>
-                  <td>{t.date}</td>
-                  <td>{t.payee}</td>
-                  <td>{categoryName(t.category)}</td>
-                  <td>{formatCents(t.amount_cents)}</td>
-                  <td>
-                    <button type="button" onClick={() => setEditingId(t.id)}>
+                <TableRow key={t.id}>
+                  <TableCell>{t.date}</TableCell>
+                  <TableCell>{t.payee}</TableCell>
+                  <TableCell>{categoryName(t.category)}</TableCell>
+                  <TableCell>{formatCents(t.amount_cents)}</TableCell>
+                  <TableCell className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setEditingId(t.id)}>
                       Edit
-                    </button>
-                    <button type="button" onClick={() => handleDelete(t.id)}>
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => handleDelete(t.id)}>
                       Delete
-                    </button>
-                  </td>
-                </tr>
+                    </Button>
+                  </TableCell>
+                </TableRow>
               ),
             )}
             {transactions.length === 0 && (
-              <tr>
-                <td colSpan={5}>No transactions yet.</td>
-              </tr>
+              <TableRow>
+                <TableCell colSpan={5} className="text-ink-secondary">
+                  No transactions yet.
+                </TableCell>
+              </TableRow>
             )}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       )}
     </section>
   );
@@ -207,79 +241,86 @@ function TransactionForm({ initialValues, categories, onSubmit, onCancel, submit
     initialValues ? (initialValues.amount_cents / 100).toString() : "",
   );
   const [payee, setPayee] = useState(initialValues?.payee ?? "");
-  const [category, setCategory] = useState(initialValues?.category ?? "");
+  const [category, setCategory] = useState(
+    initialValues?.category != null ? String(initialValues.category) : UNCATEGORIZED,
+  );
   const [notes, setNotes] = useState(initialValues?.notes ?? "");
-  const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const toast = useToast();
 
   async function handleSubmit(event) {
     event.preventDefault();
-    setError(null);
     setSubmitting(true);
     try {
       await onSubmit({
         date,
         amount_cents: Math.round(parseFloat(amount || "0") * 100),
         payee,
-        category: category || null,
+        category: category === UNCATEGORIZED ? null : Number(category),
         notes,
       });
       if (!initialValues) {
         setAmount("");
         setPayee("");
-        setCategory("");
+        setCategory(UNCATEGORIZED);
         setNotes("");
       }
     } catch (e) {
-      setError(e.data ? Object.values(e.data).flat().join(" ") : e.message);
+      toast.error(e.data ? Object.values(e.data).flat().join(" ") : e.message);
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="transaction-form">
-      <label>
-        Date
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
-      </label>
-      <label>
-        Amount
-        <input
+    <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-4">
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="txn-date">Date</Label>
+        <Input id="txn-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="txn-amount">Amount</Label>
+        <Input
+          id="txn-amount"
           type="number"
           step="0.01"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
+          className="w-28"
           required
         />
-      </label>
-      <label>
-        Payee
-        <input value={payee} onChange={(e) => setPayee(e.target.value)} required />
-      </label>
-      <label>
-        Category
-        <select value={category ?? ""} onChange={(e) => setCategory(e.target.value)}>
-          <option value="">Uncategorized</option>
-          {categories.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        Notes
-        <input value={notes} onChange={(e) => setNotes(e.target.value)} />
-      </label>
-      {error && <p role="alert">{error}</p>}
-      <button type="submit" disabled={submitting}>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="txn-payee">Payee</Label>
+        <Input id="txn-payee" value={payee} onChange={(e) => setPayee(e.target.value)} required />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label>Category</Label>
+        <Select value={category} onValueChange={setCategory}>
+          <SelectTrigger className="w-40" aria-label="Category">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={UNCATEGORIZED}>Uncategorized</SelectItem>
+            {categories.map((c) => (
+              <SelectItem key={c.id} value={String(c.id)}>
+                {c.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="txn-notes">Notes</Label>
+        <Input id="txn-notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
+      </div>
+      <Button type="submit" disabled={submitting}>
         {submitLabel}
-      </button>
+      </Button>
       {onCancel && (
-        <button type="button" onClick={onCancel}>
+        <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
-        </button>
+        </Button>
       )}
     </form>
   );

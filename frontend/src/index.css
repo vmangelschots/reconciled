@@ -5,11 +5,19 @@
    (task 3.2) - explicit choice > OS preference, not OS preference only. */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* App-wide design tokens (design.md's token table). Raw values live here
-   as plain CSS variables, redefined under .dark; @theme below exposes
-   them as Tailwind color utilities (bg-surface, text-ink-primary, etc.)
-   so both plain CSS and Tailwind utilities read from one source. */
+/* App-wide design tokens (design.md's token table), plus three
+   chart-only tokens (gridline/baseline/series-1) carried over unchanged
+   from the dataviz-skill-driven palette ForecastChart was built with -
+   same exact values, now driven by this single .dark mechanism instead
+   of the old separate data-theme/media-query trio (task 9.2). Raw values
+   live here as plain CSS variables, redefined under .dark; @theme below
+   exposes the app-wide ones as Tailwind color utilities (bg-surface,
+   text-ink-primary, etc.) so both plain CSS and Tailwind utilities read
+   from one source. */
 :root {
+  color-scheme: light dark;
+  font-family: system-ui, sans-serif;
+
   --background: #f9f9f7;
   --surface: #fcfcfb;
   --ink-primary: #0b0b0b;
@@ -19,6 +27,10 @@
   --accent: #4f46e5;
   --success: #0ca30c;
   --critical: #d03b3b;
+
+  --chart-gridline: #e1e0d9;
+  --chart-baseline: #c3c2b7;
+  --chart-series-1: #2a78d6;
 }
 
 .dark {
@@ -31,6 +43,10 @@
   --accent: #818cf8;
   --success: #0ca30c;
   --critical: #e66767;
+
+  --chart-gridline: #2c2c2a;
+  --chart-baseline: #383835;
+  --chart-series-1: #3987e5;
 }
 
 @theme {
@@ -47,173 +63,15 @@
 
 @layer base {
   body {
+    margin: 0;
     @apply bg-background text-ink-primary;
   }
 }
 
-:root {
-  color-scheme: light dark;
-  font-family: system-ui, sans-serif;
-
-  --chart-surface: #fcfcfb;
-  --chart-text-primary: #0b0b0b;
-  --chart-text-secondary: #52514e;
-  --chart-text-muted: #898781;
-  --chart-gridline: #e1e0d9;
-  --chart-baseline: #c3c2b7;
-  --chart-series-1: #2a78d6;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --chart-surface: #1a1a19;
-    --chart-text-primary: #f0efec;
-    --chart-text-secondary: #c3c2b7;
-    --chart-text-muted: #898781;
-    --chart-gridline: #2c2c2a;
-    --chart-baseline: #383835;
-    --chart-series-1: #3987e5;
-  }
-}
-
-:root[data-theme="dark"] {
-  --chart-surface: #1a1a19;
-  --chart-text-primary: #f0efec;
-  --chart-text-secondary: #c3c2b7;
-  --chart-text-muted: #898781;
-  --chart-gridline: #2c2c2a;
-  --chart-baseline: #383835;
-  --chart-series-1: #3987e5;
-}
-
-body {
-  margin: 0;
-}
-
-.login-page {
-  max-width: 320px;
-  margin: 4rem auto;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.login-page form {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-}
-
-.login-page label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.app-layout header {
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-  padding: 0.75rem 1.5rem;
-  border-bottom: 1px solid light-dark(#ddd, #333);
-}
-
-.app-layout nav {
-  display: flex;
-  gap: 1rem;
-  flex: 1;
-}
-
-.app-layout .session {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.app-layout main {
-  padding: 1.5rem;
-}
-
-.account-form {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: end;
-  gap: 1rem;
-  margin-block-end: 1.5rem;
-}
-
-.transaction-form,
-.transaction-filters {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: end;
-  gap: 1rem;
-  margin-block-end: 1.5rem;
-}
-
-.transaction-form label,
-.transaction-filters label,
-.account-form label {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-table {
-  border-collapse: collapse;
-  width: 100%;
-}
-
-th,
-td {
-  text-align: left;
-  padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid light-dark(#ddd, #333);
-}
-
-.over-limit {
-  color: light-dark(#b00020, #ff6b6b);
-  font-weight: 600;
-}
-
-.category-list {
-  list-style: none;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-block-end: 1.5rem;
-}
-
-.category-list li {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.limit-form {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.limit-form input[type="number"] {
-  width: 6rem;
-}
-
-.forecast-chart {
-  position: relative;
-  max-width: 100%;
-  margin-block-end: 1.5rem;
-}
-
-.forecast-chart svg {
-  width: 100%;
-  height: auto;
-  background: var(--chart-surface);
-  border-radius: 8px;
-}
-
+/* ForecastChart's SVG marks - kept as plain CSS since these are SVG
+   presentation attributes (stroke/fill), not element classes Tailwind's
+   utility classes cover as cleanly. See design.md's dataviz-skill mark
+   specs (2px lines, hairline gridlines, etc.) for why these values. */
 .chart-gridline {
   stroke: var(--chart-gridline);
   stroke-width: 1;
@@ -225,7 +83,7 @@ td {
 }
 
 .chart-axis-label {
-  fill: var(--chart-text-muted);
+  fill: var(--ink-muted);
   font-size: 11px;
 }
 
@@ -238,61 +96,23 @@ td {
 
 .chart-end-dot {
   fill: var(--chart-series-1);
-  stroke: var(--chart-surface);
+  stroke: var(--surface);
   stroke-width: 2;
 }
 
 .chart-end-label {
-  fill: var(--chart-text-primary);
+  fill: var(--ink-primary);
   font-size: 12px;
   font-weight: 600;
 }
 
 .chart-crosshair {
-  stroke: var(--chart-text-muted);
+  stroke: var(--ink-muted);
   stroke-width: 1;
 }
 
 .chart-hover-dot {
   fill: var(--chart-series-1);
-  stroke: var(--chart-surface);
+  stroke: var(--surface);
   stroke-width: 2;
-}
-
-.chart-tooltip {
-  position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
-  background: var(--chart-surface);
-  border: 1px solid var(--chart-gridline);
-  border-radius: 6px;
-  padding: 0.35rem 0.6rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-  pointer-events: none;
-}
-
-.chart-tooltip strong {
-  color: var(--chart-text-primary);
-}
-
-.chart-tooltip span {
-  color: var(--chart-text-secondary);
-  font-size: 0.8rem;
-}
-
-.chart-table-toggle {
-  margin-block-start: 0.5rem;
-}
-
-.horizon-presets {
-  display: flex;
-  gap: 0.5rem;
-  margin-block-end: 1rem;
-}
-
-.horizon-presets button.active {
-  font-weight: 600;
-  text-decoration: underline;
 }

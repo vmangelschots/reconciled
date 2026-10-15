@@ -6,6 +6,13 @@ import {
   listAccounts,
   updateAccount,
 } from "../api/accounts";
+import { Button } from "../components/ui/Button";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
+import { Input } from "../components/ui/Input";
+import { Label } from "../components/ui/Label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/Select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/Table";
+import { useToast } from "../components/ui/Toast";
 
 function formatCents(cents) {
   return (cents / 100).toLocaleString(undefined, {
@@ -21,93 +28,104 @@ function typeLabel(value) {
 export function AccountsPage() {
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState(null);
   const [editingId, setEditingId] = useState(null);
+  const toast = useToast();
 
   function reload() {
     setLoading(true);
     return listAccounts()
       .then(setAccounts)
-      .catch((e) => setLoadError(e.message))
+      .catch((e) => toast.error(e.message))
       .finally(() => setLoading(false));
   }
 
   useEffect(() => {
     reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function handleCreate(values) {
     await createAccount(values);
+    toast.success("Account created.");
     await reload();
   }
 
   async function handleSave(id, values) {
     await updateAccount(id, values);
+    toast.success("Account updated.");
     setEditingId(null);
     await reload();
   }
 
   async function handleArchive(id) {
     await archiveAccount(id);
+    toast.success("Account archived.");
     await reload();
   }
 
   return (
-    <section>
-      <h1>Accounts</h1>
+    <section className="flex flex-col gap-6">
+      <h1 className="text-xl font-semibold text-ink-primary">Accounts</h1>
 
-      <h2>Add account</h2>
-      <AccountForm onSubmit={handleCreate} submitLabel="Add account" />
+      <Card>
+        <CardHeader>
+          <CardTitle>Add account</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <AccountForm onSubmit={handleCreate} submitLabel="Add account" />
+        </CardContent>
+      </Card>
 
-      {loadError && <p role="alert">{loadError}</p>}
       {loading ? (
-        <p>Loading...</p>
+        <p className="text-sm text-ink-secondary">Loading...</p>
       ) : (
-        <table>
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Type</th>
-              <th>Balance</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Name</TableHead>
+              <TableHead>Type</TableHead>
+              <TableHead>Balance</TableHead>
+              <TableHead />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {accounts.map((account) =>
               editingId === account.id ? (
-                <tr key={account.id}>
-                  <td colSpan={4}>
+                <TableRow key={account.id}>
+                  <TableCell colSpan={4}>
                     <AccountForm
                       initialValues={account}
                       submitLabel="Save"
                       onSubmit={(values) => handleSave(account.id, values)}
                       onCancel={() => setEditingId(null)}
                     />
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               ) : (
-                <tr key={account.id}>
-                  <td>{account.name}</td>
-                  <td>{typeLabel(account.account_type)}</td>
-                  <td>{formatCents(account.current_balance_cents)}</td>
-                  <td>
-                    <button type="button" onClick={() => setEditingId(account.id)}>
+                <TableRow key={account.id}>
+                  <TableCell>{account.name}</TableCell>
+                  <TableCell>{typeLabel(account.account_type)}</TableCell>
+                  <TableCell>{formatCents(account.current_balance_cents)}</TableCell>
+                  <TableCell className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setEditingId(account.id)}>
                       Edit
-                    </button>
-                    <button type="button" onClick={() => handleArchive(account.id)}>
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => handleArchive(account.id)}>
                       Archive
-                    </button>
-                  </td>
-                </tr>
+                    </Button>
+                  </TableCell>
+                </TableRow>
               ),
             )}
             {accounts.length === 0 && (
-              <tr>
-                <td colSpan={4}>No accounts yet - add one above.</td>
-              </tr>
+              <TableRow>
+                <TableCell colSpan={4} className="text-ink-secondary">
+                  No accounts yet - add one above.
+                </TableCell>
+              </TableRow>
             )}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       )}
     </section>
   );
@@ -119,12 +137,11 @@ function AccountForm({ initialValues, onSubmit, onCancel, submitLabel }) {
   const [startingBalance, setStartingBalance] = useState(
     initialValues ? (initialValues.starting_balance_cents / 100).toString() : "0",
   );
-  const [error, setError] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const toast = useToast();
 
   async function handleSubmit(event) {
     event.preventDefault();
-    setError(null);
     setSubmitting(true);
     try {
       await onSubmit({
@@ -137,45 +154,51 @@ function AccountForm({ initialValues, onSubmit, onCancel, submitLabel }) {
         setStartingBalance("0");
       }
     } catch (e) {
-      setError(e.data ? Object.values(e.data).flat().join(" ") : e.message);
+      toast.error(e.data ? Object.values(e.data).flat().join(" ") : e.message);
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="account-form">
-      <label>
-        Name
-        <input value={name} onChange={(e) => setName(e.target.value)} required />
-      </label>
-      <label>
-        Type
-        <select value={accountType} onChange={(e) => setAccountType(e.target.value)}>
-          {ACCOUNT_TYPES.map((t) => (
-            <option key={t.value} value={t.value}>
-              {t.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        Starting balance
-        <input
+    <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-4">
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="account-name">Name</Label>
+        <Input id="account-name" value={name} onChange={(e) => setName(e.target.value)} required />
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label>Type</Label>
+        <Select value={accountType} onValueChange={setAccountType}>
+          <SelectTrigger className="w-40" aria-label="Account type">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {ACCOUNT_TYPES.map((t) => (
+              <SelectItem key={t.value} value={t.value}>
+                {t.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label htmlFor="starting-balance">Starting balance</Label>
+        <Input
+          id="starting-balance"
           type="number"
           step="0.01"
           value={startingBalance}
           onChange={(e) => setStartingBalance(e.target.value)}
+          className="w-32"
         />
-      </label>
-      {error && <p role="alert">{error}</p>}
-      <button type="submit" disabled={submitting}>
+      </div>
+      <Button type="submit" disabled={submitting}>
         {submitLabel}
-      </button>
+      </Button>
       {onCancel && (
-        <button type="button" onClick={onCancel}>
+        <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
-        </button>
+        </Button>
       )}
     </form>
   );

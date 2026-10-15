@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
 import { listAccounts } from "../api/accounts";
 import { commitImport, mapCsvColumns, uploadImportFile } from "../api/imports";
+import { Button } from "../components/ui/Button";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
+import { Label } from "../components/ui/Label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/Select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/Table";
+import { useToast } from "../components/ui/Toast";
 
 function formatCents(cents) {
   return (cents / 100).toLocaleString(undefined, {
@@ -10,17 +16,23 @@ function formatCents(cents) {
 }
 
 const CSV_FIELDS = ["date", "amount", "description", "payee"];
+const UNMAPPED = "none";
 
 export function ImportPage() {
   const [accounts, setAccounts] = useState([]);
   const [accountId, setAccountId] = useState(null);
   const [file, setFile] = useState(null);
   const [session, setSession] = useState(null);
-  const [mapping, setMapping] = useState({ date: "", amount: "", description: "", payee: "" });
+  const [mapping, setMapping] = useState({
+    date: UNMAPPED,
+    amount: UNMAPPED,
+    description: UNMAPPED,
+    payee: UNMAPPED,
+  });
   const [selected, setSelected] = useState(new Set());
-  const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const toast = useToast();
 
   useEffect(() => {
     listAccounts().then((accts) => {
@@ -35,14 +47,13 @@ export function ImportPage() {
 
   async function handleUpload(event) {
     event.preventDefault();
-    setError(null);
     setSubmitting(true);
     try {
       const data = await uploadImportFile(accountId, file);
       setSession(data);
       if (data.candidates?.length) selectNonDuplicates(data.candidates);
     } catch (e) {
-      setError(e.data?.detail ?? e.message);
+      toast.error(e.data?.detail ?? e.message);
     } finally {
       setSubmitting(false);
     }
@@ -50,14 +61,16 @@ export function ImportPage() {
 
   async function handleMap(event) {
     event.preventDefault();
-    setError(null);
     setSubmitting(true);
     try {
-      const data = await mapCsvColumns(session.id, mapping);
+      const mappingPayload = Object.fromEntries(
+        Object.entries(mapping).map(([field, col]) => [field, col === UNMAPPED ? "" : col]),
+      );
+      const data = await mapCsvColumns(session.id, mappingPayload);
       setSession({ ...session, ...data });
       selectNonDuplicates(data.candidates);
     } catch (e) {
-      setError(e.data?.detail ?? e.message);
+      toast.error(e.data?.detail ?? e.message);
     } finally {
       setSubmitting(false);
     }
@@ -73,13 +86,13 @@ export function ImportPage() {
   }
 
   async function handleCommit() {
-    setError(null);
     setSubmitting(true);
     try {
       const data = await commitImport(session.id, [...selected]);
       setResult(data);
+      toast.success(`Created ${data.created_count} transaction(s).`);
     } catch (e) {
-      setError(e.data?.detail ?? e.message);
+      toast.error(e.data?.detail ?? e.message);
     } finally {
       setSubmitting(false);
     }
@@ -90,130 +103,166 @@ export function ImportPage() {
     setFile(null);
     setSelected(new Set());
     setResult(null);
-    setError(null);
   }
 
   if (result) {
     return (
-      <section>
-        <h1>Import</h1>
-        <p>Created {result.created_count} transaction(s).</p>
-        <button type="button" onClick={startOver}>
-          Import another file
-        </button>
+      <section className="flex flex-col gap-4">
+        <h1 className="text-xl font-semibold text-ink-primary">Import</h1>
+        <Card>
+          <CardContent className="flex flex-col gap-4 pt-6">
+            <p className="text-sm text-ink-primary">Created {result.created_count} transaction(s).</p>
+            <Button onClick={startOver} className="self-start">
+              Import another file
+            </Button>
+          </CardContent>
+        </Card>
       </section>
     );
   }
 
   if (session?.candidates?.length) {
     return (
-      <section>
-        <h1>Import</h1>
-        <h2>Preview</h2>
-        {error && <p role="alert">{error}</p>}
-        <table>
-          <thead>
-            <tr>
-              <th />
-              <th>Date</th>
-              <th>Description</th>
-              <th>Amount</th>
-              <th>Duplicate?</th>
-            </tr>
-          </thead>
-          <tbody>
-            {session.candidates.map((c) => (
-              <tr key={c.index}>
-                <td>
-                  <input
-                    type="checkbox"
-                    checked={selected.has(c.index)}
-                    onChange={() => toggle(c.index)}
-                  />
-                </td>
-                <td>{c.date}</td>
-                <td>{c.description}</td>
-                <td>{formatCents(c.amount_cents)}</td>
-                <td>{c.is_duplicate ? "Likely duplicate" : ""}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <button type="button" onClick={handleCommit} disabled={submitting}>
-          Confirm import ({selected.size} selected)
-        </button>
-        <button type="button" onClick={startOver}>
-          Cancel
-        </button>
+      <section className="flex flex-col gap-4">
+        <h1 className="text-xl font-semibold text-ink-primary">Import</h1>
+        <Card>
+          <CardHeader>
+            <CardTitle>Preview</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead />
+                  <TableHead>Date</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Amount</TableHead>
+                  <TableHead>Duplicate?</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {session.candidates.map((c) => (
+                  <TableRow key={c.index}>
+                    <TableCell>
+                      <input
+                        type="checkbox"
+                        checked={selected.has(c.index)}
+                        onChange={() => toggle(c.index)}
+                      />
+                    </TableCell>
+                    <TableCell>{c.date}</TableCell>
+                    <TableCell>{c.description}</TableCell>
+                    <TableCell>{formatCents(c.amount_cents)}</TableCell>
+                    <TableCell className={c.is_duplicate ? "text-ink-muted" : undefined}>
+                      {c.is_duplicate ? "Likely duplicate" : ""}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <div className="flex gap-2">
+              <Button onClick={handleCommit} disabled={submitting}>
+                Confirm import ({selected.size} selected)
+              </Button>
+              <Button variant="outline" onClick={startOver}>
+                Cancel
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </section>
     );
   }
 
   if (session?.file_format === "csv") {
     return (
-      <section>
-        <h1>Import</h1>
-        <h2>Map columns</h2>
-        {error && <p role="alert">{error}</p>}
-        <form onSubmit={handleMap} className="account-form">
-          {CSV_FIELDS.map((field) => (
-            <label key={field}>
-              {field}
-              <select
-                value={mapping[field]}
-                onChange={(e) => setMapping({ ...mapping, [field]: e.target.value })}
-              >
-                <option value="">—</option>
-                {session.columns.map((col) => (
-                  <option key={col} value={col}>
-                    {col}
-                  </option>
+      <section className="flex flex-col gap-4">
+        <h1 className="text-xl font-semibold text-ink-primary">Import</h1>
+        <Card>
+          <CardHeader>
+            <CardTitle>Map columns</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleMap} className="flex flex-col gap-4">
+              <div className="flex flex-wrap gap-4">
+                {CSV_FIELDS.map((field) => (
+                  <div key={field} className="flex flex-col gap-1.5">
+                    <Label className="capitalize">{field}</Label>
+                    <Select
+                      value={mapping[field]}
+                      onValueChange={(v) => setMapping({ ...mapping, [field]: v })}
+                    >
+                      <SelectTrigger className="w-44" aria-label={field}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={UNMAPPED}>—</SelectItem>
+                        {session.columns.map((col) => (
+                          <SelectItem key={col} value={col}>
+                            {col}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 ))}
-              </select>
-            </label>
-          ))}
-          <button type="submit" disabled={submitting}>
-            Parse
-          </button>
-          <button type="button" onClick={startOver}>
-            Cancel
-          </button>
-        </form>
+              </div>
+              <div className="flex gap-2">
+                <Button type="submit" disabled={submitting}>
+                  Parse
+                </Button>
+                <Button type="button" variant="outline" onClick={startOver}>
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
       </section>
     );
   }
 
   return (
-    <section>
-      <h1>Import</h1>
+    <section className="flex flex-col gap-4">
+      <h1 className="text-xl font-semibold text-ink-primary">Import</h1>
       {accounts.length === 0 ? (
-        <p>Add an account first.</p>
+        <p className="text-sm text-ink-secondary">Add an account first.</p>
       ) : (
-        <form onSubmit={handleUpload} className="account-form">
-          <label>
-            Account
-            <select value={accountId ?? ""} onChange={(e) => setAccountId(Number(e.target.value))}>
-              {accounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            File (.csv or .ofx)
-            <input
-              type="file"
-              accept=".csv,.ofx"
-              onChange={(e) => setFile(e.target.files[0])}
-              required
-            />
-          </label>
-          {error && <p role="alert">{error}</p>}
-          <button type="submit" disabled={submitting || !file}>
-            Upload
-          </button>
-        </form>
+        <Card>
+          <CardContent className="pt-6">
+            <form onSubmit={handleUpload} className="flex flex-wrap items-end gap-4">
+              <div className="flex flex-col gap-1.5">
+                <Label>Account</Label>
+                <Select value={accountId != null ? String(accountId) : ""} onValueChange={(v) => setAccountId(Number(v))}>
+                  <SelectTrigger className="w-56" aria-label="Account">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {accounts.map((a) => (
+                      <SelectItem key={a.id} value={String(a.id)}>
+                        {a.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor="import-file">File (.csv or .ofx)</Label>
+                <input
+                  id="import-file"
+                  type="file"
+                  accept=".csv,.ofx"
+                  onChange={(e) => setFile(e.target.files[0])}
+                  required
+                  className="text-sm text-ink-secondary file:mr-3 file:rounded-md file:border-0 file:bg-accent file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:opacity-90"
+                />
+              </div>
+              <Button type="submit" disabled={submitting || !file}>
+                Upload
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
       )}
     </section>
   );
