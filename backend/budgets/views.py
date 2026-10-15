@@ -1,19 +1,112 @@
-from rest_framework import mixins, viewsets
+from django.db.models import Sum
+from rest_framework import viewsets
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
-from .models import Category
+from transactions.models import Transaction
+
+from .models import Category, CategoryLimit
 from .serializers import CategorySerializer
+from .utils import month_range, parse_month
 
 
-class CategoryViewSet(
-    mixins.ListModelMixin,
-    mixins.RetrieveModelMixin,
-    viewsets.GenericViewSet,
-):
-    """Read-only for now, so the transaction category picker has
-    something to list. Task 4.1 is expected to extend this with
-    create/rename and the delete-requires-reassignment rule from the
-    budgets spec.
-    """
-
+class CategoryViewSet(viewsets.ModelViewSet):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
+
+    def destroy(self, request, *args, **kwargs):
+        category = self.get_object()
+        count = category.transactions.count()
+        if count:
+            return Response(
+                {
+                    "detail": (
+                        f"{count} transaction(s) are still assigned to this "
+                        "category. Reassign them to another category or to "
+                        "uncategorized before deleting it."
+                    )
+                },
+                status=400,
+            )
+        return super().destroy(request, *args, **kwargs)
+
+    @action(detail=True, methods=["put"], url_path="limit")
+    def set_limit(self, request, pk=None):
+        """Set the default limit (month omitted/null) or a specific
+        month's override (month="YYYY-MM") for this category."""
+        category = self.get_object()
+        limit_cents = request.data.get("limit_cents")
+        if limit_cents is None:
+            return Response({"limit_cents": "This field is required."}, status=400)
+        try:
+            month = parse_month(request.data.get("month"))
+        except ValueError as exc:
+            return Response({"month": str(exc)}, status=400)
+
+        limit, _created = CategoryLimit.objects.update_or_create(
+            category=category, month=month, defaults={"limit_cents": limit_cents}
+        )
+        return Response(
+            {
+                "month": month.isoformat()[:7] if month else None,
+                "limit_cents": limit.limit_cents,
+            }
+        )
+
+
+class BudgetSummaryView(APIView):
+    def get(self, request):
+        month_param = request.query_params.get("month")
+        if not month_param:
+            return Response({"detail": "month query param (YYYY-MM) is required."}, status=400)
+        try:
+            period_start = parse_month(month_param)
+            if period_start is None:
+                raise ValueError(month_param)
+        except ValueError:
+            return Response({"detail": "month must be in YYYY-MM format."}, status=400)
+        period_end = month_range(period_start)
+
+        categories = []
+        for category in Category.objects.all():
+            spent = (
+                category.transactions.filter(date__gte=period_start, date__lt=period_end)
+                .aggregate(total=Sum("amount_cents"))["total"]
+                or 0
+            )
+            spent_cents = -spent
+
+            override = category.limits.filter(month=period_start).first()
+            default = category.limits.filter(month__isnull=True).first()
+            limit = override or default
+            limit_cents = limit.limit_cents if limit else None
+
+            remaining_cents = limit_cents - spent_cents if limit_cents is not None else None
+            over_limit = limit_cents is not None and spent_cents > limit_cents
+
+            categories.append(
+                {
+                    "category_id": category.id,
+                    "category_name": category.name,
+                    "limit_cents": limit_cents,
+                    "spent_cents": spent_cents,
+                    "remaining_cents": remaining_cents,
+                    "over_limit": over_limit,
+                }
+            )
+
+        uncategorized_spent = (
+            Transaction.objects.filter(
+                category__isnull=True, date__gte=period_start, date__lt=period_end
+            ).aggregate(total=Sum("amount_cents"))["total"]
+            or 0
+        )
+
+        return Response(
+            {
+                "month": month_param,
+                "categories": categories,
+                "uncategorized_spent_cents": -uncategorized_spent,
+            }
+        )
