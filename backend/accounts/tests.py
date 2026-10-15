@@ -5,6 +5,8 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
+from transactions.models import Transaction
+
 from .models import Account
 
 
@@ -89,6 +91,33 @@ class AccountTests(TestCase):
         self.assertEqual(response.status_code, 400)
         account.refresh_from_db()
         self.assertEqual(account.starting_balance_cents, 100000)
+
+    def test_edit_starting_balance_blocked_once_account_has_a_real_transaction(self):
+        # The integration-level version of the test above, promised in
+        # tasks.md 3.2 now that the real Transaction model exists.
+        account = Account.objects.create(
+            name="Main Checking", account_type="checking", starting_balance_cents=100000
+        )
+        Transaction.objects.create(account=account, date="2026-01-01", amount_cents=-500, payee="Coffee")
+
+        response = self.client.patch(
+            reverse("account-detail", args=[account.id]),
+            {"starting_balance_cents": 999},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        account.refresh_from_db()
+        self.assertEqual(account.starting_balance_cents, 100000)
+
+    def test_balance_includes_transactions(self):
+        account = Account.objects.create(
+            name="Main Checking", account_type="checking", starting_balance_cents=100000
+        )
+        Transaction.objects.create(account=account, date="2026-01-01", amount_cents=-4250, payee="Groceries")
+        Transaction.objects.create(account=account, date="2026-01-02", amount_cents=20000, payee="Paycheck")
+
+        response = self.client.get(reverse("account-detail", args=[account.id]))
+        self.assertEqual(response.json()["current_balance_cents"], 100000 - 4250 + 20000)
 
     def test_archive_hides_account_from_default_list_but_detail_still_works(self):
         account = Account.objects.create(

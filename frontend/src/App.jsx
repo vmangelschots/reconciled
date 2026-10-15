@@ -5,6 +5,7 @@ import { AccountsPage } from "./pages/AccountsPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { LoginPage } from "./pages/LoginPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
+import { TransactionsPage } from "./pages/TransactionsPage";
 
 export default function App() {
   return (
@@ -20,7 +21,7 @@ export default function App() {
       >
         <Route index element={<DashboardPage />} />
         <Route path="accounts" element={<AccountsPage />} />
-        <Route path="transactions" element={<PlaceholderPage title="Transactions" />} />
+        <Route path="transactions" element={<TransactionsPage />} />
         <Route path="budgets" element={<PlaceholderPage title="Budgets" />} />
         <Route path="import" element={<PlaceholderPage title="Import" />} />
         <Route path="forecast" element={<PlaceholderPage title="Forecast" />} />

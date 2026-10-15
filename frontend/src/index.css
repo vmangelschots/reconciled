@@ -59,6 +59,17 @@ body {
   margin-block-end: 1.5rem;
 }
 
+.transaction-form,
+.transaction-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 1rem;
+  margin-block-end: 1.5rem;
+}
+
+.transaction-form label,
+.transaction-filters label,
 .account-form label {
   display: flex;
   flex-direction: column;

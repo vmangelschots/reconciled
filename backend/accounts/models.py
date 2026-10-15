@@ -1,4 +1,5 @@
 from django.db import models
+from django.db.models import Sum
 
 
 class Account(models.Model):
@@ -24,22 +25,11 @@ class Account(models.Model):
 
     @property
     def has_transactions(self):
-        """Whether this account has at least one transaction.
-
-        The `transactions` app doesn't exist yet (task 3.x), so no
-        account can have any transactions right now and this is
-        correctly always False. Task 3.2 must update this to query the
-        real transactions relation once it exists.
-        """
-        return False
+        """Whether this account has at least one transaction."""
+        return self.transactions.exists()
 
     @property
     def current_balance_cents(self):
-        """starting balance + sum of transactions, per the accounts spec.
-
-        Until the `transactions` app exists (task 3.x) no transactions
-        can exist, so this is exactly the starting balance for now.
-        Task 3.2 must update this to add the transaction sum once that
-        model exists.
-        """
-        return self.starting_balance_cents
+        """starting balance + sum of transactions, per the accounts spec."""
+        total = self.transactions.aggregate(total=Sum("amount_cents"))["total"] or 0
+        return self.starting_balance_cents + total
