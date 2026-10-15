@@ -42,3 +42,30 @@ export async function apiFetch(path, { method = "GET", body } = {}) {
 export function ensureCsrfCookie() {
   return apiFetch("/api/auth/csrf/");
 }
+
+/**
+ * Like apiFetch, but for multipart/form-data uploads - the browser must
+ * set its own Content-Type (with the multipart boundary), so this never
+ * sets one itself.
+ */
+export async function apiUpload(path, formData) {
+  const headers = {};
+  const csrfToken = readCookie("csrftoken");
+  if (csrfToken) headers["X-CSRFToken"] = csrfToken;
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: "POST",
+    headers,
+    credentials: "include",
+    body: formData,
+  });
+
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    const error = new Error(data?.detail || `Request to ${path} failed`);
+    error.status = response.status;
+    error.data = data;
+    throw error;
+  }
+  return data;
+}
