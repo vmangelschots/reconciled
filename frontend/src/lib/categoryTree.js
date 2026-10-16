@@ -25,3 +25,21 @@ export function categoryDisplayLabel(category, categoriesById) {
   }
   return category.name;
 }
+
+// Orders the categories matching `query` for the picker: own name
+// starts with the query, then the "Parent / name" label starts with it,
+// then the label merely contains it. Original order is kept within each
+// group so callers control the tie-break. An empty query returns the
+// list unchanged.
+export function rankCategories(categories, categoriesById, query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return categories;
+  const groups = [[], [], []];
+  for (const c of categories) {
+    const label = categoryDisplayLabel(c, categoriesById).toLowerCase();
+    if (c.name.toLowerCase().startsWith(q)) groups[0].push(c);
+    else if (label.startsWith(q)) groups[1].push(c);
+    else if (label.includes(q)) groups[2].push(c);
+  }
+  return groups.flat();
+}
