@@ -111,7 +111,10 @@ class BudgetSummaryView(APIView):
 
         uncategorized_spent = (
             Transaction.objects.filter(
-                category__isnull=True, date__gte=period_start, date__lt=period_end
+                category__isnull=True,
+                transfer_counterpart__isnull=True,  # transfers aren't spending
+                date__gte=period_start,
+                date__lt=period_end,
             ).aggregate(total=Sum("amount_cents"))["total"]
             or 0
         )

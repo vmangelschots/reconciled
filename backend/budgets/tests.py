@@ -5,6 +5,7 @@ from rest_framework.test import APIClient
 
 from accounts.models import Account
 from transactions.models import Transaction
+from transactions.transfers import link_transfer
 
 from .models import Category, CategoryLimit
 
@@ -228,3 +229,15 @@ class BudgetSummaryTests(TestCase):
         self.assertEqual(summary["uncategorized_spent_cents"], 5000)
         # and it must not be folded into any category's total
         self.assertEqual(summary["categories"][0]["spent_cents"], 1000)
+
+    def test_transfers_are_not_uncategorized_spend(self):
+        savings = Account.objects.create(name="Savings", account_type="savings", starting_balance_cents=0)
+        Transaction.objects.create(account=self.account, date="2026-01-10", amount_cents=-5000, payee="Misc")
+        out = Transaction.objects.create(
+            account=self.account, date="2026-01-12", amount_cents=-50000, payee="To savings"
+        )
+        link_transfer(out, savings)
+
+        summary = self.client.get(reverse("budget-summary"), {"month": "2026-01"}).json()
+
+        self.assertEqual(summary["uncategorized_spent_cents"], 5000)

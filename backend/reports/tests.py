@@ -8,6 +8,7 @@ from rest_framework.test import APIClient
 from accounts.models import Account
 from budgets.models import Category
 from transactions.models import Transaction
+from transactions.transfers import link_transfer
 
 
 class ReportTestCase(TestCase):
@@ -63,6 +64,14 @@ class CashFlowTests(ReportTestCase):
         months = self.get("2026-01").json()["months"]
         self.assertEqual([m["month"] for m in months[:2]], ["2025-02", "2025-03"])
 
+    def test_transfers_count_toward_neither_in_nor_out(self):
+        out = self.txn(-50000, date(2026, 3, 3))
+        link_transfer(out, self.savings)  # creates the +500.00 in Savings
+
+        months = self.get("2026-03").json()["months"]
+
+        self.assertEqual(months[-1], {"month": "2026-03", "in_cents": 0, "out_cents": 0})
+
     def test_missing_or_malformed_end_is_rejected(self):
         self.assertEqual(self.client.get(reverse("report-cash-flow")).status_code, 400)
         self.assertEqual(self.get("2026-13").status_code, 400)
@@ -107,6 +116,12 @@ class CategorySpendingTests(ReportTestCase):
     def test_uncategorized_counts_outflows_only(self):
         self.txn(-4000, date(2026, 3, 5))
         self.txn(200000, date(2026, 3, 25))
+
+        self.assertEqual(self.get().json()["uncategorized_cents"], 4000)
+
+    def test_uncategorized_ignores_transfers(self):
+        self.txn(-4000, date(2026, 3, 5))
+        link_transfer(self.txn(-50000, date(2026, 3, 6)), self.savings)
 
         self.assertEqual(self.get().json()["uncategorized_cents"], 4000)
 
