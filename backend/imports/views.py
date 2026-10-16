@@ -16,6 +16,7 @@ from .utils import (
     detect_delimiter,
     detect_file_format,
     flag_duplicates,
+    flag_transfer_matches,
     parse_csv_candidates,
     parse_ofx_candidates,
 )
@@ -113,27 +114,63 @@ class ImportSessionViewSet(
         to_create = [c for c in session.candidates if c["index"] in selected_indices]
 
         with db_transaction.atomic():
-            created = Transaction.objects.bulk_create(
-                Transaction(
-                    account=session.account,
-                    date=c["date"],
-                    amount_cents=c["amount_cents"],
-                    payee=c["payee"],
-                    notes=c["description"] if c["description"] != c["payee"] else "",
+            new_rows = []
+            confirmed = 0
+            for c in to_create:
+                notes = c["description"] if c["description"] != c["payee"] else ""
+                if self._confirm_transfer_counterpart(session.account, c, notes):
+                    confirmed += 1
+                    continue
+                new_rows.append(
+                    Transaction(
+                        account=session.account,
+                        date=c["date"],
+                        amount_cents=c["amount_cents"],
+                        payee=c["payee"],
+                        notes=notes,
+                    )
                 )
-                for c in to_create
-            )
+            created = Transaction.objects.bulk_create(new_rows)
             session.status = ImportSession.Status.COMMITTED
             session.save(update_fields=["status"])
 
-        return Response({"created_count": len(created)}, status=201)
+        return Response({"created_count": len(created), "confirmed_transfer_count": confirmed}, status=201)
+
+    def _confirm_transfer_counterpart(self, account, candidate, notes):
+        """If the candidate matched a created transfer counterpart, overwrite
+        that counterpart with the bank's line (keeping the link) and return
+        True. If the counterpart is gone or no longer unconfirmed since the
+        preview, return False so the line is created normally."""
+        match = candidate.get("transfer_match")
+        if not match:
+            return False
+        txn = (
+            Transaction.objects.select_for_update()
+            .filter(
+                pk=match["transaction_id"],
+                account=account,
+                created_by_transfer=True,
+                transfer_counterpart__isnull=False,
+            )
+            .first()
+        )
+        if txn is None:
+            return False
+        txn.date = candidate["date"]
+        txn.payee = candidate["payee"]
+        txn.notes = notes
+        txn.created_by_transfer = False
+        txn.save(update_fields=["date", "payee", "notes", "created_by_transfer", "updated_at"])
+        return True
 
     def _store_candidates(self, session, candidates):
         # A real bank export can't produce a zero-amount transaction (the
         # transactions spec requires non-zero amounts); drop any before
         # they ever become commit-able candidates.
         candidates = [c for c in candidates if c["amount_cents"] != 0]
-        session.candidates = flag_duplicates(session.account, candidates)
+        session.candidates = flag_transfer_matches(
+            session.account, flag_duplicates(session.account, candidates)
+        )
         session.save(update_fields=["candidates"])
 
     def _representation(self, session):

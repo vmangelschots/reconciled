@@ -1,6 +1,6 @@
 import csv
 import io
-from datetime import datetime
+from datetime import date, datetime
 from difflib import SequenceMatcher
 
 from ofxparse import OfxParser
@@ -197,4 +197,49 @@ def flag_duplicates(account, candidates):
             for existing in by_date_amount.get(key, [])
         )
         flagged.append({**candidate, "index": index, "is_duplicate": is_duplicate})
+    return flagged
+
+
+def flag_transfer_matches(account, candidates):
+    """Attach transfer_match to each candidate: the transfer counterpart the
+    app created in this account (not yet confirmed by an import) that the
+    bank line is the real version of - same amount, dated within the
+    transfer window, closest date first, each counterpart claimed once.
+    A matched line replaces that counterpart on commit, so it is never
+    also a duplicate. See openspec/specs/transaction-import.
+    """
+    from transactions.models import Transaction
+    from transactions.transfers import TRANSFER_MATCH_DAYS
+
+    pending = list(
+        Transaction.objects.filter(
+            account=account, created_by_transfer=True, transfer_counterpart__isnull=False
+        ).select_related("transfer_counterpart__account")
+    )
+    claimed = set()
+    flagged = []
+    for candidate in candidates:
+        on = date.fromisoformat(candidate["date"])
+        options = [
+            t
+            for t in pending
+            if t.pk not in claimed
+            and t.amount_cents == candidate["amount_cents"]
+            and abs((t.date - on).days) <= TRANSFER_MATCH_DAYS
+        ]
+        match = min(options, key=lambda t: (abs((t.date - on).days), t.pk), default=None)
+        if match is None:
+            flagged.append({**candidate, "transfer_match": None})
+            continue
+        claimed.add(match.pk)
+        flagged.append(
+            {
+                **candidate,
+                "is_duplicate": False,
+                "transfer_match": {
+                    "transaction_id": match.pk,
+                    "counterpart_account_name": match.transfer_counterpart.account.name,
+                },
+            }
+        )
     return flagged

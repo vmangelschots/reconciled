@@ -8,6 +8,7 @@ from rest_framework.test import APIClient
 
 from accounts.models import Account
 from transactions.models import Transaction
+from transactions.transfers import link_transfer
 
 from .models import ImportSession
 
@@ -512,3 +513,96 @@ class CommitImportTests(TestCase):
         )
         self.assertEqual(second_attempt.status_code, 400)
         self.assertEqual(Transaction.objects.filter(account=self.account).count(), 1)
+
+
+class TransferCounterpartImportTests(TestCase):
+    """A bank line confirms a transfer counterpart the app created."""
+
+    def setUp(self):
+        self.client = APIClient()
+        user = get_user_model().objects.create_user(username="budgeter", password="x")
+        self.client.force_authenticate(user=user)
+        self.checking = Account.objects.create(name="Checking", account_type="checking", starting_balance_cents=0)
+        self.savings = Account.objects.create(name="Savings", account_type="savings", starting_balance_cents=0)
+        out = Transaction.objects.create(
+            account=self.checking, date="2026-03-03", amount_cents=-50000, payee="To savings"
+        )
+        _, self.created = link_transfer(out, self.savings)  # +500.00 in Savings on 3 March
+        self.out = out
+
+    def preview(self, rows, account=None):
+        content = "Date,Amount,Description\n" + "".join(f"{d},{a},{desc}\n" for d, a, desc in rows)
+        upload = self.client.post(
+            reverse("importsession-list"),
+            {"account": (account or self.savings).id, "file": csv_file(content)},
+            format="multipart",
+        )
+        session_id = upload.json()["id"]
+        response = self.client.post(
+            reverse("importsession-map", args=[session_id]),
+            {"date": "Date", "date_format": "YYYY-MM-DD", "amount": "Amount", "description": "Description"},
+            format="json",
+        )
+        return session_id, response.json()["candidates"]
+
+    def commit(self, session_id, indices):
+        return self.client.post(
+            reverse("importsession-commit", args=[session_id]), {"selected_indices": indices}, format="json"
+        )
+
+    def test_preview_marks_the_matching_line(self):
+        _, candidates = self.preview([("2026-03-04", "500.00", "OVERSCHRIJVING BE12"), ("2026-03-04", "-12.00", "Shop")])
+
+        self.assertEqual(
+            candidates[0]["transfer_match"],
+            {"transaction_id": self.created.pk, "counterpart_account_name": "Checking"},
+        )
+        self.assertFalse(candidates[0]["is_duplicate"])
+        self.assertIsNone(candidates[1]["transfer_match"])
+
+    def test_commit_replaces_the_created_counterpart_and_keeps_the_link(self):
+        session_id, candidates = self.preview([("2026-03-04", "500.00", "OVERSCHRIJVING BE12")])
+
+        response = self.commit(session_id, [c["index"] for c in candidates])
+
+        self.assertEqual(response.json(), {"created_count": 0, "confirmed_transfer_count": 1})
+        rows = Transaction.objects.filter(account=self.savings)
+        self.assertEqual(rows.count(), 1)
+        confirmed = rows.get()
+        self.assertEqual(confirmed.pk, self.created.pk)
+        self.assertEqual(str(confirmed.date), "2026-03-04")
+        self.assertEqual(confirmed.payee, "OVERSCHRIJVING BE12")
+        self.assertFalse(confirmed.created_by_transfer)
+        self.assertEqual(confirmed.transfer_counterpart_id, self.out.pk)
+
+    def test_excluded_match_changes_nothing(self):
+        session_id, _ = self.preview([("2026-03-04", "500.00", "OVERSCHRIJVING BE12")])
+
+        self.commit(session_id, [])
+
+        created = Transaction.objects.get(pk=self.created.pk)
+        self.assertTrue(created.created_by_transfer)
+        self.assertEqual(created.payee, "Transfer from Checking")
+        self.assertEqual(Transaction.objects.filter(account=self.savings).count(), 1)
+
+    def test_a_confirmed_counterpart_is_not_matched_again(self):
+        session_id, candidates = self.preview([("2026-03-04", "500.00", "OVERSCHRIJVING BE12")])
+        self.commit(session_id, [c["index"] for c in candidates])
+
+        _, again = self.preview([("2026-03-05", "500.00", "another 500")])
+
+        self.assertIsNone(again[0]["transfer_match"])
+
+    def test_outside_the_window_or_other_amount_does_not_match(self):
+        _, candidates = self.preview([("2026-03-09", "500.00", "late"), ("2026-03-04", "499.00", "close")])
+        self.assertEqual([c["transfer_match"] for c in candidates], [None, None])
+
+    def test_falls_back_to_creating_when_the_match_disappeared(self):
+        session_id, candidates = self.preview([("2026-03-04", "500.00", "OVERSCHRIJVING BE12")])
+        self.created.delete()  # e.g. the user unlinked the transfer meanwhile
+
+        response = self.commit(session_id, [c["index"] for c in candidates])
+
+        self.assertEqual(response.json(), {"created_count": 1, "confirmed_transfer_count": 0})
+        self.assertEqual(Transaction.objects.get(account=self.savings).payee, "OVERSCHRIJVING BE12")
+

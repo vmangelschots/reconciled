@@ -22,6 +22,14 @@ const UNMAPPED = "none";
 // reintroduced here as a pre-selected "sensible" default).
 const DATE_FORMATS = ["YYYY-MM-DD", "DD/MM/YYYY", "MM/DD/YYYY", "DD-MM-YYYY", "MM-DD-YYYY", "DD.MM.YYYY"];
 
+// A matched transfer line updates the counterpart the app created instead of
+// adding a transaction, so it is reported separately.
+function importSummary({ created_count, confirmed_transfer_count = 0 }) {
+  const parts = [`Created ${created_count} transaction(s).`];
+  if (confirmed_transfer_count > 0) parts.push(`Confirmed ${confirmed_transfer_count} transfer(s).`);
+  return parts.join(" ");
+}
+
 export function ImportPage() {
   const [accounts, setAccounts] = useState([]);
   const [accountId, setAccountId] = useState(null);
@@ -98,7 +106,7 @@ export function ImportPage() {
     try {
       const data = await commitImport(session.id, [...selected]);
       setResult(data);
-      toast.success(`Created ${data.created_count} transaction(s).`);
+      toast.success(importSummary(data));
     } catch (e) {
       toast.error(e.data?.detail ?? e.message);
     } finally {
@@ -119,7 +127,7 @@ export function ImportPage() {
         <h1 className="text-xl font-semibold text-ink-primary">Import</h1>
         <Card>
           <CardContent className="flex flex-col gap-4 pt-6">
-            <p className="text-sm text-ink-primary">Created {result.created_count} transaction(s).</p>
+            <p className="text-sm text-ink-primary">{importSummary(result)}</p>
             <Button onClick={startOver} className="self-start">
               Import another file
             </Button>
@@ -145,7 +153,7 @@ export function ImportPage() {
                   <TableHead>Date</TableHead>
                   <TableHead>Description</TableHead>
                   <TableHead>Amount</TableHead>
-                  <TableHead>Duplicate?</TableHead>
+                  <TableHead>Match</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -162,7 +170,11 @@ export function ImportPage() {
                     <TableCell>{c.description}</TableCell>
                     <TableCell>{formatCents(c.amount_cents)}</TableCell>
                     <TableCell className={c.is_duplicate ? "text-ink-muted" : undefined}>
-                      {c.is_duplicate ? "Likely duplicate" : ""}
+                      {c.transfer_match
+                        ? `Matches transfer from ${c.transfer_match.counterpart_account_name}`
+                        : c.is_duplicate
+                          ? "Likely duplicate"
+                          : ""}
                     </TableCell>
                   </TableRow>
                 ))}

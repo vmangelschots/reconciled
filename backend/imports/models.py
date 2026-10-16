@@ -30,7 +30,9 @@ class ImportSession(models.Model):
     # Parsed candidate rows once parsing has happened (immediately for
     # OFX; after the mapping step for CSV). Each item:
     # {"index": int, "date": "YYYY-MM-DD", "amount_cents": int,
-    #  "description": str, "payee": str, "is_duplicate": bool}
+    #  "description": str, "payee": str, "is_duplicate": bool,
+    #  "transfer_match": null | {"transaction_id": int,
+    #                            "counterpart_account_name": str}}
     # Nothing here is a real Transaction until commit().
     candidates = models.JSONField(default=list, blank=True)
 
