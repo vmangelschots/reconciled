@@ -16,6 +16,19 @@ class Transaction(models.Model):
         related_name="transactions",
     )
     notes = models.TextField(blank=True, default="")
+    # A transfer between two of the user's accounts is two ordinary
+    # transactions pointing at each other. SET_NULL: deleting one side
+    # unlinks the other. All rules live in transactions/transfers.py.
+    transfer_counterpart = models.OneToOneField(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    # True for a counterpart the app generated because nothing matched;
+    # cleared once a bank import confirms it.
+    created_by_transfer = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
