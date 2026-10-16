@@ -14,3 +14,11 @@ if (!Element.prototype.releasePointerCapture) {
 if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {}
 }
+// cmdk measures item sizes via ResizeObserver, which jsdom doesn't implement.
+if (typeof global.ResizeObserver === 'undefined') {
+  global.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+}

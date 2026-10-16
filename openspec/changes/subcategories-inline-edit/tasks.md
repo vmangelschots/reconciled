@@ -13,9 +13,9 @@
 
 ## 3. Shared category combobox (frontend)
 
-- [ ] 3.1 Add `cmdk` as a dependency and build `CategoryCombobox` (props: `categories`, `value`, `onSelect`, `allowCreate`, `onCreate`) - filters by substring match on name, and for subcategories on "parent / name" too, so searching a parent's name surfaces its children - and verify a component test: typing narrows the visible options to matches only
-- [ ] 3.2 Add the `allowCreate` path: when nothing matches the typed text, show a "Create '<text>'" option whose selection calls `onCreate` instead of `onSelect`, and verify a component test: typing a non-matching name shows the create option, and omitting `allowCreate` never shows it regardless of match state
-- [ ] 3.3 Add a `buildCategoryTree(categories)` helper (groups subcategories under their parent, keeps top-level categories ordered alphabetically) shared by this component and the Budgets page, and verify a test with a mixed flat list produces the expected grouped structure
+- [x] 3.1 Add `cmdk` as a dependency and build `CategoryCombobox` (props: `categories`, `value`, `onSelect`, `allowCreate`, `onCreate`) - filters by substring match on name, and for subcategories on "parent / name" too, so searching a parent's name surfaces its children - and verify a component test: typing narrows the visible options to matches only (also needed `@radix-ui/react-popover`, not yet a dependency; jsdom's missing `ResizeObserver`, which cmdk uses, needed the same kind of polyfill as the earlier Radix gaps - 9/9 tests passing, including the parent-name-surfaces-children behavior)
+- [x] 3.2 Add the `allowCreate` path: when nothing matches the typed text, show a "Create '<text>'" option whose selection calls `onCreate` instead of `onSelect`, and verify a component test: typing a non-matching name shows the create option, and omitting `allowCreate` never shows it regardless of match state
+- [x] 3.3 Add a `buildCategoryTree(categories)` helper (groups subcategories under their parent, keeps top-level categories ordered alphabetically) shared by this component and the Budgets page, and verify a test with a mixed flat list produces the expected grouped structure (5/5 passing, including both the summary endpoint's `parent_id` field name and the category-list endpoint's `parent` field name, since the two APIs this feeds from use different names for the same relationship)
 
 ## 4. Wire into the transaction ledger
 
