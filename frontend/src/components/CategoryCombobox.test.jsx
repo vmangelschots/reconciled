@@ -87,4 +87,156 @@ describe("CategoryCombobox", () => {
     await userEvent.click(screen.getByText('Create "Takeout"'));
     expect(onCreate).toHaveBeenCalledWith("Takeout");
   });
+
+  it('hides the clear option while searching for something else', async () => {
+    render(<CategoryCombobox categories={CATEGORIES} value={1} onSelect={vi.fn()} />);
+    await open();
+    await userEvent.type(screen.getByPlaceholderText("Search categories…"), "trans");
+    expect(screen.queryByText("Uncategorized")).not.toBeInTheDocument();
+  });
+
+  it("lists the clear option when its own label matches the search", async () => {
+    render(<CategoryCombobox categories={CATEGORIES} value={1} onSelect={vi.fn()} />);
+    await open();
+    await userEvent.type(screen.getByPlaceholderText("Search categories…"), "uncat");
+    expect(screen.getByText("Uncategorized")).toBeInTheDocument();
+  });
+
+  it("forwards aria-label to the trigger", () => {
+    render(<CategoryCombobox categories={CATEGORIES} value={null} onSelect={vi.fn()} aria-label="Category" />);
+    expect(screen.getByRole("button", { name: "Category" })).toBeInTheDocument();
+  });
+});
+
+describe("CategoryCombobox highlight", () => {
+  it("Enter after typing picks the best match, not the clear option", async () => {
+    const onSelect = vi.fn();
+    render(<CategoryCombobox categories={CATEGORIES} value={null} onSelect={onSelect} />);
+    await open();
+    await userEvent.type(screen.getByPlaceholderText("Search categories…"), "groc{Enter}");
+    expect(onSelect).toHaveBeenCalledWith(1);
+  });
+
+  it("Enter without typing keeps the current value", async () => {
+    const onSelect = vi.fn();
+    render(<CategoryCombobox categories={CATEGORIES} value={2} onSelect={onSelect} />);
+    await open();
+    await userEvent.keyboard("{Enter}");
+    expect(onSelect).toHaveBeenCalledWith(2);
+  });
+
+  it("Enter with no match creates the typed category when allowed", async () => {
+    const onCreate = vi.fn().mockResolvedValue(undefined);
+    render(<CategoryCombobox categories={CATEGORIES} value={null} onSelect={vi.fn()} allowCreate onCreate={onCreate} />);
+    await open();
+    await userEvent.type(screen.getByPlaceholderText("Search categories…"), "Pets{Enter}");
+    expect(onCreate).toHaveBeenCalledWith("Pets");
+  });
+
+  it("arrow keys still move the highlight", async () => {
+    const onSelect = vi.fn();
+    render(<CategoryCombobox categories={CATEGORIES} value={null} onSelect={onSelect} />);
+    await open();
+    // Empty search highlights "Uncategorized" (first); one down is Groceries.
+    await userEvent.keyboard("{ArrowDown}{Enter}");
+    expect(onSelect).toHaveBeenCalledWith(1);
+  });
+});
+
+describe("CategoryCombobox type-to-open", () => {
+  it("typing on the focused trigger opens it with that character", async () => {
+    render(<CategoryCombobox categories={CATEGORIES} value={null} onSelect={vi.fn()} />);
+    screen.getByRole("button").focus();
+    await userEvent.keyboard("g");
+    const input = screen.getByPlaceholderText("Search categories…");
+    expect(input).toHaveFocus();
+    expect(input).toHaveValue("g");
+    expect(screen.queryByText("Transport")).not.toBeInTheDocument();
+  });
+
+  it("keeps typing into the search after opening", async () => {
+    const onSelect = vi.fn();
+    render(<CategoryCombobox categories={CATEGORIES} value={null} onSelect={onSelect} />);
+    screen.getByRole("button").focus();
+    await userEvent.keyboard("tra{Enter}");
+    expect(onSelect).toHaveBeenCalledWith(2);
+  });
+
+  it("ArrowDown opens with an empty search", async () => {
+    render(<CategoryCombobox categories={CATEGORIES} value={null} onSelect={vi.fn()} />);
+    screen.getByRole("button").focus();
+    await userEvent.keyboard("{ArrowDown}");
+    expect(screen.getByPlaceholderText("Search categories…")).toHaveValue("");
+  });
+
+  it("does not capture modifier shortcuts", async () => {
+    render(<CategoryCombobox categories={CATEGORIES} value={null} onSelect={vi.fn()} />);
+    screen.getByRole("button").focus();
+    await userEvent.keyboard("{Control>}r{/Control}");
+    expect(screen.queryByPlaceholderText("Search categories…")).not.toBeInTheDocument();
+  });
+});
+
+describe("CategoryCombobox Tab / Escape", () => {
+  function Between(props) {
+    return (
+      <div>
+        <button type="button">before</button>
+        <CategoryCombobox categories={CATEGORIES} aria-label="Category" {...props} />
+        <button type="button">after</button>
+      </div>
+    );
+  }
+
+  async function typeInPicker(text) {
+    screen.getByRole("button", { name: "Category" }).focus();
+    await userEvent.keyboard(text);
+  }
+
+  it("Tab picks the highlighted match and focuses the next field", async () => {
+    const onSelect = vi.fn();
+    render(<Between value={null} onSelect={onSelect} />);
+    await typeInPicker("trans{Tab}");
+    expect(onSelect).toHaveBeenCalledWith(2);
+    expect(screen.getByText("after")).toHaveFocus();
+  });
+
+  it("Shift+Tab picks the match and focuses the previous field", async () => {
+    const onSelect = vi.fn();
+    render(<Between value={null} onSelect={onSelect} />);
+    await typeInPicker("trans{Shift>}{Tab}{/Shift}");
+    expect(onSelect).toHaveBeenCalledWith(2);
+    expect(screen.getByText("before")).toHaveFocus();
+  });
+
+  it("Tab with no match neither selects nor creates", async () => {
+    const onSelect = vi.fn();
+    const onCreate = vi.fn();
+    render(<Between value={1} onSelect={onSelect} allowCreate onCreate={onCreate} />);
+    await typeInPicker("Pets{Tab}");
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(onCreate).not.toHaveBeenCalled();
+    expect(screen.getByText("after")).toHaveFocus();
+  });
+
+  it("Escape closes without changing the value and returns focus to the trigger", async () => {
+    const onSelect = vi.fn();
+    render(<Between value={1} onSelect={onSelect} />);
+    await typeInPicker("trans{Escape}");
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(screen.queryByPlaceholderText("Search categories…")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Category" })).toHaveFocus();
+  });
+
+  it("Enter returns focus to the trigger", async () => {
+    render(<Between value={null} onSelect={vi.fn()} />);
+    await typeInPicker("trans{Enter}");
+    expect(screen.getByRole("button", { name: "Category" })).toHaveFocus();
+  });
+
+  it("reopening after Escape starts with an empty search", async () => {
+    render(<Between value={1} onSelect={vi.fn()} />);
+    await typeInPicker("trans{Escape}{Enter}");
+    expect(screen.getByPlaceholderText("Search categories…")).toHaveValue("");
+  });
 });
