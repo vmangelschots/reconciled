@@ -31,6 +31,7 @@
   --chart-gridline: #e1e0d9;
   --chart-baseline: #c3c2b7;
   --chart-series-1: #2a78d6;
+  --chart-series-2: #eb6834;
 }
 
 .dark {
@@ -47,6 +48,7 @@
   --chart-gridline: #2c2c2a;
   --chart-baseline: #383835;
   --chart-series-1: #3987e5;
+  --chart-series-2: #d95926;
 }
 
 @theme {
