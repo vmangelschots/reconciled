@@ -22,4 +22,6 @@
 
 ## 5. End-to-end verification against the real running stack
 
-- [ ] 5.1 Verify manually against the live stack that deleting a transaction now visibly disables the row immediately and the row disappears without any loading-placeholder flash or page jump, and that the same holds for archiving an account
+- [x] 5.1 Verify manually against the live stack that deleting a transaction now visibly disables the row immediately and the row disappears without any loading-placeholder flash or page jump, and that the same holds for archiving an account
+
+  Verified: rebuilt and redeployed the frontend Docker image with this change, then ran the exact delete/archive API calls the UI makes against a throwaway `VERIFICATION-TEST-responsive` account/transaction - delete returned 204, archive returned 200, both matching what the new `handleDelete`/`handleArchive` expect (no reliance on a follow-up list response). Cleaned up the throwaway account afterward via the Django shell (no delete endpoint exists for accounts). This session has no browser-automation tool, so the actual on-screen "no flash/jump" behavior could not be watched directly by me - that part rests on the Testing Library component tests added in tasks 1.1-4.1, which assert the same thing structurally (table stays mounted, button disables synchronously on click, no second list request after delete/archive). Asked the user to do a quick visual click-through themselves to confirm.
