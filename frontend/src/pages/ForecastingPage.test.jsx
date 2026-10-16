@@ -78,4 +78,25 @@ describe("ForecastingPage", () => {
     await waitFor(() => expect(screen.queryByText("Rent")).not.toBeInTheDocument());
     expect(screen.getByText("Gym")).toBeInTheDocument();
   });
+
+  it("picks a recurring transaction's category by typing and Tab", async () => {
+    categoriesApi.listCategories.mockResolvedValue([{ id: 7, name: "Housing", parent: null }]);
+    forecastingApi.listRecurringTransactions.mockResolvedValue([]);
+    forecastingApi.createRecurringTransaction.mockResolvedValue({ id: 3 });
+    renderPage();
+    await userEvent.type(await screen.findByLabelText("Payee"), "Rent");
+    await userEvent.type(screen.getByLabelText("Amount"), "-1500");
+
+    screen.getByRole("button", { name: "Category" }).focus();
+    await userEvent.keyboard("hous{Tab}");
+    const submit = screen.getByRole("button", { name: "Add recurring transaction" });
+    expect(submit).toHaveFocus();
+
+    await userEvent.click(submit);
+    await waitFor(() =>
+      expect(forecastingApi.createRecurringTransaction).toHaveBeenCalledWith(
+        expect.objectContaining({ payee: "Rent", category: 7 }),
+      ),
+    );
+  });
 });

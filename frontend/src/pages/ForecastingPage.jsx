@@ -8,6 +8,7 @@ import {
   listRecurringTransactions,
   updateRecurringTransaction,
 } from "../api/forecasting";
+import { CategoryCombobox } from "../components/CategoryCombobox";
 import { ForecastChart } from "../components/ForecastChart";
 import { Button } from "../components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
@@ -31,7 +32,6 @@ const HORIZON_PRESETS = [
   { label: "1 year", value: 365 },
 ];
 
-const UNCATEGORIZED = "uncategorized";
 
 function formatCents(cents) {
   return (cents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" });
@@ -284,9 +284,7 @@ function RecurringForm({ initialValues, categories, onSubmit, onCancel, submitLa
     initialValues?.start_date ?? new Date().toISOString().slice(0, 10),
   );
   const [endDate, setEndDate] = useState(initialValues?.end_date ?? "");
-  const [category, setCategory] = useState(
-    initialValues?.category != null ? String(initialValues.category) : UNCATEGORIZED,
-  );
+  const [category, setCategory] = useState(initialValues?.category ?? null);
   const [submitting, setSubmitting] = useState(false);
   const toast = useToast();
 
@@ -300,7 +298,7 @@ function RecurringForm({ initialValues, categories, onSubmit, onCancel, submitLa
         frequency,
         start_date: startDate,
         end_date: endDate || null,
-        category: category === UNCATEGORIZED ? null : Number(category),
+        category,
       });
       if (!initialValues) {
         setPayee("");
@@ -363,19 +361,14 @@ function RecurringForm({ initialValues, categories, onSubmit, onCancel, submitLa
       </div>
       <div className="flex flex-col gap-1.5">
         <Label>Category</Label>
-        <Select value={category} onValueChange={setCategory}>
-          <SelectTrigger className="w-40" aria-label="Category">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={UNCATEGORIZED}>Uncategorized</SelectItem>
-            {categories.map((c) => (
-              <SelectItem key={c.id} value={String(c.id)}>
-                {c.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <CategoryCombobox
+          categories={categories}
+          value={category}
+          onSelect={setCategory}
+          placeholder="Uncategorized"
+          aria-label="Category"
+          className="w-40"
+        />
       </div>
       <Button type="submit" disabled={submitting}>
         {submitLabel}

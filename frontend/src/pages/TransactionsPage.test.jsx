@@ -121,4 +121,127 @@ describe("TransactionsPage", () => {
     expect(transactionsApi.deleteTransaction).toHaveBeenCalledWith(1);
     expect(transactionsApi.listTransactions).toHaveBeenCalledTimes(1);
   });
+
+  it("picks the add form's category by typing and Tab", async () => {
+    transactionsApi.listTransactions.mockResolvedValue([]);
+    transactionsApi.createTransaction.mockResolvedValue({ id: 3 });
+    renderPage();
+    await userEvent.type(await screen.findByLabelText("Amount"), "-12.50");
+    await userEvent.type(screen.getByLabelText("Payee"), "Corner shop");
+
+    screen.getByRole("button", { name: "Category" }).focus();
+    await userEvent.keyboard("groc{Tab}");
+    expect(screen.getByLabelText("Notes")).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Category" })).toHaveTextContent("Groceries");
+
+    await userEvent.click(screen.getByRole("button", { name: "Add transaction" }));
+    await waitFor(() =>
+      expect(transactionsApi.createTransaction).toHaveBeenCalledWith(expect.objectContaining({ category: 1 })),
+    );
+  });
+
+  it("filters the ledger by typing a category, and clears it with All", async () => {
+    transactionsApi.listTransactions.mockResolvedValue(TRANSACTIONS);
+    renderPage();
+    await findTable();
+    const filter = screen.getByRole("button", { name: "Filter by category" });
+
+    filter.focus();
+    await userEvent.keyboard("groc{Enter}");
+    await waitFor(() =>
+      expect(transactionsApi.listTransactions).toHaveBeenLastCalledWith(expect.objectContaining({ category: 1 })),
+    );
+
+    filter.focus();
+    await userEvent.keyboard("all{Enter}");
+    await waitFor(() =>
+      expect(transactionsApi.listTransactions).toHaveBeenLastCalledWith(expect.objectContaining({ category: "" })),
+    );
+  });
+
+  describe("inline category changes", () => {
+    function rowPicker(payee) {
+      const row = within(screen.getByRole("table")).getByText(payee).closest("tr");
+      return within(row).getAllByRole("button")[0];
+    }
+
+    function pending() {
+      let resolve;
+      let reject;
+      const promise = new Promise((res, rej) => {
+        resolve = res;
+        reject = rej;
+      });
+      return { promise, resolve, reject };
+    }
+
+    it("shows the picked category before the save completes, without reloading", async () => {
+      transactionsApi.listTransactions.mockResolvedValue(TRANSACTIONS);
+      const update = pending();
+      transactionsApi.updateTransaction.mockReturnValue(update.promise);
+      renderPage();
+      await findTable();
+      await waitFor(() => expect(transactionsApi.listTransactions).toHaveBeenCalledTimes(1));
+
+      rowPicker("Store A").focus();
+      await userEvent.keyboard("groc{Enter}");
+
+      expect(rowPicker("Store A")).toHaveTextContent("Groceries");
+      expect(transactionsApi.updateTransaction).toHaveBeenCalledWith(1, { category: 1 });
+
+      update.resolve({});
+      await screen.findByText("Category updated.");
+      expect(rowPicker("Store A")).toHaveTextContent("Groceries");
+      expect(transactionsApi.listTransactions).toHaveBeenCalledTimes(1);
+    });
+
+    it("restores the previous category when the save fails", async () => {
+      transactionsApi.listTransactions.mockResolvedValue(TRANSACTIONS);
+      transactionsApi.updateTransaction.mockRejectedValue(new Error("Server said no"));
+      renderPage();
+      await findTable();
+
+      rowPicker("Store A").focus();
+      await userEvent.keyboard("groc{Enter}");
+
+      await screen.findByText("Server said no");
+      expect(rowPicker("Store A")).not.toHaveTextContent("Groceries");
+    });
+
+    it("shows a created category immediately and keeps it once saved", async () => {
+      transactionsApi.listTransactions.mockResolvedValue(TRANSACTIONS);
+      const create = pending();
+      categoriesApi.createCategory.mockReturnValue(create.promise);
+      transactionsApi.updateTransaction.mockResolvedValue({});
+      renderPage();
+      await findTable();
+      await waitFor(() => expect(transactionsApi.listTransactions).toHaveBeenCalledTimes(1));
+
+      rowPicker("Store A").focus();
+      await userEvent.keyboard("Pets{Enter}");
+
+      expect(rowPicker("Store A")).toHaveTextContent("Pets");
+      expect(transactionsApi.updateTransaction).not.toHaveBeenCalled();
+
+      create.resolve({ id: 9, name: "Pets", parent: null });
+      await waitFor(() => expect(transactionsApi.updateTransaction).toHaveBeenCalledWith(1, { category: 9 }));
+      await screen.findByText('Created "Pets" and assigned it.');
+      expect(rowPicker("Store A")).toHaveTextContent("Pets");
+      expect(transactionsApi.listTransactions).toHaveBeenCalledTimes(1);
+    });
+
+    it("drops the placeholder and restores the row when creating fails", async () => {
+      transactionsApi.listTransactions.mockResolvedValue(TRANSACTIONS);
+      categoriesApi.createCategory.mockRejectedValue(new Error("Name taken"));
+      renderPage();
+      await findTable();
+
+      rowPicker("Store A").focus();
+      await userEvent.keyboard("Pets{Enter}");
+
+      await screen.findByText("Name taken");
+      expect(rowPicker("Store A")).not.toHaveTextContent("Pets");
+      expect(transactionsApi.updateTransaction).not.toHaveBeenCalled();
+    });
+  });
 });

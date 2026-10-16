@@ -16,9 +16,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/Table";
 import { useToast } from "../components/ui/Toast";
 
-const UNCATEGORIZED = "uncategorized";
-const ALL_CATEGORIES = "all";
-
 function formatCents(cents) {
   return (cents / 100).toLocaleString(undefined, {
     style: "currency",
@@ -31,11 +28,12 @@ export function TransactionsPage() {
   const [categories, setCategories] = useState([]);
   const [accountId, setAccountId] = useState(null);
   const [transactions, setTransactions] = useState([]);
-  const [filters, setFilters] = useState({ dateFrom: "", dateTo: "", category: ALL_CATEGORIES, search: "" });
+  const [filters, setFilters] = useState({ dateFrom: "", dateTo: "", category: null, search: "" });
   const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [pendingIds, setPendingIds] = useState(new Set());
   const hasLoadedRef = useRef(false);
+  const nextTempIdRef = useRef(-1);
   const toast = useToast();
 
   function setPending(id, isPending) {
@@ -68,7 +66,7 @@ export function TransactionsPage() {
       account: accountId,
       date_from: filters.dateFrom,
       date_to: filters.dateTo,
-      category: filters.category === ALL_CATEGORIES ? "" : filters.category,
+      category: filters.category ?? "",
       search: filters.search,
     })
       .then((data) => {
@@ -110,24 +108,47 @@ export function TransactionsPage() {
     }
   }
 
+  // Inline category changes are optimistic: the row shows the new
+  // category straight away and the save runs in the background, with no
+  // list reload. A failed save puts the old category back - but only if
+  // the row still shows the value we set, so a later pick isn't undone.
+  function setRowCategory(transactionId, category, onlyIf) {
+    setTransactions((prev) =>
+      prev.map((t) =>
+        t.id === transactionId && (onlyIf === undefined || t.category === onlyIf) ? { ...t, category } : t,
+      ),
+    );
+  }
+
   async function handleInlineCategorySelect(transactionId, categoryId) {
+    const previous = transactions.find((t) => t.id === transactionId)?.category ?? null;
+    setRowCategory(transactionId, categoryId);
     try {
       await updateTransaction(transactionId, { category: categoryId });
       toast.success("Category updated.");
-      await reload();
     } catch (e) {
+      setRowCategory(transactionId, previous, categoryId);
       toast.error(e.data ? Object.values(e.data).flat().join(" ") : e.message);
     }
   }
 
   async function handleInlineCategoryCreate(transactionId, name) {
+    const previous = transactions.find((t) => t.id === transactionId)?.category ?? null;
+    // Negative ids never collide with server ids; the placeholder lets
+    // the row show the new name before the category exists.
+    const tempId = nextTempIdRef.current--;
+    setCategories((prev) => [...prev, { id: tempId, name, parent: null }]);
+    setRowCategory(transactionId, tempId);
+    let created = null;
     try {
-      const created = await createCategory(name);
-      setCategories((prev) => [...prev, created]);
+      created = await createCategory(name);
+      setCategories((prev) => prev.map((c) => (c.id === tempId ? created : c)));
+      setTransactions((prev) => prev.map((t) => (t.category === tempId ? { ...t, category: created.id } : t)));
       await updateTransaction(transactionId, { category: created.id });
       toast.success(`Created "${name}" and assigned it.`);
-      await reload();
     } catch (e) {
+      if (!created) setCategories((prev) => prev.filter((c) => c.id !== tempId));
+      setRowCategory(transactionId, previous, created ? created.id : tempId);
       toast.error(e.data ? Object.values(e.data).flat().join(" ") : e.message);
     }
   }
@@ -186,19 +207,15 @@ export function TransactionsPage() {
           </div>
           <div className="flex flex-col gap-1.5">
             <Label>Category</Label>
-            <Select value={filters.category} onValueChange={(v) => setFilters({ ...filters, category: v })}>
-              <SelectTrigger className="w-40" aria-label="Filter by category">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={ALL_CATEGORIES}>All</SelectItem>
-                {categories.map((c) => (
-                  <SelectItem key={c.id} value={String(c.id)}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <CategoryCombobox
+              categories={categories}
+              value={filters.category}
+              onSelect={(categoryId) => setFilters({ ...filters, category: categoryId })}
+              clearLabel="All"
+              placeholder="All"
+              aria-label="Filter by category"
+              className="w-40"
+            />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="search">Search</Label>
@@ -302,9 +319,7 @@ function TransactionForm({ initialValues, categories, onSubmit, onCancel, submit
     initialValues ? (initialValues.amount_cents / 100).toString() : "",
   );
   const [payee, setPayee] = useState(initialValues?.payee ?? "");
-  const [category, setCategory] = useState(
-    initialValues?.category != null ? String(initialValues.category) : UNCATEGORIZED,
-  );
+  const [category, setCategory] = useState(initialValues?.category ?? null);
   const [notes, setNotes] = useState(initialValues?.notes ?? "");
   const [submitting, setSubmitting] = useState(false);
   const toast = useToast();
@@ -317,13 +332,13 @@ function TransactionForm({ initialValues, categories, onSubmit, onCancel, submit
         date,
         amount_cents: Math.round(parseFloat(amount || "0") * 100),
         payee,
-        category: category === UNCATEGORIZED ? null : Number(category),
+        category,
         notes,
       });
       if (!initialValues) {
         setAmount("");
         setPayee("");
-        setCategory(UNCATEGORIZED);
+        setCategory(null);
         setNotes("");
       }
     } catch (e) {
@@ -357,19 +372,14 @@ function TransactionForm({ initialValues, categories, onSubmit, onCancel, submit
       </div>
       <div className="flex flex-col gap-1.5">
         <Label>Category</Label>
-        <Select value={category} onValueChange={setCategory}>
-          <SelectTrigger className="w-40" aria-label="Category">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={UNCATEGORIZED}>Uncategorized</SelectItem>
-            {categories.map((c) => (
-              <SelectItem key={c.id} value={String(c.id)}>
-                {c.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <CategoryCombobox
+          categories={categories}
+          value={category}
+          onSelect={setCategory}
+          placeholder="Uncategorized"
+          aria-label="Category"
+          className="w-40"
+        />
       </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="txn-notes">Notes</Label>
