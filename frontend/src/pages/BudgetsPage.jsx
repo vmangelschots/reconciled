@@ -31,7 +31,20 @@ export function BudgetsPage() {
   const [month, setMonth] = useState(currentMonth());
   const [summary, setSummary] = useState(null);
   const [editingId, setEditingId] = useState(null);
+  const [pendingIds, setPendingIds] = useState(new Set());
   const toast = useToast();
+
+  function setPending(id, isPending) {
+    setPendingIds((prev) => {
+      const next = new Set(prev);
+      if (isPending) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+      return next;
+    });
+  }
 
   function reloadCategories() {
     return listCategories().then(setCategories);
@@ -66,6 +79,7 @@ export function BudgetsPage() {
   }
 
   async function handleDelete(id) {
+    setPending(id, true);
     try {
       await deleteCategory(id);
       toast.success("Category deleted.");
@@ -73,6 +87,8 @@ export function BudgetsPage() {
       await reloadSummary();
     } catch (e) {
       toast.error(e.data?.detail ?? e.message);
+    } finally {
+      setPending(id, false);
     }
   }
 
@@ -87,7 +103,7 @@ export function BudgetsPage() {
 
   const categoryTree = buildCategoryTree(categories);
   const summaryTree = summary
-    ? buildCategoryTree(summary.categories.map((row) => ({ ...row, id: row.category_id })))
+    ? buildCategoryTree(summary.categories.map((row) => ({ ...row, id: row.category_id, name: row.category_name })))
     : [];
 
   return (
@@ -108,6 +124,7 @@ export function BudgetsPage() {
                   category={parent}
                   categories={categories}
                   editing={editingId === parent.id}
+                  disabled={pendingIds.has(parent.id)}
                   onEdit={() => setEditingId(parent.id)}
                   onCancelEdit={() => setEditingId(null)}
                   onSave={(values) => handleSaveCategory(parent.id, values)}
@@ -121,6 +138,7 @@ export function BudgetsPage() {
                           category={sub}
                           categories={categories}
                           editing={editingId === sub.id}
+                          disabled={pendingIds.has(sub.id)}
                           onEdit={() => setEditingId(sub.id)}
                           onCancelEdit={() => setEditingId(null)}
                           onSave={(values) => handleSaveCategory(sub.id, values)}
@@ -208,7 +226,7 @@ function SummaryRows({ row, onSetLimit, indent = false }) {
   );
 }
 
-function CategoryRow({ category, categories, editing, onEdit, onCancelEdit, onSave, onDelete }) {
+function CategoryRow({ category, categories, editing, disabled, onEdit, onCancelEdit, onSave, onDelete }) {
   if (editing) {
     return (
       <CategoryForm
@@ -223,10 +241,10 @@ function CategoryRow({ category, categories, editing, onEdit, onCancelEdit, onSa
   return (
     <div className="flex items-center gap-3">
       <span className="flex-1 text-sm text-ink-primary">{category.name}</span>
-      <Button variant="outline" size="sm" onClick={onEdit}>
+      <Button variant="outline" size="sm" disabled={disabled} onClick={onEdit}>
         Rename
       </Button>
-      <Button variant="ghost" size="sm" onClick={onDelete}>
+      <Button variant="ghost" size="sm" disabled={disabled} onClick={onDelete}>
         Delete
       </Button>
     </div>
@@ -292,6 +310,20 @@ function CategoryForm({ initialValues, categories, onSubmit, onCancel, submitLab
 function LimitForm({ onSave }) {
   const [amount, setAmount] = useState("");
   const [isOverride, setIsOverride] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const toast = useToast();
+
+  async function handleSave() {
+    setSubmitting(true);
+    try {
+      await onSave(amount, isOverride);
+    } catch (e) {
+      toast.error(e.data ? Object.values(e.data).flat().join(" ") : e.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   return (
     <span className="flex items-center gap-2">
       <Input
@@ -310,7 +342,7 @@ function LimitForm({ onSave }) {
         />
         this month only
       </label>
-      <Button size="sm" onClick={() => onSave(amount, isOverride)}>
+      <Button size="sm" disabled={submitting} onClick={handleSave}>
         Set
       </Button>
     </span>

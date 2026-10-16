@@ -14,11 +14,11 @@
 
 ## 3. Budgets page
 
-- [ ] 3.1 Add `pendingIds` gating to the category list's Rename/Delete buttons and the summary table's "Set limit" controls, and verify a component test covering at least the Delete button's immediate-disable behavior
+- [x] 3.1 Add `pendingIds` gating to the category list's Rename/Delete buttons and the summary table's "Set limit" controls, and verify a component test covering at least the Delete button's immediate-disable behavior
 
 ## 4. Forecasting page
 
-- [ ] 4.1 Add `pendingIds` gating to the recurring-transactions list's Edit/Delete buttons, and verify a component test covering at least the Delete button's immediate-disable behavior
+- [x] 4.1 Add `pendingIds` gating to the recurring-transactions list's Edit/Delete buttons, and verify a component test covering at least the Delete button's immediate-disable behavior
 
 ## 5. End-to-end verification against the real running stack
 

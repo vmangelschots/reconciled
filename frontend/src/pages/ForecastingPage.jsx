@@ -45,7 +45,20 @@ export function ForecastingPage() {
   const [horizonDays, setHorizonDays] = useState(90);
   const [forecast, setForecast] = useState(null);
   const [editingId, setEditingId] = useState(null);
+  const [pendingIds, setPendingIds] = useState(new Set());
   const toast = useToast();
+
+  function setPending(id, isPending) {
+    setPendingIds((prev) => {
+      const next = new Set(prev);
+      if (isPending) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+      return next;
+    });
+  }
 
   useEffect(() => {
     Promise.all([listAccounts(), listCategories()]).then(([accts, cats]) => {
@@ -89,9 +102,16 @@ export function ForecastingPage() {
   }
 
   async function handleDelete(id) {
-    await deleteRecurringTransaction(id);
-    toast.success("Recurring transaction deleted.");
-    await Promise.all([reloadRecurring(), reloadForecast()]);
+    setPending(id, true);
+    try {
+      await deleteRecurringTransaction(id);
+      toast.success("Recurring transaction deleted.");
+      await Promise.all([reloadRecurring(), reloadForecast()]);
+    } catch (e) {
+      toast.error(e.data ? Object.values(e.data).flat().join(" ") : e.message);
+    } finally {
+      setPending(id, false);
+    }
   }
 
   function categoryName(id) {
@@ -168,10 +188,20 @@ export function ForecastingPage() {
                     <TableCell>{r.end_date ?? "—"}</TableCell>
                     <TableCell>{categoryName(r.category)}</TableCell>
                     <TableCell className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={() => setEditingId(r.id)}>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={pendingIds.has(r.id)}
+                        onClick={() => setEditingId(r.id)}
+                      >
                         Edit
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => handleDelete(r.id)}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={pendingIds.has(r.id)}
+                        onClick={() => handleDelete(r.id)}
+                      >
                         Delete
                       </Button>
                     </TableCell>
