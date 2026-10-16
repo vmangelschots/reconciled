@@ -7,6 +7,22 @@ from ofxparse import OfxParser
 
 DUPLICATE_SIMILARITY_THRESHOLD = 0.8
 
+# A fixed, validated set - not arbitrary user-supplied strptime strings.
+# No default is pre-selected anywhere; the user must choose one (design.md).
+DATE_FORMATS = {
+    "YYYY-MM-DD": "%Y-%m-%d",
+    "DD/MM/YYYY": "%d/%m/%Y",
+    "MM/DD/YYYY": "%m/%d/%Y",
+    "DD-MM-YYYY": "%d-%m-%Y",
+    "MM-DD-YYYY": "%m-%d-%Y",
+    "DD.MM.YYYY": "%d.%m.%Y",
+}
+
+# Candidates real bank/spreadsheet CSV exports actually use. Restricting
+# Sniffer to these (rather than letting it guess from any character)
+# avoids false positives from a stray character in a free-text field.
+_DELIMITER_CANDIDATES = ",;\t|"
+
 
 class ImportParseError(ValueError):
     """Raised for any user-facing import problem - unsupported file,
@@ -34,8 +50,20 @@ def decode_upload(file_obj):
         return raw.decode("latin-1")
 
 
-def csv_columns(raw_content):
-    reader = csv.reader(io.StringIO(raw_content))
+def detect_delimiter(raw_content):
+    """Detect the column delimiter from the file's own content, restricted
+    to the candidates real exports actually use. Falls back to comma on
+    an inconclusive sample (e.g. a single-column file), preserving
+    today's exact behavior for files that already work.
+    """
+    try:
+        return csv.Sniffer().sniff(raw_content[:4096], delimiters=_DELIMITER_CANDIDATES).delimiter
+    except csv.Error:
+        return ","
+
+
+def csv_columns(raw_content, delimiter=","):
+    reader = csv.reader(io.StringIO(raw_content), delimiter=delimiter)
     try:
         return next(reader)
     except StopIteration:
@@ -54,25 +82,29 @@ def _parse_amount_cents(raw):
         return None
 
 
-def _parse_date(raw):
+def _parse_date(raw, date_format):
     raw = raw.strip()
-    for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y", "%m/%d/%y"):
-        try:
-            return datetime.strptime(raw, fmt).date().isoformat()
-        except ValueError:
-            continue
-    raise ImportParseError(f"Could not parse date '{raw}'.")
+    pattern = DATE_FORMATS.get(date_format)
+    if not pattern:
+        raise ImportParseError(f"Unsupported date format '{date_format}'.")
+    try:
+        return datetime.strptime(raw, pattern).date().isoformat()
+    except ValueError:
+        raise ImportParseError(f"Could not parse date '{raw}' using format '{date_format}'.")
 
 
 def validate_csv_mapping(mapping):
-    """mapping: {"date": col, "description": col, "amount": col | None,
-    "debit": col | None, "credit": col | None, "payee": col | None}
+    """mapping: {"date": col, "date_format": key (see DATE_FORMATS),
+    "description": col, "amount": col | None, "debit": col | None,
+    "credit": col | None, "payee": col | None}
 
     Raises ImportParseError listing missing fields if invalid.
     """
     missing = []
     if not mapping.get("date"):
         missing.append("date")
+    if not mapping.get("date_format"):
+        missing.append("date_format")
     if not mapping.get("description"):
         missing.append("description")
     has_amount = bool(mapping.get("amount"))
@@ -85,12 +117,12 @@ def validate_csv_mapping(mapping):
         )
 
 
-def parse_csv_candidates(raw_content, mapping):
+def parse_csv_candidates(raw_content, mapping, delimiter=","):
     validate_csv_mapping(mapping)
-    reader = csv.DictReader(io.StringIO(raw_content))
+    reader = csv.DictReader(io.StringIO(raw_content), delimiter=delimiter)
     candidates = []
     for row in reader:
-        date = _parse_date(row[mapping["date"]])
+        date = _parse_date(row[mapping["date"]], mapping["date_format"])
         description = row.get(mapping["description"], "").strip()
         payee = row.get(mapping.get("payee"), "").strip() if mapping.get("payee") else description
 

@@ -21,6 +21,12 @@ class ImportSession(models.Model):
     # Lets the CSV mapping step re-parse without asking for a re-upload.
     raw_content = models.TextField()
 
+    # CSV only: detected once at upload time (csv.Sniffer) and reused for
+    # every later parse of this session, so the mapping step never
+    # re-sniffs (and potentially re-detects differently) from the stored
+    # raw_content. Irrelevant for OFX sessions; left at the default.
+    delimiter = models.CharField(max_length=4, default=",")
+
     # Parsed candidate rows once parsing has happened (immediately for
     # OFX; after the mapping step for CSV). Each item:
     # {"index": int, "date": "YYYY-MM-DD", "amount_cents": int,

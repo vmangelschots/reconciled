@@ -13,6 +13,7 @@ from .utils import (
     ImportParseError,
     csv_columns,
     decode_upload,
+    detect_delimiter,
     detect_file_format,
     flag_duplicates,
     parse_csv_candidates,
@@ -63,13 +64,19 @@ class ImportSessionViewSet(
             self._store_candidates(session, candidates)
             return Response(self._representation(session), status=201)
 
-        # CSV: no candidates yet - return the header columns so the user
-        # can map them via the map() action below.
+        # CSV: detect the delimiter once now and store it, so the map()
+        # action below reuses the same one instead of re-sniffing (and
+        # potentially re-detecting differently) from raw_content later.
+        # No candidates yet - return the header columns so the user can
+        # map them.
+        delimiter = detect_delimiter(raw_content)
         try:
-            columns = csv_columns(raw_content)
+            columns = csv_columns(raw_content, delimiter=delimiter)
         except ImportParseError as exc:
             session.delete()
             return Response({"detail": str(exc)}, status=400)
+        session.delimiter = delimiter
+        session.save(update_fields=["delimiter"])
         data = self._representation(session)
         data["columns"] = columns
         return Response(data, status=201)
@@ -84,10 +91,10 @@ class ImportSessionViewSet(
 
         mapping = {
             key: request.data.get(key)
-            for key in ("date", "description", "amount", "debit", "credit", "payee")
+            for key in ("date", "date_format", "description", "amount", "debit", "credit", "payee")
         }
         try:
-            candidates = parse_csv_candidates(session.raw_content, mapping)
+            candidates = parse_csv_candidates(session.raw_content, mapping, delimiter=session.delimiter)
         except ImportParseError as exc:
             return Response({"detail": str(exc)}, status=400)
 

@@ -17,6 +17,10 @@ function formatCents(cents) {
 
 const CSV_FIELDS = ["date", "amount", "description", "payee"];
 const UNMAPPED = "none";
+// No default - the user must choose explicitly (design.md: guessing the
+// date format is exactly the bug this change fixes, so it isn't
+// reintroduced here as a pre-selected "sensible" default).
+const DATE_FORMATS = ["YYYY-MM-DD", "DD/MM/YYYY", "MM/DD/YYYY", "DD-MM-YYYY", "MM-DD-YYYY", "DD.MM.YYYY"];
 
 export function ImportPage() {
   const [accounts, setAccounts] = useState([]);
@@ -29,6 +33,7 @@ export function ImportPage() {
     description: UNMAPPED,
     payee: UNMAPPED,
   });
+  const [dateFormat, setDateFormat] = useState("");
   const [selected, setSelected] = useState(new Set());
   const [result, setResult] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -63,9 +68,12 @@ export function ImportPage() {
     event.preventDefault();
     setSubmitting(true);
     try {
-      const mappingPayload = Object.fromEntries(
-        Object.entries(mapping).map(([field, col]) => [field, col === UNMAPPED ? "" : col]),
-      );
+      const mappingPayload = {
+        ...Object.fromEntries(
+          Object.entries(mapping).map(([field, col]) => [field, col === UNMAPPED ? "" : col]),
+        ),
+        date_format: dateFormat,
+      };
       const data = await mapCsvColumns(session.id, mappingPayload);
       setSession({ ...session, ...data });
       selectNonDuplicates(data.candidates);
@@ -206,6 +214,21 @@ export function ImportPage() {
                     </Select>
                   </div>
                 ))}
+                <div className="flex flex-col gap-1.5">
+                  <Label>Date format</Label>
+                  <Select value={dateFormat} onValueChange={setDateFormat}>
+                    <SelectTrigger className="w-44" aria-label="Date format">
+                      <SelectValue placeholder="Choose a format" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DATE_FORMATS.map((fmt) => (
+                        <SelectItem key={fmt} value={fmt}>
+                          {fmt}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
               <div className="flex gap-2">
                 <Button type="submit" disabled={submitting}>

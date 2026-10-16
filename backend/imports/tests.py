@@ -160,7 +160,12 @@ class CsvMappingTests(TestCase):
     def test_valid_mapping_parses_every_row(self):
         response = self.client.post(
             reverse("importsession-map", args=[self.session_id]),
-            {"date": "Posted Date", "amount": "Amount", "description": "Description"},
+            {
+                "date": "Posted Date",
+                "date_format": "YYYY-MM-DD",
+                "amount": "Amount",
+                "description": "Description",
+            },
             format="json",
         )
         self.assertEqual(response.status_code, 200)
@@ -177,7 +182,173 @@ class CsvMappingTests(TestCase):
         )
         self.assertEqual(response.status_code, 400)
         self.assertIn("date", response.json()["detail"])
+        self.assertIn("date_format", response.json()["detail"])
         self.assertIn("amount", response.json()["detail"])
+
+
+class DelimiterDetectionTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        user = get_user_model().objects.create_user(username="budgeter", password="x")
+        self.client.force_authenticate(user=user)
+        self.account = Account.objects.create(
+            name="Main Checking", account_type="checking", starting_balance_cents=0
+        )
+
+    def test_semicolon_delimited_file_is_detected_and_parsed(self):
+        # Mirrors the real Crelan export that motivated this change,
+        # including a description field containing a stray comma - the
+        # kind of thing that could confuse a naive delimiter guess.
+        content = (
+            "Datum;Bedrag;Mededeling\n"
+            "01/10/2026;-21.85;Verzekeringstaks van 9,60 voor premies\n"
+            "02/10/2026;-400.00;Spending money\n"
+        )
+        upload = self.client.post(
+            reverse("importsession-list"),
+            {"account": self.account.id, "file": csv_file(content)},
+            format="multipart",
+        )
+        self.assertEqual(upload.status_code, 201)
+        data = upload.json()
+        self.assertEqual(data["columns"], ["Datum", "Bedrag", "Mededeling"])
+
+        preview = self.client.post(
+            reverse("importsession-map", args=[data["id"]]),
+            {
+                "date": "Datum",
+                "date_format": "DD/MM/YYYY",
+                "amount": "Bedrag",
+                "description": "Mededeling",
+            },
+            format="json",
+        )
+        self.assertEqual(preview.status_code, 200)
+        candidates = preview.json()["candidates"]
+        self.assertEqual(len(candidates), 2)
+        self.assertEqual(candidates[0]["date"], "2026-10-01")
+        self.assertEqual(candidates[0]["amount_cents"], -2185)
+        self.assertEqual(candidates[0]["description"], "Verzekeringstaks van 9,60 voor premies")
+
+    def test_comma_delimited_file_still_works(self):
+        content = "Posted Date,Amount,Description\n2026-01-15,-42.50,Grocery Store\n"
+        upload = self.client.post(
+            reverse("importsession-list"),
+            {"account": self.account.id, "file": csv_file(content)},
+            format="multipart",
+        )
+        self.assertEqual(upload.json()["columns"], ["Posted Date", "Amount", "Description"])
+
+    def test_inconclusive_sample_falls_back_to_comma(self):
+        # A single-column file gives the sniffer nothing to detect from.
+        content = "OnlyColumn\nsomething\n"
+        upload = self.client.post(
+            reverse("importsession-list"),
+            {"account": self.account.id, "file": csv_file(content)},
+            format="multipart",
+        )
+        self.assertEqual(upload.status_code, 201)
+        self.assertEqual(upload.json()["columns"], ["OnlyColumn"])
+
+
+class DateFormatTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        user = get_user_model().objects.create_user(username="budgeter", password="x")
+        self.client.force_authenticate(user=user)
+        self.account = Account.objects.create(
+            name="Main Checking", account_type="checking", starting_balance_cents=0
+        )
+        content = "Date,Amount,Description\n01/10/2026,-21.85,Ambiguous date\n"
+        upload = self.client.post(
+            reverse("importsession-list"),
+            {"account": self.account.id, "file": csv_file(content)},
+            format="multipart",
+        )
+        self.session_id = upload.json()["id"]
+
+    def test_same_ambiguous_date_resolves_differently_per_chosen_format(self):
+        as_dd_mm = self.client.post(
+            reverse("importsession-map", args=[self.session_id]),
+            {"date": "Date", "date_format": "DD/MM/YYYY", "amount": "Amount", "description": "Description"},
+            format="json",
+        )
+        self.assertEqual(as_dd_mm.json()["candidates"][0]["date"], "2026-10-01")
+
+        as_mm_dd = self.client.post(
+            reverse("importsession-map", args=[self.session_id]),
+            {"date": "Date", "date_format": "MM/DD/YYYY", "amount": "Amount", "description": "Description"},
+            format="json",
+        )
+        self.assertEqual(as_mm_dd.json()["candidates"][0]["date"], "2026-01-10")
+
+    def test_unrecognized_date_format_is_rejected(self):
+        response = self.client.post(
+            reverse("importsession-map", args=[self.session_id]),
+            {"date": "Date", "date_format": "not-a-real-format", "amount": "Amount", "description": "Description"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+
+class SemicolonEndToEndTests(TestCase):
+    """The full upload -> map -> preview -> commit flow against a
+    semicolon-delimited, DD/MM/YYYY-dated file - the exact shape of the
+    real Crelan file that motivated this change, replaying the existing
+    'Confirm an import' spec scenario with that format instead.
+    """
+
+    def setUp(self):
+        self.client = APIClient()
+        user = get_user_model().objects.create_user(username="budgeter", password="x")
+        self.client.force_authenticate(user=user)
+        self.account = Account.objects.create(
+            name="Main Checking", account_type="checking", starting_balance_cents=100000
+        )
+
+    def test_semicolon_dd_mm_yyyy_file_commits_with_correct_dates_and_amounts(self):
+        content = (
+            "Datum;Bedrag;Mededeling\n"
+            "01/10/2026;-21.85;DKV BELGIUM premium\n"
+            "02/10/2026;-400.00;Spending money\n"
+            "12/10/2026;-21.50;groente\n"
+        )
+        upload = self.client.post(
+            reverse("importsession-list"),
+            {"account": self.account.id, "file": csv_file(content)},
+            format="multipart",
+        )
+        session_id = upload.json()["id"]
+
+        preview = self.client.post(
+            reverse("importsession-map", args=[session_id]),
+            {
+                "date": "Datum",
+                "date_format": "DD/MM/YYYY",
+                "amount": "Bedrag",
+                "description": "Mededeling",
+            },
+            format="json",
+        )
+        candidates = preview.json()["candidates"]
+        self.assertEqual([c["date"] for c in candidates], ["2026-10-01", "2026-10-02", "2026-10-12"])
+
+        all_indices = [c["index"] for c in candidates]
+        response = self.client.post(
+            reverse("importsession-commit", args=[session_id]),
+            {"selected_indices": all_indices},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["created_count"], 3)
+
+        transactions = Transaction.objects.filter(account=self.account).order_by("date")
+        self.assertEqual(
+            [t.date.isoformat() for t in transactions],
+            ["2026-10-01", "2026-10-02", "2026-10-12"],
+        )
+        self.account.refresh_from_db()
+        self.assertEqual(self.account.current_balance_cents, 100000 - 2185 - 40000 - 2150)
 
 
 class DuplicateDetectionTests(TestCase):
@@ -202,7 +373,12 @@ class DuplicateDetectionTests(TestCase):
         session_id = upload.json()["id"]
         response = self.client.post(
             reverse("importsession-map", args=[session_id]),
-            {"date": "Posted Date", "amount": "Amount", "description": "Description"},
+            {
+                "date": "Posted Date",
+                "date_format": "YYYY-MM-DD",
+                "amount": "Amount",
+                "description": "Description",
+            },
             format="json",
         )
         candidates = response.json()["candidates"]
@@ -241,7 +417,12 @@ class CommitImportTests(TestCase):
         session_id = upload.json()["id"]
         preview = self.client.post(
             reverse("importsession-map", args=[session_id]),
-            {"date": "Posted Date", "amount": "Amount", "description": "Description"},
+            {
+                "date": "Posted Date",
+                "date_format": "YYYY-MM-DD",
+                "amount": "Amount",
+                "description": "Description",
+            },
             format="json",
         )
         candidates = preview.json()["candidates"]
@@ -280,7 +461,12 @@ class CommitImportTests(TestCase):
         session_id = upload.json()["id"]
         preview = self.client.post(
             reverse("importsession-map", args=[session_id]),
-            {"date": "Posted Date", "amount": "Amount", "description": "Description"},
+            {
+                "date": "Posted Date",
+                "date_format": "YYYY-MM-DD",
+                "amount": "Amount",
+                "description": "Description",
+            },
             format="json",
         )
         candidate = preview.json()["candidates"][0]
@@ -305,7 +491,12 @@ class CommitImportTests(TestCase):
         session_id = upload.json()["id"]
         preview = self.client.post(
             reverse("importsession-map", args=[session_id]),
-            {"date": "Posted Date", "amount": "Amount", "description": "Description"},
+            {
+                "date": "Posted Date",
+                "date_format": "YYYY-MM-DD",
+                "amount": "Amount",
+                "description": "Description",
+            },
             format="json",
         )
         index = preview.json()["candidates"][0]["index"]
