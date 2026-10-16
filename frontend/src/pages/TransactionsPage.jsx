@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { listAccounts } from "../api/accounts";
 import { createCategory, listCategories } from "../api/categories";
 import {
@@ -34,7 +34,21 @@ export function TransactionsPage() {
   const [filters, setFilters] = useState({ dateFrom: "", dateTo: "", category: ALL_CATEGORIES, search: "" });
   const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [pendingIds, setPendingIds] = useState(new Set());
+  const hasLoadedRef = useRef(false);
   const toast = useToast();
+
+  function setPending(id, isPending) {
+    setPendingIds((prev) => {
+      const next = new Set(prev);
+      if (isPending) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+      return next;
+    });
+  }
 
   useEffect(() => {
     Promise.all([listAccounts(), listCategories()]).then(([accts, cats]) => {
@@ -57,7 +71,10 @@ export function TransactionsPage() {
       category: filters.category === ALL_CATEGORIES ? "" : filters.category,
       search: filters.search,
     })
-      .then(setTransactions)
+      .then((data) => {
+        setTransactions(data);
+        hasLoadedRef.current = true;
+      })
       .catch((e) => toast.error(e.message))
       .finally(() => setLoading(false));
   }
@@ -81,9 +98,16 @@ export function TransactionsPage() {
   }
 
   async function handleDelete(id) {
-    await deleteTransaction(id);
-    toast.success("Transaction deleted.");
-    await reload();
+    setPending(id, true);
+    try {
+      await deleteTransaction(id);
+      toast.success("Transaction deleted.");
+      setTransactions((prev) => prev.filter((t) => t.id !== id));
+    } catch (e) {
+      toast.error(e.data ? Object.values(e.data).flat().join(" ") : e.message);
+    } finally {
+      setPending(id, false);
+    }
   }
 
   async function handleInlineCategorySelect(transactionId, categoryId) {
@@ -196,7 +220,7 @@ export function TransactionsPage() {
         </CardContent>
       </Card>
 
-      {loading ? (
+      {!hasLoadedRef.current && loading ? (
         <p className="text-sm text-ink-secondary">Loading...</p>
       ) : (
         <Table>
@@ -238,10 +262,20 @@ export function TransactionsPage() {
                   </TableCell>
                   <TableCell>{formatCents(t.amount_cents)}</TableCell>
                   <TableCell className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={() => setEditingId(t.id)}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={pendingIds.has(t.id)}
+                      onClick={() => setEditingId(t.id)}
+                    >
                       Edit
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleDelete(t.id)}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={pendingIds.has(t.id)}
+                      onClick={() => handleDelete(t.id)}
+                    >
                       Delete
                     </Button>
                   </TableCell>

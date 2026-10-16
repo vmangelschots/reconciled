@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ACCOUNT_TYPES,
   archiveAccount,
@@ -29,12 +29,29 @@ export function AccountsPage() {
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState(null);
+  const [pendingIds, setPendingIds] = useState(new Set());
+  const hasLoadedRef = useRef(false);
   const toast = useToast();
+
+  function setPending(id, isPending) {
+    setPendingIds((prev) => {
+      const next = new Set(prev);
+      if (isPending) {
+        next.add(id);
+      } else {
+        next.delete(id);
+      }
+      return next;
+    });
+  }
 
   function reload() {
     setLoading(true);
     return listAccounts()
-      .then(setAccounts)
+      .then((data) => {
+        setAccounts(data);
+        hasLoadedRef.current = true;
+      })
       .catch((e) => toast.error(e.message))
       .finally(() => setLoading(false));
   }
@@ -58,9 +75,16 @@ export function AccountsPage() {
   }
 
   async function handleArchive(id) {
-    await archiveAccount(id);
-    toast.success("Account archived.");
-    await reload();
+    setPending(id, true);
+    try {
+      await archiveAccount(id);
+      toast.success("Account archived.");
+      setAccounts((prev) => prev.filter((a) => a.id !== id));
+    } catch (e) {
+      toast.error(e.data ? Object.values(e.data).flat().join(" ") : e.message);
+    } finally {
+      setPending(id, false);
+    }
   }
 
   return (
@@ -76,7 +100,7 @@ export function AccountsPage() {
         </CardContent>
       </Card>
 
-      {loading ? (
+      {!hasLoadedRef.current && loading ? (
         <p className="text-sm text-ink-secondary">Loading...</p>
       ) : (
         <Table>
@@ -107,10 +131,20 @@ export function AccountsPage() {
                   <TableCell>{typeLabel(account.account_type)}</TableCell>
                   <TableCell>{formatCents(account.current_balance_cents)}</TableCell>
                   <TableCell className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={() => setEditingId(account.id)}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={pendingIds.has(account.id)}
+                      onClick={() => setEditingId(account.id)}
+                    >
                       Edit
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleArchive(account.id)}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={pendingIds.has(account.id)}
+                      onClick={() => handleArchive(account.id)}
+                    >
                       Archive
                     </Button>
                   </TableCell>
