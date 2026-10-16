@@ -13,13 +13,7 @@ import { Label } from "../components/ui/Label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/Select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/Table";
 import { useToast } from "../components/ui/Toast";
-
-function formatCents(cents) {
-  return (cents / 100).toLocaleString(undefined, {
-    style: "currency",
-    currency: "USD",
-  });
-}
+import { formatMoney } from "../lib/money";
 
 function typeLabel(value) {
   return ACCOUNT_TYPES.find((t) => t.value === value)?.label ?? value;
@@ -129,7 +123,7 @@ export function AccountsPage() {
                 <TableRow key={account.id}>
                   <TableCell>{account.name}</TableCell>
                   <TableCell>{typeLabel(account.account_type)}</TableCell>
-                  <TableCell>{formatCents(account.current_balance_cents)}</TableCell>
+                  <TableCell>{formatMoney(account.current_balance_cents)}</TableCell>
                   <TableCell className="flex gap-2">
                     <Button
                       variant="outline"

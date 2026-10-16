@@ -16,10 +16,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { useToast } from "../components/ui/Toast";
 import { buildCategoryTree } from "../lib/categoryTree";
 import { cn } from "../lib/cn";
+import { formatMoney } from "../lib/money";
 
+// A missing limit shows as a dash rather than an amount.
 function formatCents(cents) {
   if (cents == null) return "—";
-  return (cents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" });
+  return formatMoney(cents);
 }
 
 function currentMonth() {

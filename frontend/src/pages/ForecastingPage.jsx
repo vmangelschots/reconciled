@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/Table";
 import { useToast } from "../components/ui/Toast";
 import { cn } from "../lib/cn";
+import { formatMoney } from "../lib/money";
 
 const FREQUENCIES = [
   { value: "weekly", label: "Weekly" },
@@ -32,10 +33,6 @@ const HORIZON_PRESETS = [
   { label: "1 year", value: 365 },
 ];
 
-
-function formatCents(cents) {
-  return (cents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" });
-}
 
 export function ForecastingPage() {
   const [accounts, setAccounts] = useState([]);
@@ -182,7 +179,7 @@ export function ForecastingPage() {
                 ) : (
                   <TableRow key={r.id}>
                     <TableCell>{r.payee}</TableCell>
-                    <TableCell>{formatCents(r.amount_cents)}</TableCell>
+                    <TableCell>{formatMoney(r.amount_cents)}</TableCell>
                     <TableCell>{FREQUENCIES.find((f) => f.value === r.frequency)?.label}</TableCell>
                     <TableCell>{r.start_date}</TableCell>
                     <TableCell>{r.end_date ?? "—"}</TableCell>
@@ -255,7 +252,7 @@ export function ForecastingPage() {
                   <TableRow key={`${o.recurring_transaction_id}-${o.date}-${i}`}>
                     <TableCell>{o.date}</TableCell>
                     <TableCell>{o.payee}</TableCell>
-                    <TableCell>{formatCents(o.amount_cents)}</TableCell>
+                    <TableCell>{formatMoney(o.amount_cents)}</TableCell>
                   </TableRow>
                 ))}
                 {forecast.occurrences.length === 0 && (

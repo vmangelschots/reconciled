@@ -33,8 +33,8 @@ describe("CategorySpendingChart", () => {
   it("lists categories largest first, Uncategorized included, with amounts", () => {
     renderChart();
     expect(rowNames()).toEqual(["Groceries", "Uncategorized", "Clothing"]);
-    expect(screen.getByText("$250.00")).toBeInTheDocument();
-    expect(screen.getByText("$90.00")).toBeInTheDocument();
+    expect(screen.getByText("€250.00")).toBeInTheDocument();
+    expect(screen.getByText("€90.00")).toBeInTheDocument();
   });
 
   it("expands a parent into its subcategories plus the direct spending, and collapses again", async () => {
@@ -68,9 +68,9 @@ describe("CategorySpendingChart", () => {
 
   it("shows a tooltip with the share of the month's spending on hover", async () => {
     renderChart();
-    await userEvent.hover(screen.getByText("$90.00"));
+    await userEvent.hover(screen.getByText("€90.00"));
     // 9000 of 39000 total.
-    expect(screen.getByRole("tooltip")).toHaveTextContent("Uncategorized: $90.00 · 23% of the month's spending");
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Uncategorized: €90.00 · 23% of the month's spending");
   });
 
   it("says so when the month has no spending", () => {

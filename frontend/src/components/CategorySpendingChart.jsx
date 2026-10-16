@@ -3,12 +3,9 @@ import { useState } from "react";
 import { cn } from "../lib/cn";
 import { Button } from "./ui/Button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/Table";
+import { formatMoney } from "../lib/money";
 
 const UNCATEGORIZED_KEY = "uncategorized";
-
-function formatCurrency(cents) {
-  return (cents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" });
-}
 
 // Flattens the API payload into top-level rows (Uncategorized included),
 // largest first. Each expandable row carries its child rows: subcategories
@@ -69,13 +66,13 @@ function BarRow({ row, max, total, depth = 0, expanded, onToggle }) {
           style={{ width: `${Math.max((row.cents / max) * 100, 0.5)}%`, background: "var(--chart-series-1)" }}
           aria-hidden="true"
         />
-        <span className="shrink-0 text-sm tabular-nums text-ink-primary">{formatCurrency(row.cents)}</span>
+        <span className="shrink-0 text-sm tabular-nums text-ink-primary">{formatMoney(row.cents)}</span>
         {hovered && (
           <span
             role="tooltip"
             className="pointer-events-none absolute -top-7 left-0 rounded-md border border-border bg-surface px-2 py-0.5 text-xs text-ink-secondary shadow-sm"
           >
-            {row.name}: {formatCurrency(row.cents)} · {share}% of the month&apos;s spending
+            {row.name}: {formatMoney(row.cents)} · {share}% of the month&apos;s spending
           </span>
         )}
       </div>
@@ -145,12 +142,12 @@ export function CategorySpendingChart({ data, monthLabel }) {
             {rows.flatMap((row) => [
               <TableRow key={row.key}>
                 <TableCell>{row.name}</TableCell>
-                <TableCell>{formatCurrency(row.cents)}</TableCell>
+                <TableCell>{formatMoney(row.cents)}</TableCell>
               </TableRow>,
               ...row.children.map((child) => (
                 <TableRow key={child.key}>
                   <TableCell className="pl-8 text-ink-secondary">{child.name}</TableCell>
-                  <TableCell>{formatCurrency(child.cents)}</TableCell>
+                  <TableCell>{formatMoney(child.cents)}</TableCell>
                 </TableRow>
               )),
             ])}

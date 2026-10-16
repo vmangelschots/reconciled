@@ -43,9 +43,9 @@ describe("InOutChart", () => {
     fireEvent.mouseMove(container.querySelector(".recharts-wrapper"), { clientX: x + 4, clientY: 200 });
 
     expect(await screen.findByText(/March 2026/)).toBeInTheDocument();
-    expect(screen.getByText(/Money in: \$2,002\.00/)).toBeInTheDocument();
-    expect(screen.getByText(/Money out: \$1,500\.00/)).toBeInTheDocument();
-    expect(screen.getByText(/Difference: \$502\.00/)).toBeInTheDocument();
+    expect(screen.getByText(/Money in: €2,002\.00/)).toBeInTheDocument();
+    expect(screen.getByText(/Money out: €1,500\.00/)).toBeInTheDocument();
+    expect(screen.getByText(/Difference: €502\.00/)).toBeInTheDocument();
     spy.mockRestore();
   });
 
@@ -55,7 +55,7 @@ describe("InOutChart", () => {
     const rows = within(screen.getByRole("table")).getAllByRole("row");
     expect(rows).toHaveLength(13); // header + 12 months
     expect(within(rows[3]).getByText("March 2026")).toBeInTheDocument();
-    expect(within(rows[3]).getByText("$502.00")).toBeInTheDocument();
+    expect(within(rows[3]).getByText("€502.00")).toBeInTheDocument();
   });
 });
 

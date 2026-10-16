@@ -7,13 +7,7 @@ import { Label } from "../components/ui/Label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/Select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/Table";
 import { useToast } from "../components/ui/Toast";
-
-function formatCents(cents) {
-  return (cents / 100).toLocaleString(undefined, {
-    style: "currency",
-    currency: "USD",
-  });
-}
+import { formatMoney } from "../lib/money";
 
 const CSV_FIELDS = ["date", "amount", "description", "payee"];
 const UNMAPPED = "none";
@@ -168,7 +162,7 @@ export function ImportPage() {
                     </TableCell>
                     <TableCell>{c.date}</TableCell>
                     <TableCell>{c.description}</TableCell>
-                    <TableCell>{formatCents(c.amount_cents)}</TableCell>
+                    <TableCell>{formatMoney(c.amount_cents)}</TableCell>
                     <TableCell className={c.is_duplicate ? "text-ink-muted" : undefined}>
                       {c.transfer_match
                         ? `Matches transfer from ${c.transfer_match.counterpart_account_name}`

@@ -16,13 +16,7 @@ import { Label } from "../components/ui/Label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/Select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/Table";
 import { useToast } from "../components/ui/Toast";
-
-function formatCents(cents) {
-  return (cents / 100).toLocaleString(undefined, {
-    style: "currency",
-    currency: "USD",
-  });
-}
+import { formatMoney } from "../lib/money";
 
 export function TransactionsPage() {
   const [accounts, setAccounts] = useState([]);
@@ -342,7 +336,7 @@ export function TransactionsPage() {
                       onSelectTransfer={(targetId) => handleInlineTransferSelect(t.id, targetId)}
                     />
                   </TableCell>
-                  <TableCell>{formatCents(t.amount_cents)}</TableCell>
+                  <TableCell>{formatMoney(t.amount_cents)}</TableCell>
                   <TableCell className="flex gap-2">
                     <Button
                       variant="outline"

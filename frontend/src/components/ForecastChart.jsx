@@ -1,22 +1,11 @@
 import { useMemo, useState } from "react";
 import { Button } from "./ui/Button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/Table";
+import { formatMoney, formatMoneyCompact } from "../lib/money";
 
 const WIDTH = 760;
 const HEIGHT = 280;
 const PADDING = { top: 16, right: 16, bottom: 28, left: 64 };
-
-function formatCurrency(cents) {
-  return (cents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" });
-}
-
-function formatCompact(cents) {
-  const dollars = cents / 100;
-  if (Math.abs(dollars) >= 1000) {
-    return `${dollars < 0 ? "-" : ""}$${(Math.abs(dollars) / 1000).toFixed(1)}K`;
-  }
-  return `$${Math.round(dollars)}`;
-}
 
 function niceTicks(min, max, count = 4) {
   if (min === max) return [min];
@@ -80,7 +69,7 @@ export function ForecastChart({ points }) {
               className="chart-gridline"
             />
             <text x={PADDING.left - 8} y={plot.y(tick)} className="chart-axis-label" textAnchor="end" dy="0.32em">
-              {formatCompact(tick)}
+              {formatMoneyCompact(tick)}
             </text>
           </g>
         ))}
@@ -111,7 +100,7 @@ export function ForecastChart({ points }) {
           className="chart-end-label"
           textAnchor="end"
         >
-          {formatCurrency(lastPoint.balance_cents)}
+          {formatMoney(lastPoint.balance_cents)}
         </text>
 
         {hovered && (
@@ -133,7 +122,7 @@ export function ForecastChart({ points }) {
           className="absolute right-2 top-2 flex flex-col gap-0.5 rounded-md border border-border bg-surface px-2.5 py-1.5 pointer-events-none"
           aria-hidden="true"
         >
-          <strong className="text-ink-primary">{formatCurrency(hovered.balance_cents)}</strong>
+          <strong className="text-ink-primary">{formatMoney(hovered.balance_cents)}</strong>
           <span className="text-xs text-ink-secondary">{hovered.date}</span>
         </div>
       )}
@@ -160,7 +149,7 @@ export function ForecastChart({ points }) {
             {points.map((p) => (
               <TableRow key={p.date}>
                 <TableCell>{p.date}</TableCell>
-                <TableCell>{formatCurrency(p.balance_cents)}</TableCell>
+                <TableCell>{formatMoney(p.balance_cents)}</TableCell>
               </TableRow>
             ))}
           </TableBody>

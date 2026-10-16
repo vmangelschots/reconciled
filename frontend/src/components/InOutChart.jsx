@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Button } from "./ui/Button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/Table";
+import { formatMoney, formatMoneyCompact } from "../lib/money";
 
 const HEIGHT = 280;
 
@@ -9,16 +10,6 @@ const SERIES = [
   { key: "in_cents", name: "Money in", color: "var(--chart-series-1)" },
   { key: "out_cents", name: "Money out", color: "var(--chart-series-2)" },
 ];
-
-function formatCurrency(cents) {
-  return (cents / 100).toLocaleString(undefined, { style: "currency", currency: "USD" });
-}
-
-function formatCompact(cents) {
-  const dollars = cents / 100;
-  if (Math.abs(dollars) >= 1000) return `$${(dollars / 1000).toFixed(1)}K`;
-  return `$${Math.round(dollars)}`;
-}
 
 // "2026-03" -> Date in local time (day 1), so labels never shift a month.
 function monthDate(month) {
@@ -43,10 +34,10 @@ export function InOutTooltip({ active, payload }) {
       {SERIES.map((s) => (
         <span key={s.key} className="flex items-center gap-2 text-ink-primary">
           <span className="h-2.5 w-2.5 rounded-sm" style={{ background: s.color }} aria-hidden="true" />
-          {s.name}: {formatCurrency(row[s.key])}
+          {s.name}: {formatMoney(row[s.key])}
         </span>
       ))}
-      <strong className="text-ink-primary">Difference: {formatCurrency(row.in_cents - row.out_cents)}</strong>
+      <strong className="text-ink-primary">Difference: {formatMoney(row.in_cents - row.out_cents)}</strong>
     </div>
   );
 }
@@ -72,7 +63,7 @@ export function InOutChart({ months, width }) {
         tickLine={false}
       />
       <YAxis
-        tickFormatter={formatCompact}
+        tickFormatter={formatMoneyCompact}
         tick={{ fill: "var(--ink-muted)", fontSize: 11 }}
         axisLine={false}
         tickLine={false}
@@ -101,7 +92,7 @@ export function InOutChart({ months, width }) {
 
       <div
         role="img"
-        aria-label={`Money in vs money out over the last ${months.length} months: ${formatCurrency(totalIn)} in, ${formatCurrency(totalOut)} out`}
+        aria-label={`Money in vs money out over the last ${months.length} months: ${formatMoney(totalIn)} in, ${formatMoney(totalOut)} out`}
         className="rounded-lg bg-surface"
       >
         {width ? (
@@ -131,9 +122,9 @@ export function InOutChart({ months, width }) {
             {months.map((m) => (
               <TableRow key={m.month}>
                 <TableCell>{longLabel(m.month)}</TableCell>
-                <TableCell>{formatCurrency(m.in_cents)}</TableCell>
-                <TableCell>{formatCurrency(m.out_cents)}</TableCell>
-                <TableCell>{formatCurrency(m.in_cents - m.out_cents)}</TableCell>
+                <TableCell>{formatMoney(m.in_cents)}</TableCell>
+                <TableCell>{formatMoney(m.out_cents)}</TableCell>
+                <TableCell>{formatMoney(m.in_cents - m.out_cents)}</TableCell>
               </TableRow>
             ))}
           </TableBody>

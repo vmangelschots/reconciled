@@ -1,0 +1,34 @@
+import { describe, expect, it } from "vitest";
+import { CURRENCY, formatMoney, formatMoneyCompact } from "./money";
+
+// The test environment runs with an English locale, so these are the
+// en-US renderings; in the browser the separators follow its language.
+describe("formatMoney", () => {
+  it("formats cents as euro", () => {
+    expect(CURRENCY).toBe("EUR");
+    expect(formatMoney(123456)).toBe("€1,234.56");
+    expect(formatMoney(4200)).toBe("€42.00");
+  });
+
+  it("handles negative and fractional amounts", () => {
+    expect(formatMoney(-4250)).toBe("-€42.50");
+    expect(formatMoney(5)).toBe("€0.05");
+  });
+
+  it("never shows a dollar sign", () => {
+    expect(formatMoney(100)).not.toContain("$");
+  });
+});
+
+describe("formatMoneyCompact", () => {
+  it("shortens large amounts for chart axes", () => {
+    expect(formatMoneyCompact(150000)).toBe("€1.5K");
+    expect(formatMoneyCompact(-600000)).toBe("-€6K");
+  });
+
+  it("keeps small amounts whole", () => {
+    expect(formatMoneyCompact(4200)).toBe("€42");
+    expect(formatMoneyCompact(0)).toBe("€0");
+    expect(formatMoneyCompact(-76950)).toBe("-€770");
+  });
+});
