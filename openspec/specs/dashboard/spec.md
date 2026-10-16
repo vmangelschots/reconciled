@@ -11,7 +11,8 @@ cash flow and spending across the user's active accounts.
 For each of the last 12 calendar months, ending with the current one, the
 system SHALL report money in (the sum of positive transaction amounts) and
 money out (the sum of negative amounts, as a positive figure). Only
-non-archived accounts count. A month with no transactions SHALL report
+non-archived accounts count, and transfers between the user's accounts
+SHALL count toward neither. A month with no transactions SHALL report
 zero for both.
 
 #### Scenario: Income and spending are totalled separately
@@ -26,6 +27,11 @@ zero for both.
 #### Scenario: Empty months are zero
 - **WHEN** there are no transactions in one of the 12 months
 - **THEN** that month is still listed, with zero in and zero out
+
+#### Scenario: Transfers are excluded
+- **WHEN** in March -500.00 in "Checking" is a transfer to "Savings"
+  (+500.00), and there are no other transactions
+- **THEN** March reports zero money in and zero money out
 
 ### Requirement: In vs out chart
 The dashboard SHALL show money in and money out as paired bars, one pair
@@ -48,7 +54,8 @@ For a chosen month, the system SHALL report each category's spending:
 the net outflow of its transactions in active accounts, so refunds reduce
 it. A top-level category's figure SHALL include its subcategories. A
 category with no net outflow SHALL be left out. Spending without a
-category SHALL be reported as "Uncategorized", counting outflows only.
+category SHALL be reported as "Uncategorized", counting outflows only and
+leaving out transfers between the user's accounts.
 
 #### Scenario: Subcategories roll into their parent
 - **WHEN** in March "Groceries" has -50.00 directly and its subcategory
@@ -62,6 +69,11 @@ category SHALL be reported as "Uncategorized", counting outflows only.
 #### Scenario: Uncategorized ignores income
 - **WHEN** in March uncategorized transactions are -40.00 and a salary of
   +2,000.00
+- **THEN** "Uncategorized" reports 40.00
+
+#### Scenario: Uncategorized ignores transfers
+- **WHEN** in March there is -40.00 uncategorized spending and a -500.00
+  transfer to "Savings"
 - **THEN** "Uncategorized" reports 40.00
 
 ### Requirement: Expenses per category chart
