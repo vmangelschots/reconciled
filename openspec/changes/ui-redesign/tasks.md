@@ -46,9 +46,9 @@
 
 ## 10. Cross-cutting verification & cleanup
 
-- [ ] 10.1 Verify a full pass over every page in both light and dark mode (toggle, don't just rely on OS setting) with no leftover hard-coded colors from the old `index.css`
-- [ ] 10.2 Verify a full pass over every page at a narrow (mobile) viewport width, confirming the collapsed nav and that no page's layout overflows or clips content
-- [ ] 10.3 Verify a keyboard-only pass over the app shell and at least one full page (tab order, visible focus rings, dialog focus trap, toggle operable via keyboard)
+- [x] 10.1 Verify a full pass over every page in both light and dark mode (toggle, don't just rely on OS setting) with no leftover hard-coded colors from the old `index.css` (no browser/screenshot tool was available in this session, so this was performed by the user directly against the live app rather than by Claude; verdict: "looks good enough for now")
+- [x] 10.2 Verify a full pass over every page at a narrow (mobile) viewport width, confirming the collapsed nav and that no page's layout overflows or clips content (same as 10.1 - user-performed, accepted as part of the same overall sign-off)
+- [x] 10.3 Verify a keyboard-only pass over the app shell and at least one full page (tab order, visible focus rings, dialog focus trap, toggle operable via keyboard) (same as 10.1 - user-performed, accepted as part of the same overall sign-off; note the Dialog primitive exists and is unit-tested but no page currently uses one, so there was nothing to keyboard-test there specifically)
 - [x] 10.4 Remove the old `index.css` once nothing references it, and verify `npm run build` succeeds with it gone (done ahead of schedule as a natural side effect of 9.2 - once the chart was re-themed, every page's old CSS classes were dead simultaneously, confirmed via grep; build verified clean with the trimmed file)
 
 ## Workflow follow-up
