@@ -8,6 +8,9 @@ const compact = new Intl.NumberFormat(undefined, {
   style: "currency",
   currency: CURRENCY,
   notation: "compact",
+  // Explicit minimum: some ICU versions (e.g. Node 22's) otherwise pad
+  // to "€6.0K".
+  minimumFractionDigits: 0,
   maximumFractionDigits: 1,
 });
 // Below 1,000 there's no K/M suffix, so a decimal would just be noise.
