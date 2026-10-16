@@ -1,5 +1,5 @@
 import * as PopoverPrimitive from "@radix-ui/react-popover";
-import { Command, CommandEmpty, CommandItem, CommandList } from "cmdk";
+import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "cmdk";
 import { Check, ChevronsUpDown, Plus } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { categoryDisplayLabel, rankCategories } from "../lib/categoryTree";
@@ -8,6 +8,9 @@ import { focusAdjacentTabbable } from "../lib/focus";
 
 const CLEAR = "__clear__";
 const CREATE = "__create__";
+// Transfer options use their own value space so they never collide with
+// category ids in cmdk's highlight.
+const TRANSFER_PREFIX = "account:";
 
 /**
  * A searchable, keyboard-driven category picker. Filtering and ranking
@@ -36,6 +39,11 @@ const CREATE = "__create__";
  * - clearLabel: text for the "no category" option (defaults
  *   "Uncategorized"; the Budgets page's parent-picker passes "No
  *   parent (top-level)", the ledger filter "All").
+ * - transferAccounts + onSelectTransfer(accountId): when given, the user's
+ *   other accounts are offered after the categories as transfer targets
+ *   ("→ Savings" for an outflow, "← Savings" for an inflow, per
+ *   `direction`). transferAccountId / transferAccountName describe the
+ *   current transfer, if the row is one. See specs/account-transfers.
  */
 export function CategoryCombobox({
   categories,
@@ -47,6 +55,11 @@ export function CategoryCombobox({
   placeholder = "Select category…",
   className,
   "aria-label": ariaLabel,
+  transferAccounts = [],
+  transferAccountId = null,
+  transferAccountName,
+  direction = "out",
+  onSelectTransfer,
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -61,27 +74,40 @@ export function CategoryCombobox({
     [categories],
   );
 
+  const arrow = direction === "in" ? "←" : "→";
+  const transferLabel = (name) => `${arrow} ${name}`;
+
   function optionsFor(q) {
     const trimmed = q.trim();
     const lower = trimmed.toLowerCase();
     const ranked = rankCategories(categories, categoriesById, trimmed);
+    // Accounts have no parent, so the category ranking applies as-is.
+    const transfers = onSelectTransfer ? rankCategories(transferAccounts, {}, trimmed) : [];
     const showClear = !lower || clearLabel.toLowerCase().includes(lower);
     const exactMatch = categories.some((c) => c.name.toLowerCase() === lower);
     const showCreate = allowCreate && trimmed !== "" && !exactMatch;
-    return { trimmed, ranked, showClear, showCreate };
+    return { trimmed, ranked, transfers, showClear, showCreate };
   }
 
   function highlightFor(q) {
-    const { trimmed, ranked, showClear, showCreate } = optionsFor(q);
-    if (!trimmed) return value != null && categoriesById[value] ? String(value) : CLEAR;
+    const { trimmed, ranked, transfers, showClear, showCreate } = optionsFor(q);
+    if (!trimmed) {
+      if (transferAccountId != null) return `${TRANSFER_PREFIX}${transferAccountId}`;
+      return value != null && categoriesById[value] ? String(value) : CLEAR;
+    }
     if (ranked.length > 0) return String(ranked[0].id);
     if (showClear) return CLEAR;
+    if (transfers.length > 0) return `${TRANSFER_PREFIX}${transfers[0].id}`;
     if (showCreate) return CREATE;
     return "";
   }
 
-  const { trimmed: trimmedQuery, ranked, showClear, showCreate } = optionsFor(query);
+  const { trimmed: trimmedQuery, ranked, transfers, showClear, showCreate } = optionsFor(query);
   const selected = value != null ? categoriesById[value] : null;
+  const currentTransferName =
+    transferAccountId != null
+      ? (transferAccounts.find((a) => a.id === transferAccountId)?.name ?? transferAccountName)
+      : null;
 
   function changeQuery(q) {
     setQuery(q);
@@ -110,6 +136,11 @@ export function CategoryCombobox({
     handleOpenChange(false);
   }
 
+  function chooseTransfer(accountId) {
+    onSelectTransfer(accountId);
+    handleOpenChange(false);
+  }
+
   // Closes at once; the caller shows the new category optimistically
   // while it is saved.
   function createAndSelect() {
@@ -135,6 +166,8 @@ export function CategoryCombobox({
     e.preventDefault();
     if (highlighted === CLEAR) {
       onSelect(null);
+    } else if (highlighted.startsWith(TRANSFER_PREFIX)) {
+      onSelectTransfer(Number(highlighted.slice(TRANSFER_PREFIX.length)));
     } else if (highlighted && highlighted !== CREATE) {
       onSelect(Number(highlighted));
     }
@@ -156,7 +189,7 @@ export function CategoryCombobox({
   // Listed first on an empty search, after every match otherwise.
   const clearItem = (
     <CommandItem value={CLEAR} onSelect={() => choose(null)} className={cn(itemClass, "text-ink-secondary")}>
-      {value == null && <Check className="h-3.5 w-3.5" />}
+      {value == null && transferAccountId == null && <Check className="h-3.5 w-3.5" />}
       {clearLabel}
     </CommandItem>
   );
@@ -174,8 +207,12 @@ export function CategoryCombobox({
             className,
           )}
         >
-          <span className={cn("truncate", !selected && "text-ink-muted")}>
-            {selected ? categoryDisplayLabel(selected, categoriesById) : placeholder}
+          <span className={cn("truncate", !selected && !currentTransferName && "text-ink-muted")}>
+            {currentTransferName
+              ? transferLabel(currentTransferName)
+              : selected
+                ? categoryDisplayLabel(selected, categoriesById)
+                : placeholder}
           </span>
           <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 opacity-50" />
         </button>
@@ -218,6 +255,24 @@ export function CategoryCombobox({
                 </CommandItem>
               ))}
               {showClear && trimmedQuery !== "" && clearItem}
+              {transfers.length > 0 && (
+                <CommandGroup
+                  heading={direction === "in" ? "Transfer from" : "Transfer to"}
+                  className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:text-ink-muted"
+                >
+                  {transfers.map((a) => (
+                    <CommandItem
+                      key={`${TRANSFER_PREFIX}${a.id}`}
+                      value={`${TRANSFER_PREFIX}${a.id}`}
+                      onSelect={() => chooseTransfer(a.id)}
+                      className={cn(itemClass, "text-ink-primary")}
+                    >
+                      {transferAccountId === a.id && <Check className="h-3.5 w-3.5" />}
+                      {transferLabel(a.name)}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              )}
               {showCreate && (
                 <CommandItem
                   value={CREATE}
@@ -228,7 +283,7 @@ export function CategoryCombobox({
                   Create &quot;{trimmedQuery}&quot;
                 </CommandItem>
               )}
-              {ranked.length === 0 && !showClear && !showCreate && (
+              {ranked.length === 0 && transfers.length === 0 && !showClear && !showCreate && (
                 <CommandEmpty className="px-2 py-1.5 text-sm text-ink-muted">
                   No categories found.
                 </CommandEmpty>

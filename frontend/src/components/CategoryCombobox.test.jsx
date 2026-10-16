@@ -240,3 +240,90 @@ describe("CategoryCombobox Tab / Escape", () => {
     expect(screen.getByPlaceholderText("Search categories…")).toHaveValue("");
   });
 });
+
+describe("CategoryCombobox transfer options", () => {
+  const ACCOUNTS = [
+    { id: 20, name: "Savings" },
+    { id: 21, name: "Credit card" },
+  ];
+
+  function renderPicker(props = {}) {
+    const onSelect = vi.fn();
+    const onSelectTransfer = vi.fn();
+    render(
+      <div>
+        <CategoryCombobox
+          categories={CATEGORIES}
+          value={null}
+          onSelect={onSelect}
+          aria-label="Category"
+          transferAccounts={ACCOUNTS}
+          onSelectTransfer={onSelectTransfer}
+          {...props}
+        />
+        <button type="button">after</button>
+      </div>,
+    );
+    return { onSelect, onSelectTransfer };
+  }
+
+  async function typeInPicker(text) {
+    screen.getByRole("button", { name: "Category" }).focus();
+    await userEvent.keyboard(text);
+  }
+
+  it("lists the accounts after the categories under a Transfer heading", async () => {
+    renderPicker();
+    await userEvent.click(screen.getByRole("button", { name: "Category" }));
+    expect(screen.getByText("Transfer to")).toBeInTheDocument();
+    expect(screen.getByText("→ Savings")).toBeInTheDocument();
+    expect(screen.getByText("→ Credit card")).toBeInTheDocument();
+  });
+
+  it("finds a transfer by typing and picks it with Enter", async () => {
+    const { onSelect, onSelectTransfer } = renderPicker();
+    await typeInPicker("sav{Enter}");
+    expect(onSelectTransfer).toHaveBeenCalledWith(20);
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("picks a transfer with Tab and moves on", async () => {
+    const { onSelectTransfer } = renderPicker();
+    await typeInPicker("cred{Tab}");
+    expect(onSelectTransfer).toHaveBeenCalledWith(21);
+    expect(screen.getByText("after")).toHaveFocus();
+  });
+
+  it("prefers a matching category over a transfer", async () => {
+    // "s" matches Supermarket (a category) and Savings (an account).
+    const { onSelect, onSelectTransfer } = renderPicker();
+    await typeInPicker("s{Enter}");
+    expect(onSelect).toHaveBeenCalledWith(3);
+    expect(onSelectTransfer).not.toHaveBeenCalled();
+  });
+
+  it("uses ← for an inflow", async () => {
+    renderPicker({ direction: "in" });
+    await userEvent.click(screen.getByRole("button", { name: "Category" }));
+    expect(screen.getByText("Transfer from")).toBeInTheDocument();
+    expect(screen.getByText("← Savings")).toBeInTheDocument();
+  });
+
+  it("shows the current transfer on the trigger and highlights it on open", async () => {
+    const { onSelectTransfer } = renderPicker({ transferAccountId: 20 });
+    expect(screen.getByRole("button", { name: "Category" })).toHaveTextContent("→ Savings");
+    await typeInPicker("{Enter}{Enter}");
+    expect(onSelectTransfer).toHaveBeenCalledWith(20);
+  });
+
+  it("falls back to the given name for an account not offered (e.g. archived)", () => {
+    renderPicker({ transferAccountId: 99, transferAccountName: "Old savings" });
+    expect(screen.getByRole("button", { name: "Category" })).toHaveTextContent("→ Old savings");
+  });
+
+  it("offers no transfers to callers that don't pass onSelectTransfer", async () => {
+    render(<CategoryCombobox categories={CATEGORIES} value={null} onSelect={vi.fn()} aria-label="Plain" />);
+    await userEvent.click(screen.getByRole("button", { name: "Plain" }));
+    expect(screen.queryByText(/Transfer/)).not.toBeInTheDocument();
+  });
+});

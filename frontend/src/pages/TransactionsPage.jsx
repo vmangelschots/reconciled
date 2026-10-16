@@ -4,6 +4,7 @@ import { createCategory, listCategories } from "../api/categories";
 import {
   createTransaction,
   deleteTransaction,
+  linkTransfer,
   listTransactions,
   updateTransaction,
 } from "../api/transactions";
@@ -82,14 +83,26 @@ export function TransactionsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accountId, filters]);
 
-  async function handleCreate(values) {
-    await createTransaction({ ...values, account: accountId });
+  // The form reports a transfer target separately from the category: a
+  // new transaction is created first, then linked (matching or creating
+  // its other side).
+  async function handleCreate(values, transferAccountId) {
+    const created = await createTransaction({ ...values, account: accountId });
+    if (transferAccountId != null) await linkTransfer(created.id, transferAccountId);
     toast.success("Transaction added.");
     await reload();
   }
 
-  async function handleSave(id, values) {
-    await updateTransaction(id, values);
+  // Sending `category` on a transfer would unlink it (that's how picking a
+  // category ends a transfer), so it is left out while the row stays one;
+  // a changed target re-links.
+  async function handleSave(transaction, values, transferAccountId) {
+    const { category: _category, ...rest } = values;
+    const stayingTransfer = transferAccountId != null;
+    await updateTransaction(transaction.id, stayingTransfer ? rest : values);
+    if (stayingTransfer && transferAccountId !== transaction.transfer?.account_id) {
+      await linkTransfer(transaction.id, transferAccountId);
+    }
     toast.success("Transaction updated.");
     setEditingId(null);
     await reload();
@@ -112,28 +125,60 @@ export function TransactionsPage() {
   // category straight away and the save runs in the background, with no
   // list reload. A failed save puts the old category back - but only if
   // the row still shows the value we set, so a later pick isn't undone.
-  function setRowCategory(transactionId, category, onlyIf) {
+  // Picking a category also ends a transfer (the backend unlinks it), so
+  // the row's transfer is cleared alongside, and restored on revert.
+  function setRowCategory(transactionId, category, onlyIf, transfer = null) {
     setTransactions((prev) =>
       prev.map((t) =>
-        t.id === transactionId && (onlyIf === undefined || t.category === onlyIf) ? { ...t, category } : t,
+        t.id === transactionId && (onlyIf === undefined || t.category === onlyIf)
+          ? { ...t, category, transfer }
+          : t,
       ),
     );
   }
 
+  function rowSnapshot(transactionId) {
+    const row = transactions.find((t) => t.id === transactionId);
+    return { category: row?.category ?? null, transfer: row?.transfer ?? null };
+  }
+
   async function handleInlineCategorySelect(transactionId, categoryId) {
-    const previous = transactions.find((t) => t.id === transactionId)?.category ?? null;
+    const previous = rowSnapshot(transactionId);
     setRowCategory(transactionId, categoryId);
     try {
       await updateTransaction(transactionId, { category: categoryId });
       toast.success("Category updated.");
     } catch (e) {
-      setRowCategory(transactionId, previous, categoryId);
+      setRowCategory(transactionId, previous.category, categoryId, previous.transfer);
+      toast.error(e.data ? Object.values(e.data).flat().join(" ") : e.message);
+    }
+  }
+
+  // Marking a row as a transfer is optimistic too: it shows "→ Savings"
+  // at once; the server's answer (the linked or created counterpart)
+  // replaces the placeholder, or the row is put back on failure.
+  async function handleInlineTransferSelect(transactionId, targetAccountId) {
+    const previous = rowSnapshot(transactionId);
+    const target = accounts.find((a) => a.id === targetAccountId);
+    const placeholder = { account_id: targetAccountId, account_name: target?.name, counterpart_id: null };
+    const stillPlaceholder = (t) => t.transfer === placeholder;
+    setTransactions((prev) =>
+      prev.map((t) => (t.id === transactionId ? { ...t, category: null, transfer: placeholder } : t)),
+    );
+    try {
+      const { transaction } = await linkTransfer(transactionId, targetAccountId);
+      setTransactions((prev) => prev.map((t) => (t.id === transactionId && stillPlaceholder(t) ? transaction : t)));
+      toast.success(`Marked as a transfer with ${target?.name}.`);
+    } catch (e) {
+      setTransactions((prev) =>
+        prev.map((t) => (t.id === transactionId && stillPlaceholder(t) ? { ...t, ...previous } : t)),
+      );
       toast.error(e.data ? Object.values(e.data).flat().join(" ") : e.message);
     }
   }
 
   async function handleInlineCategoryCreate(transactionId, name) {
-    const previous = transactions.find((t) => t.id === transactionId)?.category ?? null;
+    const previous = rowSnapshot(transactionId);
     // Negative ids never collide with server ids; the placeholder lets
     // the row show the new name before the category exists.
     const tempId = nextTempIdRef.current--;
@@ -148,10 +193,14 @@ export function TransactionsPage() {
       toast.success(`Created "${name}" and assigned it.`);
     } catch (e) {
       if (!created) setCategories((prev) => prev.filter((c) => c.id !== tempId));
-      setRowCategory(transactionId, previous, created ? created.id : tempId);
+      setRowCategory(transactionId, previous.category, created ? created.id : tempId, previous.transfer);
       toast.error(e.data ? Object.values(e.data).flat().join(" ") : e.message);
     }
   }
+
+  // The account list only holds active accounts; a row can't transfer to
+  // its own account.
+  const transferTargets = accounts.filter((a) => a.id !== accountId);
 
   if (accounts.length === 0) {
     return (
@@ -233,7 +282,12 @@ export function TransactionsPage() {
           <CardTitle>Add transaction</CardTitle>
         </CardHeader>
         <CardContent>
-          <TransactionForm categories={categories} onSubmit={handleCreate} submitLabel="Add transaction" />
+          <TransactionForm
+            categories={categories}
+            transferAccounts={transferTargets}
+            onSubmit={handleCreate}
+            submitLabel="Add transaction"
+          />
         </CardContent>
       </Card>
 
@@ -259,8 +313,9 @@ export function TransactionsPage() {
                     <TransactionForm
                       initialValues={t}
                       categories={categories}
+                      transferAccounts={transferTargets}
                       submitLabel="Save"
-                      onSubmit={(values) => handleSave(t.id, values)}
+                      onSubmit={(values, transferAccountId) => handleSave(t, values, transferAccountId)}
                       onCancel={() => setEditingId(null)}
                     />
                   </TableCell>
@@ -280,6 +335,11 @@ export function TransactionsPage() {
                       onSelect={(categoryId) => handleInlineCategorySelect(t.id, categoryId)}
                       allowCreate
                       onCreate={(name) => handleInlineCategoryCreate(t.id, name)}
+                      transferAccounts={transferTargets}
+                      transferAccountId={t.transfer?.account_id ?? null}
+                      transferAccountName={t.transfer?.account_name}
+                      direction={t.amount_cents < 0 ? "out" : "in"}
+                      onSelectTransfer={(targetId) => handleInlineTransferSelect(t.id, targetId)}
                     />
                   </TableCell>
                   <TableCell>{formatCents(t.amount_cents)}</TableCell>
@@ -318,13 +378,16 @@ export function TransactionsPage() {
   );
 }
 
-function TransactionForm({ initialValues, categories, onSubmit, onCancel, submitLabel }) {
+function TransactionForm({ initialValues, categories, transferAccounts = [], onSubmit, onCancel, submitLabel }) {
   const [date, setDate] = useState(initialValues?.date ?? new Date().toISOString().slice(0, 10));
   const [amount, setAmount] = useState(
     initialValues ? (initialValues.amount_cents / 100).toString() : "",
   );
   const [payee, setPayee] = useState(initialValues?.payee ?? "");
   const [category, setCategory] = useState(initialValues?.category ?? null);
+  // A transfer and a category are mutually exclusive: picking one clears
+  // the other.
+  const [transferAccountId, setTransferAccountId] = useState(initialValues?.transfer?.account_id ?? null);
   const [notes, setNotes] = useState(initialValues?.notes ?? "");
   const [submitting, setSubmitting] = useState(false);
   const toast = useToast();
@@ -339,11 +402,12 @@ function TransactionForm({ initialValues, categories, onSubmit, onCancel, submit
         payee,
         category,
         notes,
-      });
+      }, transferAccountId);
       if (!initialValues) {
         setAmount("");
         setPayee("");
         setCategory(null);
+        setTransferAccountId(null);
         setNotes("");
       }
     } catch (e) {
@@ -380,10 +444,21 @@ function TransactionForm({ initialValues, categories, onSubmit, onCancel, submit
         <CategoryCombobox
           categories={categories}
           value={category}
-          onSelect={setCategory}
+          onSelect={(id) => {
+            setCategory(id);
+            setTransferAccountId(null);
+          }}
           placeholder="Uncategorized"
           aria-label="Category"
           className="w-40"
+          transferAccounts={transferAccounts}
+          transferAccountId={transferAccountId}
+          transferAccountName={initialValues?.transfer?.account_name}
+          direction={parseFloat(amount || "0") > 0 ? "in" : "out"}
+          onSelectTransfer={(id) => {
+            setTransferAccountId(id);
+            setCategory(null);
+          }}
         />
       </div>
       <div className="flex flex-col gap-1.5">

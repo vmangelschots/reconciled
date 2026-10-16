@@ -25,6 +25,7 @@ vi.mock("../api/transactions", async () => {
     createTransaction: vi.fn(),
     updateTransaction: vi.fn(),
     deleteTransaction: vi.fn(),
+    linkTransfer: vi.fn(),
   };
 });
 
@@ -262,5 +263,192 @@ describe("TransactionsPage", () => {
     // An empty note gets no tooltip.
     const storeB = tbl.getByText("Store B").closest("tr");
     expect(within(storeB).getAllByRole("cell")[2]).not.toHaveAttribute("title");
+  });
+
+  describe("transfers in the ledger", () => {
+    const TWO_ACCOUNTS = [
+      { id: 1, name: "Main Checking" },
+      { id: 2, name: "Savings" },
+    ];
+
+    function rowPicker(payee) {
+      const row = within(screen.getByRole("table")).getByText(payee).closest("tr");
+      return within(row).getAllByRole("button")[0];
+    }
+
+    beforeEach(() => {
+      accountsApi.listAccounts.mockResolvedValue(TWO_ACCOUNTS);
+    });
+
+    it("shows an existing transfer as → / ← the other account", async () => {
+      transactionsApi.listTransactions.mockResolvedValue([
+        { ...TRANSACTIONS[0], transfer: { counterpart_id: 9, account_id: 2, account_name: "Savings" } },
+        {
+          ...TRANSACTIONS[1],
+          amount_cents: 2000,
+          transfer: { counterpart_id: 8, account_id: 3, account_name: "Old savings" },
+        },
+      ]);
+      renderPage();
+      await findTable();
+
+      expect(rowPicker("Store A")).toHaveTextContent("→ Savings");
+      // An archived account isn't offered, but its name still shows.
+      expect(rowPicker("Store B")).toHaveTextContent("← Old savings");
+    });
+
+    it("offers the other accounts only, not the current one", async () => {
+      transactionsApi.listTransactions.mockResolvedValue(TRANSACTIONS);
+      renderPage();
+      await findTable();
+
+      await userEvent.click(rowPicker("Store A"));
+
+      expect(screen.getByText("→ Savings")).toBeInTheDocument();
+      expect(screen.queryByText("→ Main Checking")).not.toBeInTheDocument();
+    });
+
+    it("marks a row as a transfer optimistically, without a reload", async () => {
+      transactionsApi.listTransactions.mockResolvedValue(TRANSACTIONS);
+      let resolveLink;
+      transactionsApi.linkTransfer.mockReturnValue(new Promise((resolve) => (resolveLink = resolve)));
+      renderPage();
+      await findTable();
+      await waitFor(() => expect(transactionsApi.listTransactions).toHaveBeenCalledTimes(1));
+
+      rowPicker("Store A").focus();
+      await userEvent.keyboard("sav{Enter}");
+
+      expect(rowPicker("Store A")).toHaveTextContent("→ Savings");
+      expect(transactionsApi.linkTransfer).toHaveBeenCalledWith(1, 2);
+
+      resolveLink({
+        transaction: { ...TRANSACTIONS[0], transfer: { counterpart_id: 9, account_id: 2, account_name: "Savings" } },
+        counterpart: {},
+      });
+      await screen.findByText("Marked as a transfer with Savings.");
+      expect(rowPicker("Store A")).toHaveTextContent("→ Savings");
+      expect(transactionsApi.listTransactions).toHaveBeenCalledTimes(1);
+    });
+
+    it("puts the row back when linking fails", async () => {
+      transactionsApi.listTransactions.mockResolvedValue([{ ...TRANSACTIONS[0], category: 1 }]);
+      transactionsApi.linkTransfer.mockRejectedValue(new Error("Nope"));
+      renderPage();
+      await findTable();
+
+      rowPicker("Store A").focus();
+      await userEvent.keyboard("sav{Enter}");
+
+      await screen.findByText("Nope");
+      expect(rowPicker("Store A")).toHaveTextContent("Groceries");
+    });
+
+    it("picking a category for a transfer clears it on the row", async () => {
+      transactionsApi.listTransactions.mockResolvedValue([
+        { ...TRANSACTIONS[0], transfer: { counterpart_id: 9, account_id: 2, account_name: "Savings" } },
+      ]);
+      transactionsApi.updateTransaction.mockResolvedValue({});
+      renderPage();
+      await findTable();
+
+      rowPicker("Store A").focus();
+      await userEvent.keyboard("groc{Enter}");
+
+      expect(rowPicker("Store A")).toHaveTextContent("Groceries");
+      expect(rowPicker("Store A")).not.toHaveTextContent("Savings");
+      expect(transactionsApi.updateTransaction).toHaveBeenCalledWith(1, { category: 1 });
+    });
+  });
+
+  describe("transfers in the transaction form", () => {
+    beforeEach(() => {
+      accountsApi.listAccounts.mockResolvedValue([
+        { id: 1, name: "Main Checking" },
+        { id: 2, name: "Savings" },
+      ]);
+    });
+
+    it("adds a transaction and then links it as a transfer", async () => {
+      transactionsApi.listTransactions.mockResolvedValue([]);
+      transactionsApi.createTransaction.mockResolvedValue({ id: 30 });
+      transactionsApi.linkTransfer.mockResolvedValue({ transaction: {}, counterpart: {} });
+      renderPage();
+      await userEvent.type(await screen.findByLabelText("Amount"), "-500");
+      await userEvent.type(screen.getByLabelText("Payee"), "Monthly saving");
+
+      screen.getByRole("button", { name: "Category" }).focus();
+      await userEvent.keyboard("sav{Tab}");
+      expect(screen.getByRole("button", { name: "Category" })).toHaveTextContent("→ Savings");
+      await userEvent.click(screen.getByRole("button", { name: "Add transaction" }));
+
+      await waitFor(() => expect(transactionsApi.linkTransfer).toHaveBeenCalledWith(30, 2));
+      expect(transactionsApi.createTransaction).toHaveBeenCalledWith(
+        expect.objectContaining({ account: 1, category: null, amount_cents: -50000 }),
+      );
+      expect(transactionsApi.createTransaction.mock.invocationCallOrder[0]).toBeLessThan(
+        transactionsApi.linkTransfer.mock.invocationCallOrder[0],
+      );
+    });
+
+    it("saving a transfer without changing its target leaves out category and doesn't re-link", async () => {
+      transactionsApi.listTransactions.mockResolvedValue([
+        { ...TRANSACTIONS[0], notes: "", transfer: { counterpart_id: 9, account_id: 2, account_name: "Savings" } },
+      ]);
+      transactionsApi.updateTransaction.mockResolvedValue({});
+      renderPage();
+      const tbl = await findTable();
+
+      await userEvent.click(tbl.getByRole("button", { name: "Edit" }));
+      await userEvent.type(screen.getAllByLabelText("Notes").at(-1), "x");
+      await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      await waitFor(() => expect(transactionsApi.updateTransaction).toHaveBeenCalled());
+      expect(transactionsApi.updateTransaction.mock.calls[0][1]).not.toHaveProperty("category");
+      expect(transactionsApi.linkTransfer).not.toHaveBeenCalled();
+    });
+
+    it("changing the transfer target in the edit form re-links it", async () => {
+      accountsApi.listAccounts.mockResolvedValue([
+        { id: 1, name: "Main Checking" },
+        { id: 2, name: "Savings" },
+        { id: 3, name: "Cash" },
+      ]);
+      transactionsApi.listTransactions.mockResolvedValue([
+        { ...TRANSACTIONS[0], notes: "", transfer: { counterpart_id: 9, account_id: 2, account_name: "Savings" } },
+      ]);
+      transactionsApi.updateTransaction.mockResolvedValue({});
+      transactionsApi.linkTransfer.mockResolvedValue({ transaction: {}, counterpart: {} });
+      renderPage();
+      const tbl = await findTable();
+
+      await userEvent.click(tbl.getByRole("button", { name: "Edit" }));
+      screen.getAllByRole("button", { name: "Category" }).at(-1).focus();
+      await userEvent.keyboard("cash{Tab}");
+      await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      await waitFor(() => expect(transactionsApi.linkTransfer).toHaveBeenCalledWith(1, 3));
+      expect(transactionsApi.updateTransaction.mock.calls[0][1]).not.toHaveProperty("category");
+    });
+
+    it("picking a category in the edit form sends it, which unlinks the transfer", async () => {
+      transactionsApi.listTransactions.mockResolvedValue([
+        { ...TRANSACTIONS[0], notes: "", transfer: { counterpart_id: 9, account_id: 2, account_name: "Savings" } },
+      ]);
+      transactionsApi.updateTransaction.mockResolvedValue({});
+      renderPage();
+      const tbl = await findTable();
+
+      await userEvent.click(tbl.getByRole("button", { name: "Edit" }));
+      const pickers = screen.getAllByRole("button", { name: "Category" });
+      pickers.at(-1).focus();
+      await userEvent.keyboard("groc{Tab}");
+      await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+      await waitFor(() =>
+        expect(transactionsApi.updateTransaction).toHaveBeenCalledWith(1, expect.objectContaining({ category: 1 })),
+      );
+      expect(transactionsApi.linkTransfer).not.toHaveBeenCalled();
+    });
   });
 });

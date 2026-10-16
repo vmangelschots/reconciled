@@ -18,3 +18,14 @@ export function updateTransaction(id, data) {
 export function deleteTransaction(id) {
   return apiFetch(`/api/transactions/${id}/`, { method: "DELETE" });
 }
+
+// Marks a transaction as a transfer to/from another account; the backend
+// links a matching transaction there or creates one. Returns
+// { transaction, counterpart }.
+export function linkTransfer(id, accountId) {
+  return apiFetch(`/api/transactions/${id}/transfer/`, { method: "POST", body: { account: accountId } });
+}
+
+export function unlinkTransfer(id) {
+  return apiFetch(`/api/transactions/${id}/transfer/`, { method: "DELETE" });
+}
