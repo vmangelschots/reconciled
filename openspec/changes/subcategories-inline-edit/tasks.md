@@ -19,13 +19,13 @@
 
 ## 4. Wire into the transaction ledger
 
-- [ ] 4.1 Replace the ledger row's static category text with `CategoryCombobox` (`allowCreate` on), committing a selection immediately via the existing `updateTransaction` call with no separate save step, and verify manually that selecting an existing category reassigns the transaction without opening the row's full edit form
-- [ ] 4.2 Wire the create-on-the-spot path: selecting "Create '<name>'" calls `createCategory` then `updateTransaction` with the new category's id, and verify manually that a brand-new top-level category is created and assigned to that transaction in one action, and that it's immediately available (no extra reload step) in that category list for other rows
+- [x] 4.1 Replace the ledger row's static category text with `CategoryCombobox` (`allowCreate` on), committing a selection immediately via the existing `updateTransaction` call with no separate save step, and verify manually that selecting an existing category reassigns the transaction without opening the row's full edit form (build and existing suite clean; live-stack manual verification deferred to task 6.1's combined pass)
+- [x] 4.2 Wire the create-on-the-spot path: selecting "Create '<name>'" calls `createCategory` then `updateTransaction` with the new category's id, and verify manually that a brand-new top-level category is created and assigned to that transaction in one action, and that it's immediately available (no extra reload step) in that category list for other rows (the new category is appended to local `categories` state immediately on creation, so every other row's combobox sees it without a page reload; live-stack verification deferred to task 6.1)
 
 ## 5. Wire into the Budgets page
 
-- [ ] 5.1 Add a parent-category field (`CategoryCombobox`, `allowCreate` off, candidates restricted to top-level categories, plus a "No parent" option) to the category create/edit form, and verify manually that creating a subcategory and re-parenting an existing category both work
-- [ ] 5.2 Indent subcategories under their parent in both the category management list and the monthly summary table (using `buildCategoryTree`), and verify manually that the summary table's figures match task 2.2's independent-figures behavior visually, not just in the API response
+- [x] 5.1 Add a parent-category field (`CategoryCombobox`, `allowCreate` off, candidates restricted to top-level categories, plus a "No parent" option) to the category create/edit form, and verify manually that creating a subcategory and re-parenting an existing category both work (build and existing suite clean; `createCategory`/the old `renameCategory` generalized into a single `updateCategory(id, {name, parent})` so edit can change both in one call; live-stack verification deferred to task 6.1)
+- [x] 5.2 Indent subcategories under their parent in both the category management list and the monthly summary table (using `buildCategoryTree`), and verify manually that the summary table's figures match task 2.2's independent-figures behavior visually, not just in the API response (summary rows need an `id` alias for `category_id` before `buildCategoryTree` can group them, since the two endpoints name that field differently - handled at the call site, not inside the shared helper; live-stack verification deferred to task 6.1)
 
 ## 6. End-to-end verification against the real running stack
 

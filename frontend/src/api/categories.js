@@ -4,12 +4,13 @@ export function listCategories() {
   return apiFetch("/api/categories/");
 }
 
-export function createCategory(name) {
-  return apiFetch("/api/categories/", { method: "POST", body: { name } });
+export function createCategory(name, parent = null) {
+  return apiFetch("/api/categories/", { method: "POST", body: { name, parent } });
 }
 
-export function renameCategory(id, name) {
-  return apiFetch(`/api/categories/${id}/`, { method: "PATCH", body: { name } });
+// data: { name?, parent? } - either or both; parent: null clears it (top-level).
+export function updateCategory(id, data) {
+  return apiFetch(`/api/categories/${id}/`, { method: "PATCH", body: data });
 }
 
 export function deleteCategory(id) {

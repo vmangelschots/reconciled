@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { listAccounts } from "../api/accounts";
-import { listCategories } from "../api/categories";
+import { createCategory, listCategories } from "../api/categories";
 import {
   createTransaction,
   deleteTransaction,
   listTransactions,
   updateTransaction,
 } from "../api/transactions";
+import { CategoryCombobox } from "../components/CategoryCombobox";
 import { Button } from "../components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import { Input } from "../components/ui/Input";
@@ -85,8 +86,26 @@ export function TransactionsPage() {
     await reload();
   }
 
-  function categoryName(id) {
-    return categories.find((c) => c.id === id)?.name ?? "Uncategorized";
+  async function handleInlineCategorySelect(transactionId, categoryId) {
+    try {
+      await updateTransaction(transactionId, { category: categoryId });
+      toast.success("Category updated.");
+      await reload();
+    } catch (e) {
+      toast.error(e.data ? Object.values(e.data).flat().join(" ") : e.message);
+    }
+  }
+
+  async function handleInlineCategoryCreate(transactionId, name) {
+    try {
+      const created = await createCategory(name);
+      setCategories((prev) => [...prev, created]);
+      await updateTransaction(transactionId, { category: created.id });
+      toast.success(`Created "${name}" and assigned it.`);
+      await reload();
+    } catch (e) {
+      toast.error(e.data ? Object.values(e.data).flat().join(" ") : e.message);
+    }
   }
 
   if (accounts.length === 0) {
@@ -208,7 +227,15 @@ export function TransactionsPage() {
                 <TableRow key={t.id}>
                   <TableCell>{t.date}</TableCell>
                   <TableCell>{t.payee}</TableCell>
-                  <TableCell>{categoryName(t.category)}</TableCell>
+                  <TableCell>
+                    <CategoryCombobox
+                      categories={categories}
+                      value={t.category}
+                      onSelect={(categoryId) => handleInlineCategorySelect(t.id, categoryId)}
+                      allowCreate
+                      onCreate={(name) => handleInlineCategoryCreate(t.id, name)}
+                    />
+                  </TableCell>
                   <TableCell>{formatCents(t.amount_cents)}</TableCell>
                   <TableCell className="flex gap-2">
                     <Button variant="outline" size="sm" onClick={() => setEditingId(t.id)}>
