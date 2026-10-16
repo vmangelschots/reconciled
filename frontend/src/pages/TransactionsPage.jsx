@@ -245,6 +245,7 @@ export function TransactionsPage() {
             <TableRow>
               <TableHead>Date</TableHead>
               <TableHead>Payee</TableHead>
+              <TableHead>Notes</TableHead>
               <TableHead>Category</TableHead>
               <TableHead>Amount</TableHead>
               <TableHead />
@@ -254,7 +255,7 @@ export function TransactionsPage() {
             {transactions.map((t) =>
               editingId === t.id ? (
                 <TableRow key={t.id}>
-                  <TableCell colSpan={5}>
+                  <TableCell colSpan={6}>
                     <TransactionForm
                       initialValues={t}
                       categories={categories}
@@ -268,6 +269,10 @@ export function TransactionsPage() {
                 <TableRow key={t.id}>
                   <TableCell>{t.date}</TableCell>
                   <TableCell>{t.payee}</TableCell>
+                  {/* Long notes stay on one line; the full text is in the tooltip. */}
+                  <TableCell className="max-w-xs truncate text-ink-secondary" title={t.notes || undefined}>
+                    {t.notes}
+                  </TableCell>
                   <TableCell>
                     <CategoryCombobox
                       categories={categories}
@@ -301,7 +306,7 @@ export function TransactionsPage() {
             )}
             {transactions.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="text-ink-secondary">
+                <TableCell colSpan={6} className="text-ink-secondary">
                   No transactions yet.
                 </TableCell>
               </TableRow>

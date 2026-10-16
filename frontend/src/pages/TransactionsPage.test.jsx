@@ -43,8 +43,10 @@ function renderPage() {
   );
 }
 
+// Generous timeout: under a full parallel test run the first render can
+// take longer than findByRole's 1s default.
 async function findTable() {
-  return within(await screen.findByRole("table"));
+  return within(await screen.findByRole("table", {}, { timeout: 5000 }));
 }
 
 beforeEach(() => {
@@ -243,5 +245,22 @@ describe("TransactionsPage", () => {
       expect(rowPicker("Store A")).not.toHaveTextContent("Pets");
       expect(transactionsApi.updateTransaction).not.toHaveBeenCalled();
     });
+  });
+
+  it("shows each transaction's notes in the ledger, with the full text as a tooltip", async () => {
+    const long = "Birthday present for grandma, split with my sister - she pays me back next week";
+    transactionsApi.listTransactions.mockResolvedValue([
+      { ...TRANSACTIONS[0], notes: long },
+      { ...TRANSACTIONS[1], notes: "" },
+    ]);
+    renderPage();
+    const tbl = await findTable();
+
+    expect(tbl.getByRole("columnheader", { name: "Notes" })).toBeInTheDocument();
+    const cell = tbl.getByText(long);
+    expect(cell).toHaveAttribute("title", long);
+    // An empty note gets no tooltip.
+    const storeB = tbl.getByText("Store B").closest("tr");
+    expect(within(storeB).getAllByRole("cell")[2]).not.toHaveAttribute("title");
   });
 });
