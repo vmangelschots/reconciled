@@ -1,0 +1,16 @@
+# Non-secret settings shared by the backend. Replace budget.example.com
+# with your hostname (also in 50-ingress.yaml). Keep "localhost" in
+# DJANGO_ALLOWED_HOSTS: the kubelet's health probes send Host: localhost.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: reconciled-config
+  namespace: reconciled
+data:
+  DJANGO_DEBUG: "false"
+  DJANGO_ALLOWED_HOSTS: budget.example.com,localhost
+  CSRF_TRUSTED_ORIGINS: https://budget.example.com
+  CORS_ALLOWED_ORIGINS: https://budget.example.com
+  DB_HOST: db
+  DB_PORT: "5432"
+  DB_NAME: reconciled

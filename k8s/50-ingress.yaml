@@ -1,0 +1,36 @@
+# One hostname for the whole app: the API, Django admin and its static
+# files go to the backend, everything else to the frontend (which handles
+# client-side routes like /transactions). Replace budget.example.com
+# (also in 10-config.yaml) and the cert-manager issuer name.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: reconciled
+  namespace: reconciled
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [budget.example.com]
+      secretName: reconciled-tls
+  rules:
+    - host: budget.example.com
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service: { name: backend, port: { name: http } }
+          - path: /admin
+            pathType: Prefix
+            backend:
+              service: { name: backend, port: { name: http } }
+          - path: /static
+            pathType: Prefix
+            backend:
+              service: { name: backend, port: { name: http } }
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: frontend, port: { name: http } }
