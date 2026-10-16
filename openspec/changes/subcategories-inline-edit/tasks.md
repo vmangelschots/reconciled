@@ -2,14 +2,14 @@
 
 ## 1. Category hierarchy (backend model)
 
-- [ ] 1.1 Add `Category.parent` (nullable self-FK, `related_name="subcategories"`) and replace the `unique=True` on `name` with the two partial unique constraints (top-level name uniqueness; per-parent subcategory name uniqueness), and verify the migration applies and reverses cleanly
-- [ ] 1.2 Add `CategorySerializer.validate_parent` (reject a parent that itself has a parent; reject a category being set as its own parent) and a matching `Category.clean()` as a second line of defense for non-API writes, and verify tests for the budgets spec scenarios: create a subcategory, reject nesting a subcategory under a subcategory, reject self-parenting
-- [ ] 1.3 Verify tests for the spec's uniqueness scenarios: two top-level categories can't share a name, two subcategories under the *same* parent can't share a name, but two subcategories under *different* parents can share a name
+- [x] 1.1 Add `Category.parent` (nullable self-FK, `related_name="subcategories"`) and replace the `unique=True` on `name` with the two partial unique constraints (top-level name uniqueness; per-parent subcategory name uniqueness), and verify the migration applies and reverses cleanly
+- [x] 1.2 Add `CategorySerializer.validate_parent` (reject a parent that itself has a parent; reject a category being set as its own parent) and a matching `Category.clean()` as a second line of defense for non-API writes, and verify tests for the budgets spec scenarios: create a subcategory, reject nesting a subcategory under a subcategory, reject self-parenting (found and fixed along the way: DRF doesn't auto-generate a UniqueValidator from conditional `Meta.constraints` the way it does from field-level `unique=True`, so a duplicate name was hitting the database's IntegrityError directly as a raw 500 - added an explicit per-level uniqueness check in `validate()`)
+- [x] 1.3 Verify tests for the spec's uniqueness scenarios: two top-level categories can't share a name, two subcategories under the *same* parent can't share a name, but two subcategories under *different* parents can share a name
 
 ## 2. Delete guard & summary endpoint
 
-- [ ] 2.1 Extend `CategoryViewSet.destroy()` to also block deletion while `category.subcategories.exists()`, naming the blocker in the response, and verify tests: deleting a category with subcategories is blocked, and succeeds once they're deleted or re-parented away
-- [ ] 2.2 Add `parent_id` to each category row in `BudgetSummaryView`'s response, with no change to the spend/limit calculation itself, and verify a test replaying the spec's rollup scenario: a parent with its own direct spend and a subcategory with its own direct spend both appear independently, parent's total is not increased by the subcategory's
+- [x] 2.1 Extend `CategoryViewSet.destroy()` to also block deletion while `category.subcategories.exists()`, naming the blocker in the response, and verify tests: deleting a category with subcategories is blocked, and succeeds once they're deleted or re-parented away
+- [x] 2.2 Add `parent_id` to each category row in `BudgetSummaryView`'s response, with no change to the spend/limit calculation itself, and verify a test replaying the spec's rollup scenario: a parent with its own direct spend and a subcategory with its own direct spend both appear independently, parent's total is not increased by the subcategory's
 
 ## 3. Shared category combobox (frontend)
 

@@ -69,6 +69,98 @@ class CategoryTests(TestCase):
         self.assertFalse(Category.objects.filter(id=category.id).exists())
 
 
+class SubcategoryTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        user = get_user_model().objects.create_user(username="budgeter", password="x")
+        self.client.force_authenticate(user=user)
+        self.account = Account.objects.create(
+            name="Main Checking", account_type="checking", starting_balance_cents=0
+        )
+        self.groceries = Category.objects.create(name="Groceries")
+
+    def test_create_a_subcategory(self):
+        response = self.client.post(
+            reverse("category-list"),
+            {"name": "Supermarket", "parent": self.groceries.id},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        supermarket = Category.objects.get(id=response.json()["id"])
+        self.assertEqual(supermarket.parent_id, self.groceries.id)
+
+    def test_reject_nesting_a_subcategory_under_a_subcategory(self):
+        supermarket = Category.objects.create(name="Supermarket", parent=self.groceries)
+        response = self.client.post(
+            reverse("category-list"),
+            {"name": "Deeper", "parent": supermarket.id},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Category.objects.filter(name="Deeper").exists())
+
+    def test_reject_self_parenting(self):
+        response = self.client.patch(
+            reverse("category-detail", args=[self.groceries.id]),
+            {"parent": self.groceries.id},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_two_top_level_categories_cannot_share_a_name(self):
+        response = self.client.post(reverse("category-list"), {"name": "Groceries"}, format="json")
+        self.assertEqual(response.status_code, 400)
+
+    def test_two_subcategories_under_the_same_parent_cannot_share_a_name(self):
+        Category.objects.create(name="Supermarket", parent=self.groceries)
+        response = self.client.post(
+            reverse("category-list"),
+            {"name": "Supermarket", "parent": self.groceries.id},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_subcategories_under_different_parents_may_share_a_name(self):
+        transport = Category.objects.create(name="Transport")
+        Category.objects.create(name="Other", parent=self.groceries)
+        response = self.client.post(
+            reverse("category-list"),
+            {"name": "Other", "parent": transport.id},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+
+    def test_delete_blocked_while_subcategories_exist(self):
+        Category.objects.create(name="Supermarket", parent=self.groceries)
+        response = self.client.delete(reverse("category-detail", args=[self.groceries.id]))
+        self.assertEqual(response.status_code, 400)
+        self.assertTrue(Category.objects.filter(id=self.groceries.id).exists())
+
+    def test_delete_succeeds_once_subcategories_are_removed(self):
+        supermarket = Category.objects.create(name="Supermarket", parent=self.groceries)
+        self.client.delete(reverse("category-detail", args=[supermarket.id]))
+        response = self.client.delete(reverse("category-detail", args=[self.groceries.id]))
+        self.assertEqual(response.status_code, 204)
+
+    def test_summary_keeps_parent_and_subcategory_figures_independent(self):
+        supermarket = Category.objects.create(name="Supermarket", parent=self.groceries)
+        Transaction.objects.create(
+            account=self.account, date="2026-01-10", amount_cents=-32000, payee="Direct groceries",
+            category=self.groceries,
+        )
+        Transaction.objects.create(
+            account=self.account, date="2026-01-11", amount_cents=-9000, payee="Supermarket run",
+            category=supermarket,
+        )
+        summary = self.client.get(reverse("budget-summary"), {"month": "2026-01"}).json()
+        rows = {row["category_id"]: row for row in summary["categories"]}
+
+        self.assertEqual(rows[self.groceries.id]["spent_cents"], 32000)
+        self.assertEqual(rows[self.groceries.id]["parent_id"], None)
+        self.assertEqual(rows[supermarket.id]["spent_cents"], 9000)
+        self.assertEqual(rows[supermarket.id]["parent_id"], self.groceries.id)
+
+
 class BudgetSummaryTests(TestCase):
     def setUp(self):
         self.client = APIClient()

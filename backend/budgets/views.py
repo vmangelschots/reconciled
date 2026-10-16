@@ -17,12 +17,24 @@ class CategoryViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         category = self.get_object()
-        count = category.transactions.count()
-        if count:
+        subcategory_count = category.subcategories.count()
+        if subcategory_count:
             return Response(
                 {
                     "detail": (
-                        f"{count} transaction(s) are still assigned to this "
+                        f"{subcategory_count} subcategory/subcategories are still "
+                        "nested under this category. Remove or re-parent them "
+                        "before deleting it."
+                    )
+                },
+                status=400,
+            )
+        transaction_count = category.transactions.count()
+        if transaction_count:
+            return Response(
+                {
+                    "detail": (
+                        f"{transaction_count} transaction(s) are still assigned to this "
                         "category. Reassign them to another category or to "
                         "uncategorized before deleting it."
                     )
@@ -89,6 +101,7 @@ class BudgetSummaryView(APIView):
                 {
                     "category_id": category.id,
                     "category_name": category.name,
+                    "parent_id": category.parent_id,
                     "limit_cents": limit_cents,
                     "spent_cents": spent_cents,
                     "remaining_cents": remaining_cents,
