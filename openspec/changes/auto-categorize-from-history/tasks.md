@@ -32,7 +32,7 @@
 
 ## 5. Integration check
 
-- [ ] 5.1 Run the backend and frontend suites, lint and build, rebuild the local stack, then use only the keyboard in the browser:
+- [x] 5.1 Run the backend and frontend suites, lint and build, rebuild the local stack, then use only the keyboard in the browser:
   - confirm a few categories by hand on a throwaway account;
   - import a CSV with repeat and new payees, and check the summary line, the nav count and the marked rows in the ledger;
   - on the Review page, confirm one group with Enter, correct another group, and fix one row inside a group;

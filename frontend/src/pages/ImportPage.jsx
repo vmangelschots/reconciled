@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/Table";
 import { useToast } from "../components/ui/Toast";
 import { formatMoney } from "../lib/money";
+import { useReviewCount } from "../review/ReviewCountContext";
 
 const CSV_FIELDS = ["date", "amount", "description", "payee"];
 const UNMAPPED = "none";
@@ -29,6 +30,7 @@ function importSummary({ created_count, confirmed_transfer_count = 0, categorize
 }
 
 export function ImportPage() {
+  const { refresh: refreshReviewCount } = useReviewCount();
   const [accounts, setAccounts] = useState([]);
   const [accountId, setAccountId] = useState(null);
   const [file, setFile] = useState(null);
@@ -105,6 +107,8 @@ export function ImportPage() {
       const data = await commitImport(session.id, [...selected]);
       setResult(data);
       toast.success(importSummary(data));
+      // The commit may have added guesses, so the nav's Review count is stale.
+      refreshReviewCount();
     } catch (e) {
       toast.error(e.data?.detail ?? e.message);
     } finally {

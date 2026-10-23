@@ -6,6 +6,7 @@ import { ToastProvider } from "../components/ui/Toast";
 import * as accountsApi from "../api/accounts";
 import * as categoriesApi from "../api/categories";
 import * as transactionsApi from "../api/transactions";
+import { ReviewCountProvider } from "../review/ReviewCountContext";
 
 vi.mock("../api/accounts", async () => {
   const actual = await vi.importActual("../api/accounts");
@@ -26,6 +27,7 @@ vi.mock("../api/transactions", async () => {
     updateTransaction: vi.fn(),
     deleteTransaction: vi.fn(),
     linkTransfer: vi.fn(),
+    getReviewCount: vi.fn(),
   };
 });
 
@@ -292,6 +294,26 @@ describe("TransactionsPage", () => {
       expect(transactionsApi.updateTransaction).toHaveBeenCalledWith(1, { category: 1 });
       await screen.findByText("Category updated.");
       expect(transactionsApi.listTransactions).toHaveBeenCalledTimes(1);
+    });
+
+    it("confirming a guess refreshes the nav's Review count", async () => {
+      transactionsApi.listTransactions.mockResolvedValue(GUESSED);
+      transactionsApi.updateTransaction.mockResolvedValue({});
+      transactionsApi.getReviewCount.mockResolvedValue({ count: 1 });
+      render(
+        <ToastProvider>
+          <ReviewCountProvider>
+            <TransactionsPage />
+          </ReviewCountProvider>
+        </ToastProvider>,
+      );
+      await findTable();
+      await waitFor(() => expect(transactionsApi.getReviewCount).toHaveBeenCalledTimes(1));
+
+      rowPicker("Carrefour").focus();
+      await userEvent.keyboard("{Enter}{Enter}");
+
+      await waitFor(() => expect(transactionsApi.getReviewCount).toHaveBeenCalledTimes(2));
     });
 
     it("a failed confirm turns the row back into a guess and shows the error", async () => {

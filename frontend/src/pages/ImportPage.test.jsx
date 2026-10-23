@@ -6,9 +6,12 @@ import { ImportPage } from "./ImportPage";
 import { ToastProvider } from "../components/ui/Toast";
 import * as accountsApi from "../api/accounts";
 import * as importsApi from "../api/imports";
+import * as transactionsApi from "../api/transactions";
+import { ReviewCountProvider } from "../review/ReviewCountContext";
 
 vi.mock("../api/accounts", () => ({ listAccounts: vi.fn() }));
 vi.mock("../api/imports", () => ({ uploadImportFile: vi.fn(), mapCsvColumns: vi.fn(), commitImport: vi.fn() }));
+vi.mock("../api/transactions", () => ({ getReviewCount: vi.fn().mockResolvedValue({ count: 0 }) }));
 
 // An OFX upload parses straight away, so the preview shows without mapping.
 const SESSION = {
@@ -40,7 +43,9 @@ async function uploadAndPreview() {
   render(
     <MemoryRouter>
       <ToastProvider>
-        <ImportPage />
+        <ReviewCountProvider>
+          <ImportPage />
+        </ReviewCountProvider>
       </ToastProvider>
     </MemoryRouter>,
   );
@@ -93,6 +98,9 @@ describe("ImportPage review line", () => {
       (await screen.findAllByText("Created 20 transaction(s). 14 got a category from your history.")).length,
     ).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: "Review 14 guesses" })).toHaveAttribute("href", "/review");
+    // The nav's Review count is refreshed after the commit, not just on the
+    // next navigation.
+    await waitFor(() => expect(transactionsApi.getReviewCount).toHaveBeenCalledTimes(2));
   });
 
   it("shows only the created count when nothing was categorized", async () => {
