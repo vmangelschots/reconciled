@@ -327,3 +327,38 @@ describe("CategoryCombobox transfer options", () => {
     expect(screen.queryByText(/Transfer/)).not.toBeInTheDocument();
   });
 });
+
+describe("CategoryCombobox guesses", () => {
+  it("styles a guessed category with its source and a hint", () => {
+    render(<CategoryCombobox categories={CATEGORIES} value={1} onSelect={vi.fn()} suggestion="history" />);
+
+    const trigger = screen.getByRole("button");
+    expect(trigger).toHaveAttribute("data-suggestion", "history");
+    expect(trigger).toHaveClass("border-dashed");
+    expect(trigger).toHaveAttribute("title", "Guessed from history. Pick a category to confirm.");
+    expect(trigger.querySelector("svg.lucide-history")).not.toBeNull();
+  });
+
+  it("shows no guess style for a confirmed category", () => {
+    render(<CategoryCombobox categories={CATEGORIES} value={1} onSelect={vi.fn()} />);
+
+    const trigger = screen.getByRole("button");
+    expect(trigger).not.toHaveAttribute("data-suggestion");
+    expect(trigger).not.toHaveClass("border-dashed");
+    expect(trigger).not.toHaveAttribute("title");
+  });
+
+  it("ignores a suggestion when no category is shown", () => {
+    render(<CategoryCombobox categories={CATEGORIES} value={null} onSelect={vi.fn()} suggestion="history" />);
+
+    expect(screen.getByRole("button")).not.toHaveAttribute("data-suggestion");
+  });
+
+  it("keeps the trigger's width classes when guessed", () => {
+    render(
+      <CategoryCombobox categories={CATEGORIES} value={1} onSelect={vi.fn()} suggestion="history" className="w-48" />,
+    );
+
+    expect(screen.getByRole("button")).toHaveClass("min-w-32", "w-48");
+  });
+});

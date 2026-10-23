@@ -248,6 +248,67 @@ describe("TransactionsPage", () => {
     });
   });
 
+  describe("guessed categories", () => {
+    const GUESSED = [
+      {
+        id: 1, date: "2026-10-01", payee: "Carrefour", category: 1, amount_cents: -1000,
+        category_confirmed: false, category_source: "history",
+      },
+      {
+        id: 2, date: "2026-10-02", payee: "Bakery", category: 1, amount_cents: -500,
+        category_confirmed: true, category_source: "manual",
+      },
+    ];
+
+    function rowPicker(payee) {
+      const row = within(screen.getByRole("table")).getByText(payee).closest("tr");
+      return within(row).getAllByRole("button")[0];
+    }
+
+    it("marks only unconfirmed rows, without changing the column width", async () => {
+      transactionsApi.listTransactions.mockResolvedValue(GUESSED);
+      renderPage();
+      await findTable();
+
+      expect(rowPicker("Carrefour")).toHaveAttribute("data-suggestion", "history");
+      expect(rowPicker("Bakery")).not.toHaveAttribute("data-suggestion");
+      for (const payee of ["Carrefour", "Bakery"]) {
+        expect(rowPicker(payee)).toHaveClass("min-w-32");
+        expect(rowPicker(payee).className).not.toMatch(/(^|\s)w-\d/);
+      }
+    });
+
+    it("re-picking a guess with Enter confirms it at once, without a reload", async () => {
+      transactionsApi.listTransactions.mockResolvedValue(GUESSED);
+      transactionsApi.updateTransaction.mockResolvedValue({});
+      renderPage();
+      await findTable();
+      await waitFor(() => expect(transactionsApi.listTransactions).toHaveBeenCalledTimes(1));
+
+      rowPicker("Carrefour").focus();
+      await userEvent.keyboard("{Enter}{Enter}");
+
+      expect(rowPicker("Carrefour")).not.toHaveAttribute("data-suggestion");
+      expect(transactionsApi.updateTransaction).toHaveBeenCalledWith(1, { category: 1 });
+      await screen.findByText("Category updated.");
+      expect(transactionsApi.listTransactions).toHaveBeenCalledTimes(1);
+    });
+
+    it("a failed confirm turns the row back into a guess and shows the error", async () => {
+      transactionsApi.listTransactions.mockResolvedValue(GUESSED);
+      transactionsApi.updateTransaction.mockRejectedValue(new Error("Server said no"));
+      renderPage();
+      await findTable();
+
+      rowPicker("Carrefour").focus();
+      await userEvent.keyboard("{Enter}{Enter}");
+
+      await screen.findByText("Server said no");
+      expect(rowPicker("Carrefour")).toHaveAttribute("data-suggestion", "history");
+      expect(rowPicker("Carrefour")).toHaveTextContent("Groceries");
+    });
+  });
+
   it("shows each transaction's notes in the ledger, with the full text as a tooltip", async () => {
     const long = "Birthday present for grandma, split with my sister - she pays me back next week";
     transactionsApi.listTransactions.mockResolvedValue([

@@ -121,11 +121,13 @@ export function TransactionsPage() {
   // the row still shows the value we set, so a later pick isn't undone.
   // Picking a category also ends a transfer (the backend unlinks it), so
   // the row's transfer is cleared alongside, and restored on revert.
-  function setRowCategory(transactionId, category, onlyIf, transfer = null) {
+  // Any pick confirms the category - re-picking a guess is how the ledger
+  // accepts it - so a revert also restores whether it was still a guess.
+  function setRowCategory(transactionId, category, onlyIf, transfer = null, confirmed = true) {
     setTransactions((prev) =>
       prev.map((t) =>
         t.id === transactionId && (onlyIf === undefined || t.category === onlyIf)
-          ? { ...t, category, transfer }
+          ? { ...t, category, transfer, category_confirmed: confirmed }
           : t,
       ),
     );
@@ -133,7 +135,11 @@ export function TransactionsPage() {
 
   function rowSnapshot(transactionId) {
     const row = transactions.find((t) => t.id === transactionId);
-    return { category: row?.category ?? null, transfer: row?.transfer ?? null };
+    return {
+      category: row?.category ?? null,
+      transfer: row?.transfer ?? null,
+      category_confirmed: row?.category_confirmed ?? true,
+    };
   }
 
   async function handleInlineCategorySelect(transactionId, categoryId) {
@@ -143,7 +149,7 @@ export function TransactionsPage() {
       await updateTransaction(transactionId, { category: categoryId });
       toast.success("Category updated.");
     } catch (e) {
-      setRowCategory(transactionId, previous.category, categoryId, previous.transfer);
+      setRowCategory(transactionId, previous.category, categoryId, previous.transfer, previous.category_confirmed);
       toast.error(e.data ? Object.values(e.data).flat().join(" ") : e.message);
     }
   }
@@ -187,7 +193,13 @@ export function TransactionsPage() {
       toast.success(`Created "${name}" and assigned it.`);
     } catch (e) {
       if (!created) setCategories((prev) => prev.filter((c) => c.id !== tempId));
-      setRowCategory(transactionId, previous.category, created ? created.id : tempId, previous.transfer);
+      setRowCategory(
+        transactionId,
+        previous.category,
+        created ? created.id : tempId,
+        previous.transfer,
+        previous.category_confirmed,
+      );
       toast.error(e.data ? Object.values(e.data).flat().join(" ") : e.message);
     }
   }
@@ -334,6 +346,7 @@ export function TransactionsPage() {
                       transferAccountName={t.transfer?.account_name}
                       direction={t.amount_cents < 0 ? "out" : "in"}
                       onSelectTransfer={(targetId) => handleInlineTransferSelect(t.id, targetId)}
+                      suggestion={t.category_confirmed === false ? t.category_source : null}
                     />
                   </TableCell>
                   <TableCell>{formatMoney(t.amount_cents)}</TableCell>
