@@ -1,9 +1,12 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import * as transactionsApi from '../api/transactions'
 import { ThemeProvider } from '../theme/ThemeProvider'
 import { Layout } from './Layout'
+
+vi.mock('../api/transactions', () => ({ getReviewCount: vi.fn() }))
 
 vi.mock('../auth/AuthContext', () => ({
   useAuth: () => ({ user: { username: 'vincent' }, logout: vi.fn() }),
@@ -25,12 +28,17 @@ function renderLayout() {
         <Routes>
           <Route element={<Layout />}>
             <Route index element={<p>Page content</p>} />
+            <Route path="budgets" element={<p>Budgets content</p>} />
           </Route>
         </Routes>
       </MemoryRouter>
     </ThemeProvider>,
   )
 }
+
+beforeEach(() => {
+  transactionsApi.getReviewCount.mockResolvedValue({ count: 0 })
+})
 
 describe('Layout navigation', () => {
   afterEach(() => {
@@ -55,5 +63,43 @@ describe('Layout navigation', () => {
 
     expect(screen.getByRole('link', { name: 'Accounts' })).toBeVisible()
     expect(screen.getByRole('link', { name: 'Forecast' })).toBeVisible()
+  })
+})
+
+describe('Review count in the navigation', () => {
+  it('shows how many guesses wait for review', async () => {
+    mockViewport(true)
+    transactionsApi.getReviewCount.mockResolvedValue({ count: 14 })
+    renderLayout()
+
+    const link = screen.getByRole('link', { name: /Review/ })
+    await waitFor(() => expect(within(link).getByText('14')).toBeInTheDocument())
+    expect(link).toHaveAttribute('href', '/review')
+  })
+
+  it('shows no count when nothing needs review', async () => {
+    mockViewport(true)
+    renderLayout()
+
+    await waitFor(() => expect(transactionsApi.getReviewCount).toHaveBeenCalled())
+    expect(screen.getByRole('link', { name: 'Review' })).toHaveTextContent(/^Review$/)
+  })
+
+  it('caps the count at 99+', async () => {
+    mockViewport(true)
+    transactionsApi.getReviewCount.mockResolvedValue({ count: 140 })
+    renderLayout()
+
+    await waitFor(() => expect(screen.getByRole('link', { name: /Review/ })).toHaveTextContent('Review99+'))
+  })
+
+  it('refetches the count when the user navigates', async () => {
+    mockViewport(true)
+    renderLayout()
+    await waitFor(() => expect(transactionsApi.getReviewCount).toHaveBeenCalledTimes(1))
+
+    await userEvent.click(screen.getByRole('link', { name: 'Budgets' }))
+
+    await waitFor(() => expect(transactionsApi.getReviewCount).toHaveBeenCalledTimes(2))
   })
 })

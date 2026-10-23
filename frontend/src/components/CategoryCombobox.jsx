@@ -1,6 +1,6 @@
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "cmdk";
-import { Check, ChevronsUpDown, Plus } from "lucide-react";
+import { Check, ChevronsUpDown, History, Plus, Sparkles } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { categoryDisplayLabel, rankCategories } from "../lib/categoryTree";
 import { cn } from "../lib/cn";
@@ -11,6 +11,12 @@ const CREATE = "__create__";
 // Transfer options use their own value space so they never collide with
 // category ids in cmdk's highlight.
 const TRANSFER_PREFIX = "account:";
+
+const SUGGESTION_ICONS = { history: History, ai: Sparkles };
+const SUGGESTION_TITLE = {
+  history: "Guessed from history. Pick a category to confirm.",
+  ai: "Guessed by AI. Pick a category to confirm.",
+};
 
 /**
  * A searchable, keyboard-driven category picker. Filtering and ranking
@@ -44,6 +50,14 @@ const TRANSFER_PREFIX = "account:";
  *   ("→ Savings" for an outflow, "← Savings" for an inflow, per
  *   `direction`). transferAccountId / transferAccountName describe the
  *   current transfer, if the row is one. See specs/account-transfers.
+ * - suggestion: null, or the source of an unconfirmed guess ("history",
+ *   later "ai"). The trigger then shows the guess style - dashed border,
+ *   italic label, a source icon - until the category is confirmed. See
+ *   specs/auto-categorization.
+ * - restoreFocusOnSelect: when false, picking a category leaves focus
+ *   alone instead of returning it to the trigger (or the next field), for
+ *   callers that remove the picker and move focus themselves - e.g. a
+ *   Review group that disappears once its category is picked.
  */
 export function CategoryCombobox({
   categories,
@@ -60,6 +74,8 @@ export function CategoryCombobox({
   transferAccountName,
   direction = "out",
   onSelectTransfer,
+  suggestion = null,
+  restoreFocusOnSelect = true,
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -68,6 +84,9 @@ export function CategoryCombobox({
   // Set by Tab / Shift+Tab so the close handler moves focus on instead
   // of returning it to the trigger.
   const tabDirection = useRef(null);
+  // Set when a category (or "no category") was picked, for
+  // restoreFocusOnSelect.
+  const picked = useRef(false);
 
   const categoriesById = useMemo(
     () => Object.fromEntries(categories.map((c) => [c.id, c])),
@@ -108,6 +127,9 @@ export function CategoryCombobox({
     transferAccountId != null
       ? (transferAccounts.find((a) => a.id === transferAccountId)?.name ?? transferAccountName)
       : null;
+  // Only a shown category can be a guess.
+  const guessed = suggestion != null && selected != null && currentTransferName == null;
+  const SuggestionIcon = SUGGESTION_ICONS[suggestion];
 
   function changeQuery(q) {
     setQuery(q);
@@ -132,6 +154,7 @@ export function CategoryCombobox({
   }
 
   function choose(category) {
+    picked.current = true;
     onSelect(category ? category.id : null);
     handleOpenChange(false);
   }
@@ -165,10 +188,12 @@ export function CategoryCombobox({
     if (e.key !== "Tab") return;
     e.preventDefault();
     if (highlighted === CLEAR) {
+      picked.current = true;
       onSelect(null);
     } else if (highlighted.startsWith(TRANSFER_PREFIX)) {
       onSelectTransfer(Number(highlighted.slice(TRANSFER_PREFIX.length)));
     } else if (highlighted && highlighted !== CREATE) {
+      picked.current = true;
       onSelect(Number(highlighted));
     }
     tabDirection.current = e.shiftKey ? "prev" : "next";
@@ -176,6 +201,13 @@ export function CategoryCombobox({
   }
 
   function handleCloseAutoFocus(e) {
+    const wasPicked = picked.current;
+    picked.current = false;
+    if (wasPicked && !restoreFocusOnSelect) {
+      tabDirection.current = null;
+      e.preventDefault();
+      return;
+    }
     const direction = tabDirection.current;
     if (!direction) return;
     tabDirection.current = null;
@@ -202,17 +234,32 @@ export function CategoryCombobox({
           type="button"
           aria-label={ariaLabel}
           onKeyDown={handleTriggerKeyDown}
+          title={guessed ? SUGGESTION_TITLE[suggestion] : undefined}
+          data-suggestion={guessed ? suggestion : undefined}
           className={cn(
             "flex h-8 min-w-32 items-center justify-between gap-2 rounded-md border border-border bg-surface px-2 text-left text-sm text-ink-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
+            // The solid surface and the accent icon keep a guess reading as
+            // deliberate rather than disabled; the plain border token is
+            // too faint once dashed.
+            guessed && "border-dashed border-ink-muted/60 hover:border-solid hover:border-ink-muted",
             className,
           )}
         >
-          <span className={cn("truncate", !selected && !currentTransferName && "text-ink-muted")}>
-            {currentTransferName
-              ? transferLabel(currentTransferName)
-              : selected
-                ? categoryDisplayLabel(selected, categoriesById)
-                : placeholder}
+          <span className="flex min-w-0 items-center gap-1.5">
+            {guessed && <SuggestionIcon className="h-3.5 w-3.5 shrink-0 text-accent" aria-hidden="true" />}
+            <span
+              className={cn(
+                "truncate",
+                !selected && !currentTransferName && "text-ink-muted",
+                guessed && "italic text-ink-secondary",
+              )}
+            >
+              {currentTransferName
+                ? transferLabel(currentTransferName)
+                : selected
+                  ? categoryDisplayLabel(selected, categoriesById)
+                  : placeholder}
+            </span>
           </span>
           <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 opacity-50" />
         </button>

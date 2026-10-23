@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/Table";
 import { useToast } from "../components/ui/Toast";
 import { formatMoney } from "../lib/money";
+import { useReviewCount } from "../review/ReviewCountContext";
 
 export function TransactionsPage() {
   const [accounts, setAccounts] = useState([]);
@@ -30,6 +31,9 @@ export function TransactionsPage() {
   const hasLoadedRef = useRef(false);
   const nextTempIdRef = useRef(-1);
   const toast = useToast();
+  // Confirming, changing or deleting a guessed category changes the nav's
+  // Review count, so every save here refreshes it.
+  const { refresh: refreshReviewCount } = useReviewCount();
 
   function setPending(id, isPending) {
     setPendingIds((prev) => {
@@ -98,6 +102,7 @@ export function TransactionsPage() {
       await linkTransfer(transaction.id, transferAccountId);
     }
     toast.success("Transaction updated.");
+    refreshReviewCount();
     setEditingId(null);
     await reload();
   }
@@ -107,6 +112,7 @@ export function TransactionsPage() {
     try {
       await deleteTransaction(id);
       toast.success("Transaction deleted.");
+      refreshReviewCount();
       setTransactions((prev) => prev.filter((t) => t.id !== id));
     } catch (e) {
       toast.error(e.data ? Object.values(e.data).flat().join(" ") : e.message);
@@ -121,11 +127,13 @@ export function TransactionsPage() {
   // the row still shows the value we set, so a later pick isn't undone.
   // Picking a category also ends a transfer (the backend unlinks it), so
   // the row's transfer is cleared alongside, and restored on revert.
-  function setRowCategory(transactionId, category, onlyIf, transfer = null) {
+  // Any pick confirms the category - re-picking a guess is how the ledger
+  // accepts it - so a revert also restores whether it was still a guess.
+  function setRowCategory(transactionId, category, onlyIf, transfer = null, confirmed = true) {
     setTransactions((prev) =>
       prev.map((t) =>
         t.id === transactionId && (onlyIf === undefined || t.category === onlyIf)
-          ? { ...t, category, transfer }
+          ? { ...t, category, transfer, category_confirmed: confirmed }
           : t,
       ),
     );
@@ -133,7 +141,11 @@ export function TransactionsPage() {
 
   function rowSnapshot(transactionId) {
     const row = transactions.find((t) => t.id === transactionId);
-    return { category: row?.category ?? null, transfer: row?.transfer ?? null };
+    return {
+      category: row?.category ?? null,
+      transfer: row?.transfer ?? null,
+      category_confirmed: row?.category_confirmed ?? true,
+    };
   }
 
   async function handleInlineCategorySelect(transactionId, categoryId) {
@@ -142,8 +154,9 @@ export function TransactionsPage() {
     try {
       await updateTransaction(transactionId, { category: categoryId });
       toast.success("Category updated.");
+      refreshReviewCount();
     } catch (e) {
-      setRowCategory(transactionId, previous.category, categoryId, previous.transfer);
+      setRowCategory(transactionId, previous.category, categoryId, previous.transfer, previous.category_confirmed);
       toast.error(e.data ? Object.values(e.data).flat().join(" ") : e.message);
     }
   }
@@ -163,6 +176,7 @@ export function TransactionsPage() {
       const { transaction } = await linkTransfer(transactionId, targetAccountId);
       setTransactions((prev) => prev.map((t) => (t.id === transactionId && stillPlaceholder(t) ? transaction : t)));
       toast.success(`Marked as a transfer with ${target?.name}.`);
+      refreshReviewCount();
     } catch (e) {
       setTransactions((prev) =>
         prev.map((t) => (t.id === transactionId && stillPlaceholder(t) ? { ...t, ...previous } : t)),
@@ -185,9 +199,16 @@ export function TransactionsPage() {
       setTransactions((prev) => prev.map((t) => (t.category === tempId ? { ...t, category: created.id } : t)));
       await updateTransaction(transactionId, { category: created.id });
       toast.success(`Created "${name}" and assigned it.`);
+      refreshReviewCount();
     } catch (e) {
       if (!created) setCategories((prev) => prev.filter((c) => c.id !== tempId));
-      setRowCategory(transactionId, previous.category, created ? created.id : tempId, previous.transfer);
+      setRowCategory(
+        transactionId,
+        previous.category,
+        created ? created.id : tempId,
+        previous.transfer,
+        previous.category_confirmed,
+      );
       toast.error(e.data ? Object.values(e.data).flat().join(" ") : e.message);
     }
   }
@@ -334,6 +355,7 @@ export function TransactionsPage() {
                       transferAccountName={t.transfer?.account_name}
                       direction={t.amount_cents < 0 ? "out" : "in"}
                       onSelectTransfer={(targetId) => handleInlineTransferSelect(t.id, targetId)}
+                      suggestion={t.category_confirmed === false ? t.category_source : null}
                     />
                   </TableCell>
                   <TableCell>{formatMoney(t.amount_cents)}</TableCell>

@@ -118,3 +118,12 @@
   stroke: var(--surface);
   stroke-width: 2;
 }
+
+/* A Review group that failed to save slides back into place - see the
+   auto-categorization design. */
+@keyframes review-return {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}

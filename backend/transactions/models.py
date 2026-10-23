@@ -2,6 +2,10 @@ from django.db import models
 
 
 class Transaction(models.Model):
+    class CategorySource(models.TextChoices):
+        MANUAL = "manual", "Manual"
+        HISTORY = "history", "History"
+
     account = models.ForeignKey(
         "accounts.Account", on_delete=models.CASCADE, related_name="transactions"
     )
@@ -15,7 +19,15 @@ class Transaction(models.Model):
         on_delete=models.SET_NULL,
         related_name="transactions",
     )
-    notes = models.TextField(blank=True, default="")
+    # A category the categorizer guessed is unconfirmed until the user
+    # accepts or replaces it; everything else (and "no category") is
+    # confirmed. Source records what produced the current category. All
+    # guessing lives in transactions/categorize.py.
+    category_confirmed = models.BooleanField(default=True)
+    category_source = models.CharField(
+        max_length=10, choices=CategorySource.choices, default=CategorySource.MANUAL
+    )
+    notes =models.TextField(blank=True, default="")
     # A transfer between two of the user's accounts is two ordinary
     # transactions pointing at each other. SET_NULL: deleting one side
     # unlinks the other. All rules live in transactions/transfers.py.

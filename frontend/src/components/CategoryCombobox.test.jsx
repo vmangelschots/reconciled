@@ -327,3 +327,65 @@ describe("CategoryCombobox transfer options", () => {
     expect(screen.queryByText(/Transfer/)).not.toBeInTheDocument();
   });
 });
+
+describe("CategoryCombobox guesses", () => {
+  it("styles a guessed category with its source and a hint", () => {
+    render(<CategoryCombobox categories={CATEGORIES} value={1} onSelect={vi.fn()} suggestion="history" />);
+
+    const trigger = screen.getByRole("button");
+    expect(trigger).toHaveAttribute("data-suggestion", "history");
+    expect(trigger).toHaveClass("border-dashed");
+    expect(trigger).toHaveAttribute("title", "Guessed from history. Pick a category to confirm.");
+    expect(trigger.querySelector("svg.lucide-history")).not.toBeNull();
+  });
+
+  it("shows no guess style for a confirmed category", () => {
+    render(<CategoryCombobox categories={CATEGORIES} value={1} onSelect={vi.fn()} />);
+
+    const trigger = screen.getByRole("button");
+    expect(trigger).not.toHaveAttribute("data-suggestion");
+    expect(trigger).not.toHaveClass("border-dashed");
+    expect(trigger).not.toHaveAttribute("title");
+  });
+
+  it("ignores a suggestion when no category is shown", () => {
+    render(<CategoryCombobox categories={CATEGORIES} value={null} onSelect={vi.fn()} suggestion="history" />);
+
+    expect(screen.getByRole("button")).not.toHaveAttribute("data-suggestion");
+  });
+
+  it("keeps the trigger's width classes when guessed", () => {
+    render(
+      <CategoryCombobox categories={CATEGORIES} value={1} onSelect={vi.fn()} suggestion="history" className="w-48" />,
+    );
+
+    expect(screen.getByRole("button")).toHaveClass("min-w-32", "w-48");
+  });
+});
+
+describe("CategoryCombobox restoreFocusOnSelect", () => {
+  it("returns focus to the trigger after a pick by default", async () => {
+    render(<CategoryCombobox categories={CATEGORIES} value={null} onSelect={vi.fn()} />);
+    screen.getByRole("button").focus();
+    await userEvent.keyboard("groc{Enter}");
+
+    await vi.waitFor(() => expect(screen.getByRole("button")).toHaveFocus());
+  });
+
+  it("leaves focus to the caller when turned off", async () => {
+    const onSelect = vi.fn(() => document.getElementById("elsewhere").focus());
+    render(
+      <>
+        <CategoryCombobox categories={CATEGORIES} value={null} onSelect={onSelect} restoreFocusOnSelect={false} />
+        <button id="elsewhere" type="button">
+          Elsewhere
+        </button>
+      </>,
+    );
+    screen.getAllByRole("button")[0].focus();
+    await userEvent.keyboard("groc{Enter}");
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(screen.getByRole("button", { name: "Elsewhere" })).toHaveFocus();
+  });
+});

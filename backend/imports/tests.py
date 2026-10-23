@@ -7,6 +7,7 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from accounts.models import Account
+from budgets.models import Category
 from transactions.models import Transaction
 from transactions.transfers import link_transfer
 
@@ -565,7 +566,7 @@ class TransferCounterpartImportTests(TestCase):
 
         response = self.commit(session_id, [c["index"] for c in candidates])
 
-        self.assertEqual(response.json(), {"created_count": 0, "confirmed_transfer_count": 1})
+        self.assertEqual(response.json(), {"created_count": 0, "confirmed_transfer_count": 1, "categorized_count": 0})
         rows = Transaction.objects.filter(account=self.savings)
         self.assertEqual(rows.count(), 1)
         confirmed = rows.get()
@@ -597,12 +598,86 @@ class TransferCounterpartImportTests(TestCase):
         _, candidates = self.preview([("2026-03-09", "500.00", "late"), ("2026-03-04", "499.00", "close")])
         self.assertEqual([c["transfer_match"] for c in candidates], [None, None])
 
+    def test_a_line_confirming_a_counterpart_stays_a_transfer_without_a_category(self):
+        # Even with confirmed history for this payee, the confirmed
+        # counterpart keeps its link and gets no guessed category.
+        income = Category.objects.create(name="Income")
+        Transaction.objects.create(
+            account=self.savings, date="2026-02-01", amount_cents=10000,
+            payee="OVERSCHRIJVING BE34", category=income,
+        )
+        session_id, candidates = self.preview([("2026-03-04", "500.00", "OVERSCHRIJVING BE12")])
+
+        response = self.commit(session_id, [c["index"] for c in candidates])
+
+        self.assertEqual(response.json()["categorized_count"], 0)
+        confirmed = Transaction.objects.get(pk=self.created.pk)
+        self.assertIsNone(confirmed.category)
+        self.assertEqual(confirmed.transfer_counterpart_id, self.out.pk)
+
     def test_falls_back_to_creating_when_the_match_disappeared(self):
         session_id, candidates = self.preview([("2026-03-04", "500.00", "OVERSCHRIJVING BE12")])
         self.created.delete()  # e.g. the user unlinked the transfer meanwhile
 
         response = self.commit(session_id, [c["index"] for c in candidates])
 
-        self.assertEqual(response.json(), {"created_count": 1, "confirmed_transfer_count": 0})
+        self.assertEqual(response.json(), {"created_count": 1, "confirmed_transfer_count": 0, "categorized_count": 0})
         self.assertEqual(Transaction.objects.get(account=self.savings).payee, "OVERSCHRIJVING BE12")
 
+
+
+class ImportCategorizationTests(TestCase):
+    """Committing an import guesses categories from history - see
+    openspec/specs/transaction-import and auto-categorization."""
+
+    def setUp(self):
+        self.client = APIClient()
+        user = get_user_model().objects.create_user(username="budgeter", password="x")
+        self.client.force_authenticate(user=user)
+        self.account = Account.objects.create(name="Checking", account_type="checking", starting_balance_cents=0)
+        self.groceries = Category.objects.create(name="Groceries")
+        self.transport = Category.objects.create(name="Transport")
+        for payee, category in (("CARREFOUR MARKET 1234", self.groceries), ("NMBS 551", self.transport)):
+            Transaction.objects.create(
+                account=self.account, date="2026-09-01", amount_cents=-1000, payee=payee, category=category
+            )
+
+    def import_rows(self, rows):
+        content = "Date,Amount,Description\n" + "".join(f"{d},{a},{desc}\n" for d, a, desc in rows)
+        upload = self.client.post(
+            reverse("importsession-list"),
+            {"account": self.account.id, "file": csv_file(content)},
+            format="multipart",
+        )
+        session_id = upload.json()["id"]
+        candidates = self.client.post(
+            reverse("importsession-map", args=[session_id]),
+            {"date": "Date", "date_format": "YYYY-MM-DD", "amount": "Amount", "description": "Description"},
+            format="json",
+        ).json()["candidates"]
+        return self.client.post(
+            reverse("importsession-commit", args=[session_id]),
+            {"selected_indices": [c["index"] for c in candidates]},
+            format="json",
+        )
+
+    def test_repeat_payees_arrive_with_unconfirmed_categories(self):
+        response = self.import_rows(
+            [
+                ("2026-10-02", "-38.10", "Carrefour Market 0987"),
+                ("2026-10-03", "-15.30", "NMBS 909"),
+                ("2026-10-04", "-48.00", "Bistro Lumiere"),
+            ]
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["created_count"], 3)
+        self.assertEqual(response.json()["categorized_count"], 2)
+        rows = {t.payee: t for t in Transaction.objects.filter(date__gte="2026-10-01")}
+        carrefour = rows["Carrefour Market 0987"]
+        self.assertEqual(carrefour.category, self.groceries)
+        self.assertFalse(carrefour.category_confirmed)
+        self.assertEqual(carrefour.category_source, "history")
+        self.assertEqual(rows["NMBS 909"].category, self.transport)
+        self.assertIsNone(rows["Bistro Lumiere"].category)
+        self.assertTrue(rows["Bistro Lumiere"].category_confirmed)

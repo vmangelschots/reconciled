@@ -5,6 +5,7 @@ from rest_framework.parsers import JSONParser, MultiPartParser
 from rest_framework.response import Response
 
 from accounts.models import Account
+from transactions.categorize import categorize
 from transactions.models import Transaction
 
 from .models import ImportSession
@@ -131,10 +132,20 @@ class ImportSessionViewSet(
                     )
                 )
             created = Transaction.objects.bulk_create(new_rows)
+            # Only freshly created rows are guessed: a line that confirmed a
+            # transfer counterpart stays a transfer.
+            categorized = categorize(created)
             session.status = ImportSession.Status.COMMITTED
             session.save(update_fields=["status"])
 
-        return Response({"created_count": len(created), "confirmed_transfer_count": confirmed}, status=201)
+        return Response(
+            {
+                "created_count": len(created),
+                "confirmed_transfer_count": confirmed,
+                "categorized_count": categorized,
+            },
+            status=201,
+        )
 
     def _confirm_transfer_counterpart(self, account, candidate, notes):
         """If the candidate matched a created transfer counterpart, overwrite
