@@ -54,6 +54,10 @@ const SUGGESTION_TITLE = {
  *   later "ai"). The trigger then shows the guess style - dashed border,
  *   italic label, a source icon - until the category is confirmed. See
  *   specs/auto-categorization.
+ * - restoreFocusOnSelect: when false, picking a category leaves focus
+ *   alone instead of returning it to the trigger (or the next field), for
+ *   callers that remove the picker and move focus themselves - e.g. a
+ *   Review group that disappears once its category is picked.
  */
 export function CategoryCombobox({
   categories,
@@ -71,6 +75,7 @@ export function CategoryCombobox({
   direction = "out",
   onSelectTransfer,
   suggestion = null,
+  restoreFocusOnSelect = true,
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -79,6 +84,9 @@ export function CategoryCombobox({
   // Set by Tab / Shift+Tab so the close handler moves focus on instead
   // of returning it to the trigger.
   const tabDirection = useRef(null);
+  // Set when a category (or "no category") was picked, for
+  // restoreFocusOnSelect.
+  const picked = useRef(false);
 
   const categoriesById = useMemo(
     () => Object.fromEntries(categories.map((c) => [c.id, c])),
@@ -146,6 +154,7 @@ export function CategoryCombobox({
   }
 
   function choose(category) {
+    picked.current = true;
     onSelect(category ? category.id : null);
     handleOpenChange(false);
   }
@@ -179,10 +188,12 @@ export function CategoryCombobox({
     if (e.key !== "Tab") return;
     e.preventDefault();
     if (highlighted === CLEAR) {
+      picked.current = true;
       onSelect(null);
     } else if (highlighted.startsWith(TRANSFER_PREFIX)) {
       onSelectTransfer(Number(highlighted.slice(TRANSFER_PREFIX.length)));
     } else if (highlighted && highlighted !== CREATE) {
+      picked.current = true;
       onSelect(Number(highlighted));
     }
     tabDirection.current = e.shiftKey ? "prev" : "next";
@@ -190,6 +201,13 @@ export function CategoryCombobox({
   }
 
   function handleCloseAutoFocus(e) {
+    const wasPicked = picked.current;
+    picked.current = false;
+    if (wasPicked && !restoreFocusOnSelect) {
+      tabDirection.current = null;
+      e.preventDefault();
+      return;
+    }
     const direction = tabDirection.current;
     if (!direction) return;
     tabDirection.current = null;

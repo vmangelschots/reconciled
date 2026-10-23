@@ -362,3 +362,30 @@ describe("CategoryCombobox guesses", () => {
     expect(screen.getByRole("button")).toHaveClass("min-w-32", "w-48");
   });
 });
+
+describe("CategoryCombobox restoreFocusOnSelect", () => {
+  it("returns focus to the trigger after a pick by default", async () => {
+    render(<CategoryCombobox categories={CATEGORIES} value={null} onSelect={vi.fn()} />);
+    screen.getByRole("button").focus();
+    await userEvent.keyboard("groc{Enter}");
+
+    await vi.waitFor(() => expect(screen.getByRole("button")).toHaveFocus());
+  });
+
+  it("leaves focus to the caller when turned off", async () => {
+    const onSelect = vi.fn(() => document.getElementById("elsewhere").focus());
+    render(
+      <>
+        <CategoryCombobox categories={CATEGORIES} value={null} onSelect={onSelect} restoreFocusOnSelect={false} />
+        <button id="elsewhere" type="button">
+          Elsewhere
+        </button>
+      </>,
+    );
+    screen.getAllByRole("button")[0].focus();
+    await userEvent.keyboard("groc{Enter}");
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(screen.getByRole("button", { name: "Elsewhere" })).toHaveFocus();
+  });
+});

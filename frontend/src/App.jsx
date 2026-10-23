@@ -7,6 +7,7 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { ForecastingPage } from "./pages/ForecastingPage";
 import { ImportPage } from "./pages/ImportPage";
 import { LoginPage } from "./pages/LoginPage";
+import { ReviewPage } from "./pages/ReviewPage";
 import { TransactionsPage } from "./pages/TransactionsPage";
 
 export default function App() {
@@ -24,6 +25,7 @@ export default function App() {
         <Route index element={<DashboardPage />} />
         <Route path="accounts" element={<AccountsPage />} />
         <Route path="transactions" element={<TransactionsPage />} />
+        <Route path="review" element={<ReviewPage />} />
         <Route path="budgets" element={<BudgetsPage />} />
         <Route path="import" element={<ImportPage />} />
         <Route path="forecast" element={<ForecastingPage />} />
