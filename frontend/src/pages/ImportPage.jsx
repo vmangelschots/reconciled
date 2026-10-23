@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { listAccounts } from "../api/accounts";
 import { commitImport, mapCsvColumns, uploadImportFile } from "../api/imports";
-import { Button } from "../components/ui/Button";
+import { Button, buttonVariants } from "../components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import { Label } from "../components/ui/Label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/Select";
@@ -18,9 +19,12 @@ const DATE_FORMATS = ["YYYY-MM-DD", "DD/MM/YYYY", "MM/DD/YYYY", "DD-MM-YYYY", "M
 
 // A matched transfer line updates the counterpart the app created instead of
 // adding a transaction, so it is reported separately.
-function importSummary({ created_count, confirmed_transfer_count = 0 }) {
+// Guessed categories are reviewed on the Review page, never here; the
+// summary only says how many there are.
+function importSummary({ created_count, confirmed_transfer_count = 0, categorized_count = 0 }) {
   const parts = [`Created ${created_count} transaction(s).`];
   if (confirmed_transfer_count > 0) parts.push(`Confirmed ${confirmed_transfer_count} transfer(s).`);
+  if (categorized_count > 0) parts.push(`${categorized_count} got a category from your history.`);
   return parts.join(" ");
 }
 
@@ -122,9 +126,16 @@ export function ImportPage() {
         <Card>
           <CardContent className="flex flex-col gap-4 pt-6">
             <p className="text-sm text-ink-primary">{importSummary(result)}</p>
-            <Button onClick={startOver} className="self-start">
-              Import another file
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              {result.categorized_count > 0 && (
+                <Link to="/review" className={buttonVariants()}>
+                  Review {result.categorized_count} {result.categorized_count === 1 ? "guess" : "guesses"}
+                </Link>
+              )}
+              <Button onClick={startOver} variant={result.categorized_count > 0 ? "outline" : "default"}>
+                Import another file
+              </Button>
+            </div>
           </CardContent>
         </Card>
       </section>

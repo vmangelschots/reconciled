@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ImportPage } from "./ImportPage";
 import { ToastProvider } from "../components/ui/Toast";
@@ -37,9 +38,11 @@ const SESSION = {
 
 async function uploadAndPreview() {
   render(
-    <ToastProvider>
-      <ImportPage />
-    </ToastProvider>,
+    <MemoryRouter>
+      <ToastProvider>
+        <ImportPage />
+      </ToastProvider>
+    </MemoryRouter>,
   );
   await waitFor(() => expect(accountsApi.listAccounts).toHaveBeenCalled());
   await userEvent.upload(
@@ -76,5 +79,30 @@ describe("ImportPage transfer matches", () => {
 
     expect(importsApi.commitImport).toHaveBeenCalledWith(7, [0]);
     expect((await screen.findAllByText("Created 0 transaction(s). Confirmed 1 transfer(s).")).length).toBeGreaterThan(0);
+  });
+});
+
+describe("ImportPage review line", () => {
+  it("says how many were categorized and links to the Review page", async () => {
+    importsApi.commitImport.mockResolvedValue({ created_count: 20, confirmed_transfer_count: 0, categorized_count: 14 });
+    await uploadAndPreview();
+
+    await userEvent.click(screen.getByRole("button", { name: /confirm import/i }));
+
+    expect(
+      (await screen.findAllByText("Created 20 transaction(s). 14 got a category from your history.")).length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: "Review 14 guesses" })).toHaveAttribute("href", "/review");
+  });
+
+  it("shows only the created count when nothing was categorized", async () => {
+    importsApi.commitImport.mockResolvedValue({ created_count: 6, confirmed_transfer_count: 0, categorized_count: 0 });
+    await uploadAndPreview();
+
+    await userEvent.click(screen.getByRole("button", { name: /confirm import/i }));
+
+    expect((await screen.findAllByText("Created 6 transaction(s).")).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("link", { name: /Review/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "Import another file" })).toBeInTheDocument();
   });
 });

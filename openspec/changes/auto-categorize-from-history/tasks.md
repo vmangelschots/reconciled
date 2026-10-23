@@ -28,7 +28,7 @@
 - [x] 4.3 Build `ReviewPage.jsx` with its `/review` route: group cards, Confirm and the group picker via `confirm-categories`, optimistic removal with revert, and the focus rule from decision 6. Verify with `ReviewPage.test.jsx` cases: groups render in count order with their evidence; Confirm confirms the group's ids and removes it; picking another category corrects the whole group; a failed confirm brings the group back with an error; focus starts on the first Confirm and moves to the next group; three Enter presses clear three groups and show the empty state.
 - [x] 4.4 Add [Show N] expanded rows with per-row pickers. A row correction PATCHes only that transaction, removes it from the group, and updates the group's count and total. Verify with page tests for the "fix one row of a mixed payee" scenario and the focus moving to the next row.
 - [x] 4.5 Add the empty state with [Guess categories from history]: the uncategorized count, the "Guessed N of M" result, the no-matches message, and "Every transaction has a category" when there's nothing left. Verify with page tests for the backfill and "nothing left to do" scenarios.
-- [ ] 4.6 Add the "Review" nav item with its count pill (fetched on route change, refetched after confirms, hidden at 0), and the import summary line with its link. Verify with `Layout.test.jsx` cases for 14 and 0, and `ImportPage.test.jsx` cases for 14 categorized (line and link) and 0 (no line).
+- [x] 4.6 Add the "Review" nav item with its count pill (fetched on route change, refetched after confirms, hidden at 0), and the import summary line with its link. Verify with `Layout.test.jsx` cases for 14 and 0, and `ImportPage.test.jsx` cases for 14 categorized (line and link) and 0 (no line).
 
 ## 5. Integration check
 
