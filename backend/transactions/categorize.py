@@ -88,3 +88,73 @@ def categorize(transactions):
         changed, ["category", "category_confirmed", "category_source", "updated_at"]
     )
     return len(changed)
+
+
+def needs_review():
+    """Transactions whose category is a guess nobody has confirmed yet."""
+    return Transaction.objects.filter(category__isnull=False, category_confirmed=False)
+
+
+def uncategorized():
+    """What the backfill can try: no category and not a transfer."""
+    return Transaction.objects.filter(category__isnull=True, transfer_counterpart__isnull=True)
+
+
+def review_groups():
+    """The Review page's groups: unconfirmed transactions that share a
+    normalized payee, a direction, a guessed category and a source, largest
+    group first (most recent first on a tie). Evidence is worked out from
+    the current confirmed history, so nothing extra is stored."""
+    rows = needs_review().select_related("account").order_by("date", "id")
+    groups = {}
+    for txn in rows:
+        normalized, outflow = payee_key(txn.payee, txn.amount_cents)
+        key = (normalized, outflow, txn.category_id, txn.category_source)
+        group = groups.setdefault(
+            key,
+            {
+                "key": "|".join([normalized, "out" if outflow else "in", str(txn.category_id), txn.category_source]),
+                "direction": "out" if outflow else "in",
+                "category": txn.category_id,
+                "source": txn.category_source,
+                "count": 0,
+                "total_cents": 0,
+                "accounts": [],
+                "transactions": [],
+            },
+        )
+        group["count"] += 1
+        group["total_cents"] += txn.amount_cents
+        if txn.account.name not in group["accounts"]:
+            group["accounts"].append(txn.account.name)
+        group["transactions"].append(
+            {
+                "id": txn.id,
+                "date": txn.date.isoformat(),
+                "account": txn.account.name,
+                "payee": txn.payee,
+                "amount_cents": txn.amount_cents,
+                "notes": txn.notes,
+            }
+        )
+
+    history = confirmed_history() if groups else {}
+    result = []
+    for (normalized, outflow, category_id, source), group in groups.items():
+        txns = group["transactions"]
+        # Rows are in date order, so the last one is the most recent.
+        group["payee"] = txns[-1]["payee"]
+        group["date_from"] = txns[0]["date"]
+        group["date_to"] = txns[-1]["date"]
+        group["evidence"] = None
+        if source == Transaction.CategorySource.HISTORY:
+            stats = history.get((normalized, outflow), {})
+            group["evidence"] = {
+                "matching": stats.get(category_id, [0, 0])[0],
+                "total": sum(count for count, _ in stats.values()),
+            }
+        result.append(group)
+    # Stable sorts: most recent first, then largest first on top of that.
+    result.sort(key=lambda g: g["date_to"], reverse=True)
+    result.sort(key=lambda g: g["count"], reverse=True)
+    return result

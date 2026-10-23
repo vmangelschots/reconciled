@@ -12,14 +12,14 @@
 
 ## 3. Import commit and API endpoints
 
-- [ ] 3.1 Call `categorize(created)` in `ImportViewSet.commit` after `bulk_create`, inside the atomic block, and add `categorized_count` to the response. Verify with `imports/tests.py` cases: repeat payees arrive with unconfirmed categories and the rest stay uncategorized; a line that confirms a created transfer counterpart keeps its link and gets no category.
-- [ ] 3.2 Add `review-groups`, `review-count`, `confirm-categories` (ids, optional category) and `categorize` (optional account) to `TransactionViewSet`, as in design decision 5. Verify with API tests:
+- [x] 3.1 Call `categorize(created)` in `ImportViewSet.commit` after `bulk_create`, inside the atomic block, and add `categorized_count` to the response. Verify with `imports/tests.py` cases: repeat payees arrive with unconfirmed categories and the rest stay uncategorized; a line that confirms a created transfer counterpart keeps its link and gets no category.
+- [x] 3.2 Add `review-groups`, `review-count`, `confirm-categories` (ids, optional category) and `categorize` (optional account) to `TransactionViewSet`, as in design decision 5. Verify with API tests:
   - groups split by payee, direction, category and source, ordered by count, with total, date span, accounts and 7-of-8 style evidence;
   - `uncategorized_count` excludes transfers;
   - `review-count` matches the number of unconfirmed rows;
   - `confirm-categories` without a category only confirms the unconfirmed rows among the given ids, and with a category sets and confirms them (source `manual`);
   - `categorize` across all accounts reports 25 of 40 for the backfill scenario and leaves transfers and categorized rows alone.
-- [ ] 3.3 Add `getReviewGroups()`, `getReviewCount()`, `confirmCategories(ids, category)` and `categorizeUncategorized(accountId?)` to `frontend/src/api/transactions.js`. Verify with a client test asserting the request paths and payloads.
+- [x] 3.3 Add `getReviewGroups()`, `getReviewCount()`, `confirmCategories(ids, category)` and `categorizeUncategorized(accountId?)` to `frontend/src/api/transactions.js`. Verify with a client test asserting the request paths and payloads.
 
 ## 4. Review UI
 
