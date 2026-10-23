@@ -172,75 +172,122 @@ A new route `/review` (`ReviewPage.jsx`) and a "Review" nav item between
 Transactions and Budgets.
 
 ```
-  Review guesses
-  12 transactions in 4 groups. Confirm or correct each group.
+  Review
+  12 transactions got a category from your history. Confirm each group
+  or pick the right category.
 
-  +------------------------------------------------------------------+
-  | Carrefour Market            5 txns   -EUR 212.40   2-21 Oct      |
-  | Checking                                                         |
-  | (H) 7 of 8 earlier payments to Carrefour Market were Groceries   |
-  | [ Confirm 5 ]  [ (H) Groceries      v ]  [ Show 5 ]              |
-  +------------------------------------------------------------------+
+  From your history
+  +--------------------------------------------------------------+
+  | Carrefour Market                 -EUR 212.40  5 transactions |
+  | Checking  .  2-21 Oct                                        |
+  | (H) 7 of 8 earlier payments were Groceries                   |
+  | [v Confirm 5] [(H) Groceries     v]              [Show 5 v]  |
+  +--------------------------------------------------------------+
 ```
 
-- **Cards, not a table.** Each group is a `Card`: the payee in the
-  primary ink, the count/total/date span right-aligned, accounts and
-  evidence underneath in `ink-secondary`. `ink-muted` is too faint for
-  text people need to read in the light theme. The cards stack, so the
-  page already works at phone width; under 640px the buttons wrap below
-  the evidence line.
-- **Controls, in focus order:** [Confirm N] (the primary button), then the
-  group's `CategoryCombobox` preset to the guess, then [Show N]. Confirm
+The visual details below come from the UI Designer review (task 4.1).
+
+- **Page header:** the h1 is "Review", matching its nav label like every
+  other page. Below it is a live summary line in `ink-secondary`, then an
+  h2 "From your history" (`text-sm font-medium text-ink-secondary`), so
+  the AI section can slot in under its own heading later.
+- **Group card:** a `Card` with `p-4` (not `CardHeader`/`CardContent`,
+  whose `p-6` is too airy for a list). The space between cards is padding
+  on each card's wrapper, not `gap` on the list, so it collapses along
+  with a leaving card.
+  - Line 1: the payee (`font-semibold`, truncated) on the left; the total
+    (`tabular-nums`) and "5 transactions" in `ink-secondary` on the right.
+  - Line 2: accounts and the date span in `text-sm text-ink-secondary`,
+    e.g. "Checking · 2–21 Oct". Short dates: "21 Oct", "28 Sep – 21 Oct",
+    with the year only when it differs from this year. More than two
+    accounts become "Checking, Savings +1".
+  - Line 3, the evidence: an accent `History` icon, then "7 of 8 earlier
+    payments were **Groceries**" ("deposits" for inflows). The category is
+    in `font-medium text-ink-primary`. The payee isn't repeated, since
+    it's the title right above. `ink-muted` is too faint for this text in
+    the light theme, so the line uses `ink-secondary`.
+  - Controls, all h-8 (`size="sm"`): [Confirm N] (default variant, `Check`
+    icon), the group picker (`w-48`, guess style), and [Show N] (`ghost`,
+    `ml-auto`, with a chevron that rotates when open).
+  - `focus-within:border-accent/40` marks the group that Enter acts on.
+  - Under 640px: the count moves to line 2, Confirm and the picker share
+    the row with `flex-1`, and Show becomes an icon-only ghost button.
+- **Controls, in focus order:** Confirm, the picker, then Show. Confirm
   comes first because Enter on a closed picker opens it, so the picker
   can't double as "accept".
-- **Optimism:** a resolved group is removed at once. On failure it's put
-  back where it was, and an error toast is shown.
-- **Focus:** on load, focus goes to the first group's Confirm. After a
-  group resolves, focus goes to the Confirm of the group now at the same
-  index, or the previous one if it was the last. With no groups left,
-  focus goes to the empty-state heading. A success toast confirms each
-  group ("Confirmed 5 Carrefour Market as Groceries").
+- **Optimism and motion:** a resolved group leaves at once. Its wrapper
+  animates `grid-template-rows` to `0fr` with fading opacity and a small
+  `translate-x`, over 200ms, while the card border turns `success/50`. It
+  becomes `inert` straight away, and is removed from state on
+  `transitionend` (with a 250ms fallback). On failure it comes back at its
+  old index with a short `review-return` keyframe (in `index.css`) and a
+  `critical/50` border for about 1.5s, plus an error toast. The motion is
+  turned off under `motion-reduce`.
+- **Focus:** on load, focus goes to the first group's Confirm. When a group
+  resolves, focus moves immediately (not after the animation) to the
+  Confirm of the next group that isn't leaving, or the previous one if it
+  was the last. That keeps fast Enter presses working. With no groups
+  left, focus goes to the empty-state heading (`tabIndex={-1}`).
+- **No success toasts on this page.** The card leaving, the summary line
+  and the nav count already confirm the action, and three quick Enters
+  would stack three toasts. Errors still toast.
 - **Group picker:** picking a category calls `confirm-categories` with the
   ids and that category. Picking the guessed category is the same as
   Confirm. Because the group (and with it the picker) disappears, the
   focus rule above replaces the picker's usual return-to-trigger.
-- **Expanded rows:** [Show N] reveals a compact list (date, account, raw
-  payee, amount, notes), each row with its own picker. A row correction
-  PATCHes that transaction, removes the row from the group, and updates
+- **Expanded rows:** [Show N] reveals a list under the controls
+  (`border-t`, `divide-y`). Each row is a grid: the short date, a middle
+  column (the raw payee over "Checking · notes" in `text-xs`, full text in
+  `title`), the amount and a `w-40` picker in guess style. Under 640px
+  the picker wraps onto its own line. A row correction PATCHes that
+  transaction, collapses the row the same way a group leaves, and updates
   the group's count and total. Focus moves to the next row's picker, or to
   the group's Confirm after the last row.
-- **Empty state:**
-  - "Nothing to review."
-  - With `uncategorized_count > 0`, it adds "40 transactions are
-    uncategorized" and a [Guess categories from history] button. That
-    calls `categorize` with no account, toasts "Guessed 25 of 40", and
-    reloads the groups. If nothing matched, it says "No matches in your
-    history for 40 uncategorized transactions" and keeps the button.
+- **Empty state:** a single centered `Card` with a `success`
+  `CheckCircle2` and the heading "Nothing to review".
+  - With `uncategorized_count > 0`: "40 transactions still have no
+    category.", a [Guess categories from history] button (`History` icon;
+    "Guessing…" with a spinner while it runs), and the hint "Only payees
+    you've categorized before get a guess." When the run finds matches, a
+    toast reports "Guessed 25 of 40" (the one success toast on this page,
+    because the spec requires the report and the backfill isn't
+    repeated), their groups appear, and focus goes to the first Confirm.
+  - When a run matched nothing: "None of the 40 uncategorized transactions
+    match a payee you've categorized before." The button is replaced by a
+    link to Transactions, since running it again would give the same
+    answer.
   - With nothing uncategorized: "Every transaction has a category."
 - **Section for AI:** groups are rendered from `source`, so the follow-up
   AI change only adds a second "AI guesses" section below the history
   groups. It needs no layout changes.
 
-The visual details (card density, spacing, the look of a guess in both
-themes, the empty state) get a UI Designer review before the page is
-built (task 4.1).
-
 ### 7. Guesses elsewhere: ledger marker, navigation count, import summary
 
 - **Ledger marker:** inside the existing `CategoryCombobox` trigger, so the
-  column doesn't widen. For a guess, the trigger gets a dashed border, an
-  italic label in `ink-secondary`, and a leading source icon: lucide
-  `History` for history guesses, with `Sparkles` reserved for AI. The
-  combobox gets a `suggestion` prop (`null | "history" | "ai"`). The
-  row's optimistic snapshot gains `category_confirmed`, so re-picking
-  shows the confirmed state at once and reverts on failure.
+  column doesn't widen. The combobox gets a `suggestion` prop
+  (`null | "history" | "ai"`). For a guess, the trigger:
+  - keeps its solid `bg-surface`, but gets
+    `border-dashed border-ink-muted/60` (solid on hover). The `border`
+    token is too faint dashed, especially in dark mode;
+  - shows the label in `italic text-ink-secondary`;
+  - shows a leading source icon in `text-accent`: lucide `History`, with
+    `Sparkles` reserved for AI. The accent color is what keeps it reading
+    as deliberate rather than disabled;
+  - has the tooltip "Guessed from history. Pick a category to confirm."
+
+  The row's optimistic snapshot gains `category_confirmed`, so re-picking
+  drops the guess style at once and brings it back on failure.
 - **Navigation count:** `Layout` fetches `review-count` on every route
   change. The Review page triggers a refetch after each confirm, via a
-  small shared hook or context. The count is a pill next to "Review",
-  hidden at 0.
-- **Import summary:** `importSummary` adds "14 were categorized from your
-  history." and a "Review them" link to `/review` when
-  `categorized_count > 0`.
+  small shared context. The pill is `rounded-full`, 18px high,
+  `text-[11px] font-semibold tabular-nums`, with "99+" above 99, and
+  hidden at 0. Inactive it's `bg-accent/15 text-accent`; on the active
+  link (`bg-accent text-white`) it's `bg-white/25 text-white`.
+- **Import summary:** when `categorized_count > 0`, the result card reads
+  "Created 52 transactions. 14 got a category from your history." The
+  primary button becomes a [Review 14 guesses] link to `/review`, and
+  "Import another file" becomes `outline`. With nothing categorized the
+  card stays as it is.
 
 ## Risks / Trade-offs
 
