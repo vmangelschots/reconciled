@@ -14,12 +14,14 @@ class TransactionSerializer(serializers.ModelSerializer):
             "amount_cents",
             "payee",
             "category",
+            "category_confirmed",
+            "category_source",
             "notes",
             "transfer",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["created_at", "updated_at"]
+        read_only_fields = ["category_confirmed", "category_source", "created_at", "updated_at"]
 
     transfer = serializers.SerializerMethodField()
 
@@ -53,12 +55,27 @@ class TransactionSerializer(serializers.ModelSerializer):
             )
         return attrs
 
+    def create(self, validated_data):
+        # The defaults (confirmed, manual) are already right for a category
+        # the user picks; spelled out so create and update read the same.
+        if "category" in validated_data:
+            validated_data["category_confirmed"] = True
+            validated_data["category_source"] = Transaction.CategorySource.MANUAL
+        return super().create(validated_data)
+
     def update(self, instance, validated_data):
         # Choosing a category (or "no category") for a transfer unlinks it:
         # a transfer never has a category - see transactions/transfers.py.
         if "category" in validated_data and instance.transfer_counterpart_id is not None:
             unlink_transfer(instance)
             instance.refresh_from_db()
+        # Any write of the category - even re-sending the current one -
+        # confirms it; only a different category changes its source. See
+        # openspec/specs/auto-categorization.
+        if "category" in validated_data:
+            validated_data["category_confirmed"] = True
+            if validated_data["category"] != instance.category:
+                validated_data["category_source"] = Transaction.CategorySource.MANUAL
         instance = super().update(instance, validated_data)
         if instance.transfer_counterpart_id is not None and (
             "amount_cents" in validated_data or "date" in validated_data

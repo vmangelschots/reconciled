@@ -2,8 +2,8 @@
 
 ## 1. Confirmed state on transactions
 
-- [ ] 1.1 Add `category_confirmed` (default `True`) and `category_source` (`manual` / `history`, default `manual`) to `Transaction`, with a migration. Verify that `makemigrations --check` is clean, existing rows read as confirmed/manual, and the existing backend suite passes.
-- [ ] 1.2 Expose both fields read-only on `TransactionSerializer`. On create/update, any write of `category` sets `category_confirmed=True`, and `category_source="manual"` when the value changes. Verify with `transactions/tests.py` cases: PATCHing a different category confirms it and sets manual; PATCHing the same category confirms it and keeps the source; a notes-only PATCH leaves an unconfirmed row unconfirmed; clearing to null leaves confirmed/manual; the edit-form scenario (full PUT/PATCH including the unchanged category) confirms it.
+- [x] 1.1 Add `category_confirmed` (default `True`) and `category_source` (`manual` / `history`, default `manual`) to `Transaction`, with a migration. Verify that `makemigrations --check` is clean, existing rows read as confirmed/manual, and the existing backend suite passes.
+- [x] 1.2 Expose both fields read-only on `TransactionSerializer`. On create/update, any write of `category` sets `category_confirmed=True`, and `category_source="manual"` when the value changes. Verify with `transactions/tests.py` cases: PATCHing a different category confirms it and sets manual; PATCHing the same category confirms it and keeps the source; a notes-only PATCH leaves an unconfirmed row unconfirmed; clearing to null leaves confirmed/manual; the edit-form scenario (full PUT/PATCH including the unchanged category) confirms it.
 
 ## 2. History categorizer
 

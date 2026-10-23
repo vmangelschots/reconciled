@@ -133,3 +133,100 @@ class TransactionTests(TestCase):
         )
         payees = [t["payee"] for t in response.json()]
         self.assertEqual(payees, ["In range"])
+
+
+class CategoryConfirmationTests(TestCase):
+    """Writing a category through the API confirms it - see
+    openspec/specs/auto-categorization and the transactions spec."""
+
+    def setUp(self):
+        self.client = APIClient()
+        user = get_user_model().objects.create_user(username="budgeter", password="x")
+        self.client.force_authenticate(user=user)
+        self.account = Account.objects.create(
+            name="Main Checking", account_type="checking", starting_balance_cents=0
+        )
+        self.groceries = Category.objects.create(name="Groceries")
+        self.household = Category.objects.create(name="Household")
+        self.txn = Transaction.objects.create(
+            account=self.account,
+            date="2026-10-02",
+            amount_cents=-3810,
+            payee="CARREFOUR MARKET 1234",
+            category=self.groceries,
+            category_confirmed=False,
+            category_source=Transaction.CategorySource.HISTORY,
+        )
+
+    def patch(self, data):
+        response = self.client.patch(
+            reverse("transaction-detail", args=[self.txn.id]), data, format="json"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.txn.refresh_from_db()
+        return response
+
+    def test_existing_and_new_rows_default_to_confirmed_manual(self):
+        txn = Transaction.objects.create(
+            account=self.account, date="2026-10-02", amount_cents=-100, payee="Shop"
+        )
+        self.assertTrue(txn.category_confirmed)
+        self.assertEqual(txn.category_source, "manual")
+
+    def test_fields_are_exposed_read_only(self):
+        response = self.patch({"category_confirmed": True, "category_source": "manual"})
+        self.assertEqual(response.data["category_confirmed"], False)
+        self.assertEqual(response.data["category_source"], "history")
+        self.assertFalse(self.txn.category_confirmed)
+
+    def test_patching_a_different_category_confirms_it_as_manual(self):
+        self.patch({"category": self.household.id})
+        self.assertEqual(self.txn.category, self.household)
+        self.assertTrue(self.txn.category_confirmed)
+        self.assertEqual(self.txn.category_source, "manual")
+
+    def test_patching_the_same_category_confirms_it_and_keeps_the_source(self):
+        self.patch({"category": self.groceries.id})
+        self.assertTrue(self.txn.category_confirmed)
+        self.assertEqual(self.txn.category_source, "history")
+
+    def test_notes_only_patch_leaves_a_guess_unconfirmed(self):
+        self.patch({"notes": "weekly shop"})
+        self.assertFalse(self.txn.category_confirmed)
+        self.assertEqual(self.txn.category_source, "history")
+
+    def test_clearing_the_category_leaves_confirmed_manual(self):
+        self.patch({"category": None})
+        self.assertIsNone(self.txn.category)
+        self.assertTrue(self.txn.category_confirmed)
+        self.assertEqual(self.txn.category_source, "manual")
+
+    def test_saving_the_edit_form_confirms_the_category(self):
+        # The edit form sends every field, the unchanged category included.
+        self.patch(
+            {
+                "date": "2026-10-02",
+                "amount_cents": -3810,
+                "payee": "CARREFOUR MARKET 1234",
+                "category": self.groceries.id,
+                "notes": "changed only the notes",
+            }
+        )
+        self.assertEqual(self.txn.category, self.groceries)
+        self.assertTrue(self.txn.category_confirmed)
+
+    def test_creating_with_a_category_is_confirmed_manual(self):
+        response = self.client.post(
+            reverse("transaction-list"),
+            {
+                "account": self.account.id,
+                "date": "2026-10-03",
+                "amount_cents": -500,
+                "payee": "Bakery",
+                "category": self.groceries.id,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertTrue(response.data["category_confirmed"])
+        self.assertEqual(response.data["category_source"], "manual")
