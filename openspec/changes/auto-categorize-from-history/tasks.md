@@ -7,8 +7,8 @@
 
 ## 2. History categorizer
 
-- [ ] 2.1 Implement `transactions/categorize.py` with `normalize_payee` and `categorize(transactions)` as in design decision 3: one history query, a key of normalized payee plus direction, most frequent with ties to most recent, only filling empty non-transfer rows, and `bulk_update`. Verify with `transactions/tests_categorize.py` covering every `auto-categorization` guessing scenario: repeat payee across digit/case noise, most frequent wins, tie goes to the most recent, inflow/outflow kept apart, unknown payee, an unconfirmed category not counting as history, an existing category kept, transfers skipped, and the result being unconfirmed with source `history`.
-- [ ] 2.2 Add a `budgets/tests.py` case: an unconfirmed category counts toward its category's monthly spend. This verifies the "unconfirmed categories count like confirmed ones" scenario with no budgets code change.
+- [x] 2.1 Implement `transactions/categorize.py` with `normalize_payee` and `categorize(transactions)` as in design decision 3: one history query, a key of normalized payee plus direction, most frequent with ties to most recent, only filling empty non-transfer rows, and `bulk_update`. Verify with `transactions/tests_categorize.py` covering every `auto-categorization` guessing scenario: repeat payee across digit/case noise, most frequent wins, tie goes to the most recent, inflow/outflow kept apart, unknown payee, an unconfirmed category not counting as history, an existing category kept, transfers skipped, and the result being unconfirmed with source `history`.
+- [x] 2.2 Add a `budgets/tests.py` case: an unconfirmed category counts toward its category's monthly spend. This verifies the "unconfirmed categories count like confirmed ones" scenario with no budgets code change.
 
 ## 3. Import commit and API endpoints
 

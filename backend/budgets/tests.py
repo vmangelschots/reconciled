@@ -217,6 +217,22 @@ class BudgetSummaryTests(TestCase):
         self.assertEqual(row["remaining_cents"], -3000)
         self.assertTrue(row["over_limit"])
 
+    def test_unconfirmed_category_counts_toward_its_spend(self):
+        # A guess counts toward its budget before anyone confirms it - see
+        # openspec/specs/auto-categorization.
+        Transaction.objects.create(
+            account=self.account, date="2026-01-10", amount_cents=-4000, payee="Store",
+            category=self.groceries, category_confirmed=False,
+            category_source=Transaction.CategorySource.HISTORY,
+        )
+        Transaction.objects.create(
+            account=self.account, date="2026-01-12", amount_cents=-1000, payee="Store",
+            category=self.groceries,
+        )
+        summary = self.client.get(reverse("budget-summary"), {"month": "2026-01"}).json()
+        self.assertEqual(summary["categories"][0]["spent_cents"], 5000)
+        self.assertEqual(summary["uncategorized_spent_cents"], 0)
+
     def test_uncategorized_spend_reported_separately(self):
         Transaction.objects.create(
             account=self.account, date="2026-01-10", amount_cents=-5000, payee="Misc"
