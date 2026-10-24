@@ -9,8 +9,11 @@ import {
   updateTransaction,
 } from "../api/transactions";
 import { CategoryCombobox } from "../components/CategoryCombobox";
+import { Amount } from "../components/ui/Amount";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
+import { PageHeader } from "../components/ui/PageHeader";
+import { Panel } from "../components/ui/Panel";
 import { useToast } from "../components/ui/Toast";
 import { useAfterDelay } from "../hooks/useAfterDelay";
 import { categoryDisplayLabel } from "../lib/categoryTree";
@@ -252,8 +255,8 @@ export function ReviewPage() {
   if (groups === null) {
     return (
       <section className="flex flex-col gap-4">
-        <h1 className="text-xl font-semibold text-ink-primary">Review</h1>
-        <p className="text-sm text-ink-secondary">Loading…</p>
+        <PageHeader title="Review" />
+        <Panel loading />
       </section>
     );
   }
@@ -267,7 +270,7 @@ export function ReviewPage() {
   return (
     <section className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
-        <h1 className="text-xl font-semibold text-ink-primary">Review</h1>
+        <PageHeader title="Review" />
         {pendingCount > 0 && (
           <p className="text-sm text-ink-secondary">
             {pendingBySource.ai > 0
@@ -288,7 +291,9 @@ export function ReviewPage() {
         <div key={source} className={cn("flex flex-col", index > 0 && pendingBySource[sources[0]] > 0 && "mt-6")}>
           {groups.some((g) => g.source === source && !isLeaving(g)) && (
             <div className="mb-2">
-              <h2 className="text-sm font-medium text-ink-secondary">{SECTION_TITLES[source] ?? "Guesses"}</h2>
+              <h2 className="text-xs font-medium tracking-wide text-ink-muted uppercase">
+                {SECTION_TITLES[source] ?? "Guesses"}
+              </h2>
               {SECTION_SUBLINES[source] && (
                 <p className="text-xs text-ink-secondary">{SECTION_SUBLINES[source]}</p>
               )}
@@ -370,7 +375,7 @@ function ReviewGroup({
           <div className="flex items-baseline justify-between gap-4">
             <span className="truncate text-base font-semibold text-ink-primary">{group.payee}</span>
             <span className="flex shrink-0 items-baseline gap-2">
-              <span className="font-medium tabular-nums text-ink-primary">{formatMoney(total)}</span>
+              <span className="num font-medium text-ink-primary">{formatMoney(total)}</span>
               <span className="hidden text-sm text-ink-secondary sm:inline">{countLabel}</span>
             </span>
           </div>
@@ -454,8 +459,8 @@ function ReviewGroup({
                           {row.notes ? ` · ${row.notes}` : ""}
                         </p>
                       </div>
-                      <span className="text-right text-sm tabular-nums text-ink-primary">
-                        {formatMoney(row.amount_cents)}
+                      <span className="text-right text-sm text-ink-primary">
+                        <Amount cents={row.amount_cents} signed />
                       </span>
                       <span ref={rowPickerRef(row.id)} className="col-span-2 sm:col-span-1">
                         <CategoryCombobox

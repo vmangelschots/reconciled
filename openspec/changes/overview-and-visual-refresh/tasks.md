@@ -68,7 +68,7 @@
 
 ## 4. Restyle the other pages
 
-- [ ] 4.1 Move Transactions (including `SplitEditor` and the inline form, which stays inline) and Review onto `PageHeader`, `Panel` (flush tables), signed right-aligned `Amount`, short dates and `EmptyState`, without moving any section. Verify that their test suites pass (only label and heading queries change), and check both pages in the browser in light and dark mode.
+- [x] 4.1 Move Transactions (including `SplitEditor` and the inline form, which stays inline) and Review onto `PageHeader`, `Panel` (flush tables), signed right-aligned `Amount`, short dates and `EmptyState`, without moving any section. Verify that their test suites pass (only label and heading queries change), and check both pages in the browser in light and dark mode.
 - [ ] 4.2 Do the same for:
   - **Budgets:** `MonthSwitcher`, plus the month in `?month=` read with `useSearchParams` in local time;
   - **Forecast:** `Amount` right-aligned, and short dates in the occurrences table;

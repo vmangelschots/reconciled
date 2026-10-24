@@ -14,7 +14,10 @@ import {
 import { CategoryCombobox } from "../components/CategoryCombobox";
 import { SplitEditor } from "../components/SplitEditor";
 import { Button } from "../components/ui/Button";
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
+import { Amount } from "../components/ui/Amount";
+import { EmptyState } from "../components/ui/EmptyState";
+import { PageHeader } from "../components/ui/PageHeader";
+import { Panel } from "../components/ui/Panel";
 import { Input } from "../components/ui/Input";
 import { Label } from "../components/ui/Label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/Select";
@@ -22,6 +25,7 @@ import { Table, TableCell, TableHead, TableHeader, TableRow } from "../component
 import { useToast } from "../components/ui/Toast";
 import { categoryDisplayLabel } from "../lib/categoryTree";
 import { cn } from "../lib/cn";
+import { formatShortDate } from "../lib/dates";
 import { formatMoney } from "../lib/money";
 import { useReviewCount } from "../review/ReviewCountContext";
 
@@ -286,21 +290,20 @@ export function TransactionsPage() {
 
   if (accounts.length === 0) {
     return (
-      <section>
-        <h1 className="text-xl font-semibold text-ink-primary">Transactions</h1>
-        <p className="mt-2 text-sm text-ink-secondary">Add an account first.</p>
+      <section className="flex flex-col gap-6">
+        <PageHeader title="Transactions" />
+        <Panel>
+          <EmptyState>Add an account first.</EmptyState>
+        </Panel>
       </section>
     );
   }
 
   return (
     <section className="flex flex-col gap-6">
-      <h1 className="text-xl font-semibold text-ink-primary">Transactions</h1>
-
-      <div className="flex flex-col gap-1.5">
-        <Label>Account</Label>
+      <PageHeader title="Transactions">
         <Select value={accountId != null ? String(accountId) : ""} onValueChange={(v) => setAccountId(Number(v))}>
-          <SelectTrigger className="w-56" aria-label="Account">
+          <SelectTrigger className="w-full sm:w-56" aria-label="Account">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -311,13 +314,10 @@ export function TransactionsPage() {
             ))}
           </SelectContent>
         </Select>
-      </div>
+      </PageHeader>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Filters</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-wrap items-end gap-4">
+      <Panel title="Filters">
+        <div className="flex flex-wrap items-end gap-4">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="date-from">From</Label>
             <Input
@@ -356,26 +356,22 @@ export function TransactionsPage() {
               onChange={(e) => setFilters({ ...filters, search: e.target.value })}
             />
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </Panel>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Add transaction</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <Panel title="Add transaction">
           <TransactionForm
             categories={categories}
             transferAccounts={transferTargets}
             onSubmit={handleCreate}
             submitLabel="Add transaction"
           />
-        </CardContent>
-      </Card>
+      </Panel>
 
       {!hasLoadedRef.current && loading ? (
-        <p className="text-sm text-ink-secondary">Loading...</p>
+        <Panel loading />
       ) : (
+        <Panel flush className="overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow>
@@ -419,7 +415,7 @@ export function TransactionsPage() {
             return (
               <tbody key={t.id} className="group border-b border-border last:border-b-0">
                 <TableRow className={cn("hover:bg-transparent group-hover:bg-surface-2", splitOpen && "bg-surface-2")}>
-                  <TableCell className={barCell}>{t.date}</TableCell>
+                  <TableCell className={cn(barCell, "whitespace-nowrap text-ink-secondary")}>{formatShortDate(t.date)}</TableCell>
                   <TableCell>{t.payee}</TableCell>
                   {/* Long notes stay on one line; the full text is in the tooltip. */}
                   <TableCell className="max-w-xs truncate text-ink-secondary" title={t.notes || undefined}>
@@ -450,7 +446,9 @@ export function TransactionsPage() {
                       />
                     )}
                   </TableCell>
-                  <TableCell className="text-right tabular-nums">{formatMoney(t.amount_cents)}</TableCell>
+                  <TableCell className="text-right">
+                    <Amount cents={t.amount_cents} signed />
+                  </TableCell>
                   <TableCell className="flex gap-2">
                     <Button
                       variant="outline"
@@ -509,8 +507,8 @@ export function TransactionsPage() {
                           aria-label={`Category of part ${part.notes || formatMoney(part.amount_cents)}`}
                         />
                       </TableCell>
-                      <TableCell className="py-1.5 text-right text-ink-secondary tabular-nums">
-                        {formatMoney(part.amount_cents)}
+                      <TableCell className="py-1.5 text-right text-ink-secondary">
+                        <Amount cents={part.amount_cents} signed className="text-ink-secondary" />
                       </TableCell>
                       <TableCell className="py-1.5">
                         {/* A part is changed (or removed) through its split. */}
@@ -527,13 +525,14 @@ export function TransactionsPage() {
           {transactions.length === 0 && (
             <tbody>
               <TableRow>
-                <TableCell colSpan={6} className="text-ink-secondary">
-                  No transactions yet.
+                <TableCell colSpan={6}>
+                  <EmptyState>No transactions yet.</EmptyState>
                 </TableCell>
               </TableRow>
             </tbody>
           )}
         </Table>
+        </Panel>
       )}
     </section>
   );
