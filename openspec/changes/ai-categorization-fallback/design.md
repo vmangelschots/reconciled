@@ -235,11 +235,11 @@ reviews.
     border). The only differences are the evidence line and an `outline`
     Confirm button; history Confirm stays solid;
   - **evidence line:** the history line's structure with an accent
-    `Sparkles` icon: "AI guess: **Eating out** · restaurant name". The
+    `Sparkles` icon: "AI guess: **Eating out** · Restaurant name". The
     category is in `font-medium text-ink-primary` and the reason in plain
     `ink-secondary`, neither quoted nor italic. On the client, the reason
-    loses any trailing period, and its first letter is lowercased unless
-    it's an acronym. The line is `truncate` with the full reason in
+    loses any trailing period and otherwise keeps the model's casing, so
+    names like "Belgian" stay capitalized. The line is `truncate` with the full reason in
     `title`, and without a reason it shows just "AI guess: **Eating out**";
   - **focus:** wherever the existing rules would put focus on a group's
     Confirm (on load, or after the previous group resolved), an AI group
@@ -278,7 +278,7 @@ reviews.
   - the toast uses the error style when AI failed or the key was rejected,
     and the success style otherwise.
 - **Ledger:** the AI tooltip includes the reason: "Guessed by AI
-  (restaurant name). Pick a category to confirm." The marker itself is
+  (Restaurant name). Pick a category to confirm." The marker itself is
   unchanged (same dashed and italic style, `Sparkles` instead of
   `History`).
 - **Keeping it calm:** no gradients, shimmer, second accent colour,

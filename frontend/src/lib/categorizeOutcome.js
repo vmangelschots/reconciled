@@ -31,12 +31,8 @@ export function aiFailed(ai) {
   return ai?.status === "failed" || ai?.status === "key_rejected";
 }
 
-// The model's reason as a phrase after "·": no trailing period, and a
-// lowercase first letter unless it starts with an acronym ("NMBS station").
+// The model's reason as a phrase after "·": no trailing period. Its casing
+// is kept, so "Belgian rail operator" doesn't become "belgian ...".
 export function displayReason(reason) {
-  const text = (reason ?? "").trim().replace(/\.+$/, "");
-  if (!text) return "";
-  const firstWord = text.split(/\s/)[0];
-  const acronym = firstWord.length > 1 && firstWord === firstWord.toUpperCase() && /\p{Lu}/u.test(firstWord);
-  return acronym ? text : text[0].toLowerCase() + text.slice(1);
+  return (reason ?? "").trim().replace(/\.+$/, "");
 }

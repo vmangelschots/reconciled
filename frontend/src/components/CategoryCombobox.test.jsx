@@ -353,7 +353,7 @@ describe("CategoryCombobox guesses", () => {
     const trigger = screen.getByRole("button");
     expect(trigger).toHaveAttribute("data-suggestion", "ai");
     expect(trigger.querySelector("svg.lucide-sparkles")).not.toBeNull();
-    expect(trigger).toHaveAttribute("title", "Guessed by AI (restaurant name). Pick a category to confirm.");
+    expect(trigger).toHaveAttribute("title", "Guessed by AI (Restaurant name). Pick a category to confirm.");
 
     rerender(<CategoryCombobox categories={CATEGORIES} value={1} onSelect={vi.fn()} suggestion="ai" />);
     expect(trigger).toHaveAttribute("title", "Guessed by AI. Pick a category to confirm.");

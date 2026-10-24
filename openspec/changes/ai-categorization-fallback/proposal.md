@@ -43,7 +43,7 @@ and out of scope here.
 - **Review page:**
   - AI guesses appear in their own "AI guesses" section below the history
     groups, with a "worth a closer look" subline;
-  - the evidence line reads "AI guess: **Eating out** · restaurant name";
+  - the evidence line reads "AI guess: **Eating out** · Restaurant name";
   - accepting an AI guess takes a deliberate step: focus lands on its
     picker, not its Confirm button, and Confirm is an outline button;
   - the empty state's button guesses from history and AI when AI is

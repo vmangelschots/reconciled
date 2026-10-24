@@ -258,8 +258,8 @@ describe("ReviewPage AI guesses", () => {
     const bistro = within(card("Bistro Lumiere"));
     // The reason loses its period and its capital, and is in the title.
     const evidence = bistro.getByText(/^AI guess:/);
-    expect(evidence).toHaveTextContent("AI guess: Household · restaurant name");
-    expect(evidence).toHaveAttribute("title", "restaurant name");
+    expect(evidence).toHaveTextContent("AI guess: Household · Restaurant name");
+    expect(evidence).toHaveAttribute("title", "Restaurant name");
     expect(within(card("Kinepolis")).getByText(/^AI guess:/)).toHaveTextContent(/^AI guess: Transport$/);
     expect(bistro.getByRole("button", { name: "Confirm 2" }).className).toMatch(/border/);
     expect(within(card("IKEA")).getByRole("button", { name: "Confirm 1" }).className).toMatch(/bg-accent/);
