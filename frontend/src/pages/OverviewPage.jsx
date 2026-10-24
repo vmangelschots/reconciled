@@ -23,7 +23,7 @@ import { cn } from "../lib/cn";
 import { formatShortDate } from "../lib/dates";
 import { formatMoneyWhole } from "../lib/money";
 import { currentMonth, daysSince, monthLabel, monthName } from "../lib/months";
-import { useOverviewAccount } from "../overview/OverviewAccountContext";
+import { useAccounts } from "../accounts/AccountsContext";
 
 // The last import counts as stale after this many days - see the
 // overview spec's "Stale import reminder".
@@ -232,7 +232,7 @@ export function OverviewPage() {
   const [month, setMonth] = useState(thisMonth);
   const isCurrent = month === thisMonth;
   const isWide = useMediaQuery("(min-width: 640px)");
-  const { accounts, account, loaded, setAccountId } = useOverviewAccount();
+  const { accounts, defaultAccount: account, loaded, setLastOpened: setAccountId } = useAccounts();
   const [categoryTable, setCategoryTable] = useState(false);
   const [inOutTable, setInOutTable] = useState(false);
 

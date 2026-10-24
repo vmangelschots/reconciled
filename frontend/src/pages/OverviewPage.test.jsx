@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { OverviewPage } from "./OverviewPage";
 import { ToastProvider } from "../components/ui/Toast";
-import { OverviewAccountProvider } from "../overview/OverviewAccountContext";
+import { AccountsProvider } from "../accounts/AccountsContext";
 import * as accountsApi from "../api/accounts";
 import * as overviewApi from "../api/overview";
 import * as reportsApi from "../api/reports";
@@ -80,12 +80,12 @@ function renderPage() {
   return render(
     <MemoryRouter initialEntries={["/"]}>
       <ToastProvider>
-        <OverviewAccountProvider>
+        <AccountsProvider>
           <Routes>
             <Route path="/" element={<OverviewPage />} />
             <Route path="*" element={<Where />} />
           </Routes>
-        </OverviewAccountProvider>
+        </AccountsProvider>
       </ToastProvider>
     </MemoryRouter>,
   );
@@ -129,7 +129,7 @@ describe("Overview account and month", () => {
     unmount();
 
     accountsApi.listAccounts.mockResolvedValue([JOINT, SAVINGS]);
-    window.localStorage.setItem("reconciled.overviewAccount", "2");
+    window.localStorage.setItem("reconciled.lastAccount", "2");
     renderPage();
 
     expect(await screen.findByRole("combobox", { name: "Account" })).toHaveTextContent("Savings");

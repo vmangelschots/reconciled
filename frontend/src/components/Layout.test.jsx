@@ -4,7 +4,6 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as accountsApi from '../api/accounts'
 import * as transactionsApi from '../api/transactions'
-import { useOverviewAccount } from '../overview/OverviewAccountContext'
 import { ThemeProvider } from '../theme/ThemeProvider'
 import { formatMoney } from '../lib/money'
 import { Layout } from './Layout'
@@ -30,25 +29,14 @@ function mockViewport(isWide) {
   })
 }
 
-function AccountPicker() {
-  const { account, setAccountId } = useOverviewAccount()
-  return (
-    <div>
-      <p>Showing {account?.name ?? 'nothing'}</p>
-      <button type="button" onClick={() => setAccountId(2)}>
-        Pick savings
-      </button>
-    </div>
-  )
-}
-
 function renderLayout(path = '/') {
   return render(
     <ThemeProvider>
       <MemoryRouter initialEntries={[path]}>
         <Routes>
           <Route element={<Layout />}>
-            <Route index element={<AccountPicker />} />
+            <Route index element={<p>Overview content</p>} />
+            <Route path="transactions/:accountId" element={<p>Ledger content</p>} />
             <Route path="budgets" element={<p>Budgets content</p>} />
             <Route path="forecast" element={<p>Forecast content</p>} />
           </Route>
@@ -74,17 +62,20 @@ describe('Layout navigation', () => {
     renderLayout()
     const sidebar = screen.getByRole('navigation', { name: 'Main' })
 
+    await screen.findByText('Total · 2 accounts')
     expect(within(sidebar).getAllByRole('link').map((l) => l.textContent)).toEqual([
       'Overview',
       'Transactions',
+      'Joint€3,482',
+      'Savings€10,000',
       'Review',
       'Budgets',
       'Forecast',
       'Import',
       'Accounts',
     ])
-    expect(await screen.findByText(formatMoney(348217))).toBeInTheDocument()
-    expect(screen.getByText('Joint', { selector: 'span' })).toBeInTheDocument()
+    expect(await screen.findByText(formatMoney(348217 + 1000000))).toBeInTheDocument()
+    expect(screen.getByText('Total · 2 accounts')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'More' })).not.toBeInTheDocument()
   })
 
@@ -173,34 +164,44 @@ describe('Review count in the navigation', () => {
   })
 })
 
-describe('Overview account', () => {
-  it('starts on the first active account and remembers a choice', async () => {
+describe('Accounts in the sidebar', () => {
+  it('marks only the open account', async () => {
     mockViewport(true)
-    const { unmount } = renderLayout()
-    expect(await screen.findByText('Showing Joint')).toBeInTheDocument()
+    renderLayout('/transactions/2')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Pick savings' }))
-    expect(screen.getByText('Showing Savings')).toBeInTheDocument()
-    unmount()
-
-    renderLayout()
-    expect(await screen.findByText('Showing Savings')).toBeInTheDocument()
+    const savings = await screen.findByRole('link', { name: /Savings/ })
+    expect(savings).toHaveAttribute('aria-current', 'page')
+    expect(savings).toHaveClass('bg-accent')
+    expect(screen.getByRole('link', { name: 'Transactions' })).not.toHaveClass('bg-accent')
+    expect(screen.getByRole('link', { name: /Joint/ })).not.toHaveAttribute('aria-current')
   })
 
-  it('falls back to the first account when the remembered one is gone', async () => {
-    window.localStorage.setItem('reconciled.overviewAccount', '99')
+  it('shows no sub-items with one account', async () => {
+    accountsApi.listAccounts.mockResolvedValue([ACCOUNTS[0]])
     mockViewport(true)
     renderLayout()
 
-    expect(await screen.findByText('Showing Joint')).toBeInTheDocument()
+    expect(await screen.findByText('Total · 1 account')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /Joint/ })).toBeNull()
   })
 
-  it('ignores archived accounts', async () => {
-    accountsApi.listAccounts.mockResolvedValue([{ ...ACCOUNTS[0], archived: true }, ACCOUNTS[1]])
-    window.localStorage.setItem('reconciled.overviewAccount', '1')
+  it('lists five accounts and "+N more" beyond that', async () => {
+    accountsApi.listAccounts.mockResolvedValue(
+      Array.from({ length: 7 }, (_, i) => ({ id: i + 1, name: `Account ${i + 1}`, current_balance_cents: 100, archived: false })),
+    )
     mockViewport(true)
     renderLayout()
 
-    expect(await screen.findByText('Showing Savings')).toBeInTheDocument()
+    expect(await screen.findByRole('link', { name: '+2 more' })).toHaveAttribute('href', '/accounts')
+    expect(screen.getAllByRole('link', { name: /^Account \d/ })).toHaveLength(5)
+  })
+
+  it('leaves archived accounts out of the list and the total', async () => {
+    accountsApi.listAccounts.mockResolvedValue([ACCOUNTS[0], { ...ACCOUNTS[1], archived: true }])
+    mockViewport(true)
+    renderLayout()
+
+    expect(await screen.findByText('Total · 1 account')).toBeInTheDocument()
+    expect(screen.getByText(formatMoney(348217))).toBeInTheDocument()
   })
 })

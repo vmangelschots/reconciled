@@ -22,13 +22,13 @@
 
 ## 2. Accounts context, routes and navigation
 
-- [ ] 2.1 Replace `OverviewAccountContext` with `AccountsContext`:
+- [x] 2.1 Replace `OverviewAccountContext` with `AccountsContext`:
   - accounts, `loaded` and `total`;
   - `lastOpenedId` in `reconciled.lastAccount` (wrapped in try/catch) and `setLastOpened`;
   - `defaultAccount`, falling back to the first active account.
 
   Add `getAccount(id)` to `api/accounts.js`. Verify with `AccountsContext.test.jsx`: the default is the last-opened account; it falls back when that account is missing or archived; the total sums active balances.
-- [ ] 2.2 Rewrite the sidebar in `Layout`:
+- [x] 2.2 Rewrite the sidebar in `Layout`:
   - Transactions gets account children (the first five plus "+N more"), with only the open account marked;
   - no children with one account;
   - the footer shows "Total · N accounts".
