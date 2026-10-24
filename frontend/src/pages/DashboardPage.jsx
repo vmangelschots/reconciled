@@ -1,8 +1,10 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getCashFlow, getCategorySpending } from "../api/reports";
+import { listTabs } from "../api/tabs";
 import { CategorySpendingChart } from "../components/CategorySpendingChart";
 import { InOutChart } from "../components/InOutChart";
+import { OpenTabsCard } from "../components/OpenTabsCard";
 import { Button } from "../components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import { useToast } from "../components/ui/Toast";
@@ -66,10 +68,14 @@ export function DashboardPage() {
   const [month, setMonth] = useState(thisMonth);
   const cashFlow = useReport(() => getCashFlow(thisMonth), thisMonth);
   const spending = useReport(() => getCategorySpending(month), month);
+  const tabs = useReport(listTabs, "tabs");
 
   return (
     <section className="flex flex-col gap-6">
       <h1 className="text-xl font-semibold text-ink-primary">Dashboard</h1>
+
+      {/* Loading and failure show nothing: the card only matters once tabs exist. */}
+      {tabs.data && <OpenTabsCard tabs={tabs.data} />}
 
       <Card>
         <CardHeader>
@@ -80,6 +86,7 @@ export function DashboardPage() {
           <ReportBody report={cashFlow} what="money in vs out">
             {(data) => <InOutChart months={data.months} />}
           </ReportBody>
+          <p className="mt-3 text-xs text-ink-muted">Excludes transfers and tabs</p>
         </CardContent>
       </Card>
 
