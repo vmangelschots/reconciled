@@ -27,7 +27,7 @@
   - restyle `Card`/`CardHeader`/`CardContent` (`p-5`, ring), `Input`, `Table` (header style, `h-11` rows) and `Select`.
 
   Verify that the frontend suite and build pass, that `grep` finds no `text-white` left on accent backgrounds, and that the built CSS bundles the Inter font file with no external font URL.
-- [ ] 2.2 Add `PageHeader`, `Panel` (actions, flush, loading, error), `Stat`, `ProgressBar` (marker), `MonthSwitcher` (short), `Amount` (signDisplay), `ListRow`, `EmptyState` and `Skeleton` to `components/ui`, `lib/months.js` (the month helpers, local time), and `formatMoneyWhole` in `lib/money.js`. Verify with unit tests:
+- [x] 2.2 Add `PageHeader`, `Panel` (actions, flush, loading, error), `Stat`, `ProgressBar` (marker), `MonthSwitcher` (short), `Amount` (signDisplay), `ListRow`, `EmptyState` and `Skeleton` to `components/ui`, `lib/months.js` (the month helpers, local time), and `formatMoneyWhole` in `lib/money.js`. Verify with unit tests:
   - `MonthSwitcher` disables next on the current month, and uses local time at 1 Nov 00:30 local while UTC is 31 Oct;
   - `Amount` shows "+" with the positive tone only when signed, including with the nl-BE locale;
   - `formatMoneyWhole` gives "€3,482" for 348217;
