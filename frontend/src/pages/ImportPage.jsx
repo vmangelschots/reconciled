@@ -1,6 +1,8 @@
 import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
+import { useAccounts } from "../accounts/AccountsContext";
 import { listAccounts } from "../api/accounts";
 import { commitImport, mapCsvColumns, uploadImportFile } from "../api/imports";
 import { Button, buttonVariants } from "../components/ui/Button";
@@ -57,6 +59,8 @@ export function ImportPage() {
   const { refresh: refreshReviewCount } = useReviewCount();
   const [accounts, setAccounts] = useState([]);
   const [accountId, setAccountId] = useState(null);
+  const [searchParams] = useSearchParams();
+  const { lastOpenedId } = useAccounts();
   const [file, setFile] = useState(null);
   const [session, setSession] = useState(null);
   const [mapping, setMapping] = useState({
@@ -76,8 +80,14 @@ export function ImportPage() {
   useEffect(() => {
     listAccounts().then((accts) => {
       setAccounts(accts);
-      if (accts.length > 0) setAccountId(accts[0].id);
+      // ?account= (from a stale-import reminder or an empty ledger) wins,
+      // then the account last opened under Transactions, then the first.
+      const wanted = Number(searchParams.get("account"));
+      const start = accts.find((a) => a.id === wanted) ?? accts.find((a) => a.id === lastOpenedId) ?? accts[0];
+      if (start) setAccountId(start.id);
     });
+    // The starting account is chosen once, when the page opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function selectNonDuplicates(candidates) {

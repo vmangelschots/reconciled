@@ -23,3 +23,8 @@ export function updateAccount(id, data) {
 export function archiveAccount(id) {
   return apiFetch(`/api/accounts/${id}/archive/`, { method: "POST" });
 }
+
+// Also returns archived accounts, so their ledger stays reachable.
+export function getAccount(id) {
+  return apiFetch(`/api/accounts/${id}/`);
+}

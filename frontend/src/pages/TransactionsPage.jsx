@@ -1,6 +1,8 @@
-import { ChevronDown, Split } from "lucide-react";
+import { ChevronDown, Split, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { listAccounts } from "../api/accounts";
+import { Link, Navigate, NavLink, useNavigate, useParams } from "react-router-dom";
+import { useAccounts } from "../accounts/AccountsContext";
+import { getAccount } from "../api/accounts";
 import { createCategory, listCategories } from "../api/categories";
 import {
   createTransaction,
@@ -13,26 +15,87 @@ import {
 } from "../api/transactions";
 import { CategoryCombobox } from "../components/CategoryCombobox";
 import { SplitEditor } from "../components/SplitEditor";
-import { Button } from "../components/ui/Button";
+import { Button, buttonVariants } from "../components/ui/Button";
 import { Amount } from "../components/ui/Amount";
 import { EmptyState } from "../components/ui/EmptyState";
 import { PageHeader } from "../components/ui/PageHeader";
 import { Panel } from "../components/ui/Panel";
 import { Input } from "../components/ui/Input";
 import { Label } from "../components/ui/Label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/Select";
 import { Table, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/Table";
 import { useToast } from "../components/ui/Toast";
 import { categoryDisplayLabel } from "../lib/categoryTree";
 import { cn } from "../lib/cn";
 import { formatShortDate } from "../lib/dates";
-import { formatMoney } from "../lib/money";
+import { formatMoney, formatMoneyWhole } from "../lib/money";
 import { useReviewCount } from "../review/ReviewCountContext";
 
+// The plain Transactions address opens the account last opened here, or
+// the first active one. See the transactions spec.
+export function TransactionsIndex() {
+  const { loaded, defaultAccount } = useAccounts();
+  if (!loaded) return null;
+  if (!defaultAccount) {
+    return (
+      <section className="flex flex-col gap-6">
+        <PageHeader title="Transactions" />
+        <Panel>
+          <EmptyState>Add an account first.</EmptyState>
+        </Panel>
+      </section>
+    );
+  }
+  return <Navigate replace to={`/transactions/${defaultAccount.id}`} />;
+}
+
+// Below 1024px there is no sidebar, so the accounts are pills under the
+// title, with the open account's balance at the end of the row.
+function AccountPills({ accounts, current }) {
+  const activeRef = useRef(null);
+  useEffect(() => {
+    activeRef.current?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  }, [current?.id]);
+  return (
+    <div className="flex items-center gap-3 lg:hidden">
+      {/* Bleeds to the left screen edge only, so the balance stays clear;
+          no visible scrollbar - the row is swiped. */}
+      <nav
+        aria-label="Accounts"
+        className="-ml-4 flex min-w-0 flex-1 gap-2 overflow-x-auto pl-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {accounts.map((a) => (
+          <NavLink
+            key={a.id}
+            to={`/transactions/${a.id}`}
+            ref={a.id === current?.id ? activeRef : undefined}
+            className={({ isActive }) =>
+              cn(
+                "flex h-8 shrink-0 items-center rounded-full px-3 text-sm whitespace-nowrap",
+                isActive ? "bg-accent text-on-accent" : "bg-surface-2 text-ink-secondary hover:text-ink-primary",
+              )
+            }
+          >
+            {a.name}
+          </NavLink>
+        ))}
+      </nav>
+      {current && (
+        <span className="num shrink-0 text-sm font-medium text-ink-primary">
+          {formatMoneyWhole(current.current_balance_cents)}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function TransactionsPage() {
-  const [accounts, setAccounts] = useState([]);
+  const { accountId: accountParam } = useParams();
+  const accountId = Number(accountParam);
+  const { accounts, loaded: accountsLoaded, setLastOpened } = useAccounts();
+  const navigate = useNavigate();
   const [categories, setCategories] = useState([]);
-  const [accountId, setAccountId] = useState(null);
+  // An archived account isn't in the active list; it is fetched by id.
+  const [archivedAccount, setArchivedAccount] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [filters, setFilters] = useState({ dateFrom: "", dateTo: "", category: null, search: "" });
   // At most one row is being edited: in the form or in the split editor.
@@ -59,15 +122,35 @@ export function TransactionsPage() {
   }
 
   useEffect(() => {
-    Promise.all([listAccounts(), listCategories()]).then(([accts, cats]) => {
-      setAccounts(accts);
-      setCategories(cats);
-      if (accts.length > 0) setAccountId(accts[0].id);
-    });
+    listCategories().then(setCategories);
   }, []);
 
+  const activeAccount = accounts.find((a) => a.id === accountId) ?? null;
+  const account = activeAccount ?? (archivedAccount?.id === accountId ? archivedAccount : null);
+  const isArchived = Boolean(account?.archived);
+
+  useEffect(() => {
+    if (!accountsLoaded) return;
+    if (activeAccount) {
+      setLastOpened(activeAccount.id);
+      return;
+    }
+    let current = true;
+    getAccount(accountId)
+      .then((a) => current && setArchivedAccount(a))
+      .catch(() => {
+        if (!current) return;
+        toast.error("That account wasn't found.");
+        navigate("/transactions", { replace: true });
+      });
+    return () => {
+      current = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountId, accountsLoaded, activeAccount?.id]);
+
   function reload() {
-    if (!accountId) {
+    if (!account) {
       setLoading(false);
       return undefined;
     }
@@ -90,7 +173,7 @@ export function TransactionsPage() {
   useEffect(() => {
     reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accountId, filters]);
+  }, [account?.id, filters]);
 
   // The form reports a transfer target separately from the category: a
   // new transaction is created first, then linked (matching or creating
@@ -287,14 +370,13 @@ export function TransactionsPage() {
   // The account list only holds active accounts; a row can't transfer to
   // its own account.
   const transferTargets = accounts.filter((a) => a.id !== accountId);
+  const filtering = Boolean(filters.dateFrom || filters.dateTo || filters.category != null || filters.search);
 
-  if (accounts.length === 0) {
+  if (!account) {
     return (
       <section className="flex flex-col gap-6">
         <PageHeader title="Transactions" />
-        <Panel>
-          <EmptyState>Add an account first.</EmptyState>
-        </Panel>
+        <Panel loading />
       </section>
     );
   }
@@ -302,19 +384,17 @@ export function TransactionsPage() {
   return (
     <section className="flex flex-col gap-6">
       <PageHeader title="Transactions">
-        <Select value={accountId != null ? String(accountId) : ""} onValueChange={(v) => setAccountId(Number(v))}>
-          <SelectTrigger className="w-full sm:w-56" aria-label="Account">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {accounts.map((a) => (
-              <SelectItem key={a.id} value={String(a.id)}>
-                {a.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <span className="flex items-center gap-2 text-sm text-ink-secondary">
+          <span className={cn(accounts.length > 1 && !isArchived && "hidden lg:inline")}>{account.name}</span>
+          {isArchived && (
+            <span className="rounded-full bg-surface-2 px-2 py-0.5 text-xs font-medium text-ink-muted ring-1 ring-border">
+              Archived
+            </span>
+          )}
+        </span>
       </PageHeader>
+
+      {accounts.length > 1 && !isArchived && <AccountPills accounts={accounts} current={activeAccount} />}
 
       <Panel title="Filters">
         <div className="flex flex-wrap items-end gap-4">
@@ -359,14 +439,16 @@ export function TransactionsPage() {
         </div>
       </Panel>
 
-      <Panel title="Add transaction">
+      {!isArchived && (
+        <Panel title="Add transaction">
           <TransactionForm
             categories={categories}
             transferAccounts={transferTargets}
             onSubmit={handleCreate}
             submitLabel="Add transaction"
           />
-      </Panel>
+        </Panel>
+      )}
 
       {!hasLoadedRef.current && loading ? (
         <Panel loading />
@@ -526,7 +608,22 @@ export function TransactionsPage() {
             <tbody>
               <TableRow>
                 <TableCell colSpan={6}>
-                  <EmptyState>No transactions yet.</EmptyState>
+                  {filtering ? (
+                    <EmptyState>No transactions match these filters.</EmptyState>
+                  ) : (
+                    <EmptyState
+                      action={
+                        !isArchived && (
+                          <Link to={`/import?account=${account.id}`} className={buttonVariants({ variant: "outline" })}>
+                            <Upload className="h-4 w-4" aria-hidden="true" />
+                            Import
+                          </Link>
+                        )
+                      }
+                    >
+                      No transactions yet.
+                    </EmptyState>
+                  )}
                 </TableCell>
               </TableRow>
             </tbody>

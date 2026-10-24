@@ -11,10 +11,11 @@ import {
 } from 'lucide-react'
 import { useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
+import { AccountsProvider, useAccounts } from '../accounts/AccountsContext'
 import { useAuth } from '../auth/AuthContext'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { cn } from '../lib/cn'
-import { OverviewAccountProvider, useOverviewAccount } from '../overview/OverviewAccountContext'
+import { formatMoneyWhole } from '../lib/money'
 import { ReviewCountProvider, useReviewCount } from '../review/ReviewCountContext'
 import { ThemeToggle } from './ThemeToggle'
 import { Amount } from './ui/Amount'
@@ -75,13 +76,75 @@ function SidebarLink({ item, onNavigate }) {
   )
 }
 
-function AccountReadout() {
-  const { account } = useOverviewAccount()
-  if (!account) return null
+// The sidebar shows at most this many accounts under Transactions; the
+// rest are behind "+N more". See the ui-shell spec.
+const SIDEBAR_ACCOUNTS = 5
+
+// Transactions with the active accounts beneath it. Only the open account
+// is filled; the parent stays plain while one of them is open.
+function TransactionsGroup({ item }) {
+  const { accounts } = useAccounts()
+  const { pathname } = useLocation()
+  if (accounts.length <= 1) return <SidebarLink item={item} />
+
+  const Icon = item.icon
+  const inGroup = pathname.startsWith('/transactions')
+  const shown = accounts.slice(0, SIDEBAR_ACCOUNTS)
+  const hidden = accounts.length - shown.length
+  return (
+    <div className="flex flex-col gap-0.5">
+      <NavLink
+        to={item.to}
+        className={cn(
+          'flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors hover:bg-surface-2',
+          inGroup ? 'text-ink-primary' : 'text-ink-secondary hover:text-ink-primary',
+        )}
+      >
+        <Icon className={cn('h-4 w-4 shrink-0', inGroup && 'text-accent')} aria-hidden="true" />
+        <span className="flex-1">{item.label}</span>
+      </NavLink>
+      <div className="ml-5 flex flex-col gap-0.5 border-l border-border pl-2">
+        {shown.map((account) => (
+          <NavLink
+            key={account.id}
+            to={`/transactions/${account.id}`}
+            title={account.name}
+            className={({ isActive }) =>
+              cn(
+                'flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm transition-colors',
+                isActive ? 'bg-accent text-on-accent' : 'text-ink-secondary hover:bg-surface-2 hover:text-ink-primary',
+              )
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <span className="min-w-0 flex-1 truncate">{account.name}</span>
+                <span className={cn('num text-xs', isActive ? 'text-on-accent/80' : 'text-ink-muted')}>
+                  {formatMoneyWhole(account.current_balance_cents)}
+                </span>
+              </>
+            )}
+          </NavLink>
+        ))}
+        {hidden > 0 && (
+          <NavLink to="/accounts" className="px-3 py-1.5 text-xs text-ink-muted hover:text-ink-primary">
+            +{hidden} more
+          </NavLink>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function TotalReadout() {
+  const { accounts, total } = useAccounts()
+  if (accounts.length === 0) return null
   return (
     <div className="flex flex-col gap-0.5 px-3">
-      <span className="truncate text-xs text-ink-muted">{account.name}</span>
-      <Amount cents={account.current_balance_cents} className="text-base font-semibold text-ink-primary" />
+      <span className="text-xs font-medium tracking-wide text-ink-muted uppercase">
+        Total · {accounts.length} {accounts.length === 1 ? 'account' : 'accounts'}
+      </span>
+      <Amount cents={total} className="text-base font-semibold text-ink-primary" />
     </div>
   )
 }
@@ -109,16 +172,20 @@ function Sidebar() {
     <aside className="fixed inset-y-0 left-0 z-30 flex w-56 flex-col border-r border-border bg-background">
       <div className="px-6 pt-6 pb-5 text-[15px] font-semibold tracking-tight text-ink-primary">reconciled</div>
       <nav aria-label="Main" className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-3">
-        {NAV_ITEMS.filter((i) => i.group === 'main').map((item) => (
-          <SidebarLink key={item.to} item={item} />
-        ))}
+        {NAV_ITEMS.filter((i) => i.group === 'main').map((item) =>
+          item.to === '/transactions' ? (
+            <TransactionsGroup key={item.to} item={item} />
+          ) : (
+            <SidebarLink key={item.to} item={item} />
+          ),
+        )}
         <div className="mx-3 my-3 h-px bg-border" />
         {NAV_ITEMS.filter((i) => i.group === 'more').map((item) => (
           <SidebarLink key={item.to} item={item} />
         ))}
       </nav>
       <div className="flex flex-col gap-3 border-t border-border px-3 py-4">
-        <AccountReadout />
+        <TotalReadout />
         <div className="flex items-center gap-1 pl-3">
           <span className="flex-1 truncate text-sm text-ink-secondary">{user?.username}</span>
           <ThemeToggle />
@@ -191,13 +258,12 @@ function TabBar() {
 
 export function Layout() {
   const isWide = useMediaQuery('(min-width: 1024px)')
-  // The Review count and the overview account are refetched on every
-  // route change.
+  // The Review count and the accounts are refetched on every route change.
   const { pathname } = useLocation()
 
   return (
     <ReviewCountProvider refreshKey={pathname}>
-      <OverviewAccountProvider refreshKey={pathname}>
+      <AccountsProvider refreshKey={pathname}>
         <div className="min-h-screen bg-background">
           {isWide ? <Sidebar /> : <TabBar />}
           <main className={cn(isWide ? 'pl-56' : 'pb-[calc(4.5rem+env(safe-area-inset-bottom))]')}>
@@ -206,7 +272,7 @@ export function Layout() {
             </div>
           </main>
         </div>
-      </OverviewAccountProvider>
+      </AccountsProvider>
     </ReviewCountProvider>
   )
 }

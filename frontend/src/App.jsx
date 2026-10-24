@@ -9,7 +9,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { ReviewPage } from "./pages/ReviewPage";
 import { TabPage } from "./pages/TabPage";
-import { TransactionsPage } from "./pages/TransactionsPage";
+import { TransactionsIndex, TransactionsPage } from "./pages/TransactionsPage";
 
 export default function App() {
   return (
@@ -25,7 +25,8 @@ export default function App() {
       >
         <Route index element={<OverviewPage />} />
         <Route path="accounts" element={<AccountsPage />} />
-        <Route path="transactions" element={<TransactionsPage />} />
+        <Route path="transactions" element={<TransactionsIndex />} />
+        <Route path="transactions/:accountId" element={<TransactionsPage />} />
         <Route path="review" element={<ReviewPage />} />
         <Route path="budgets" element={<BudgetsPage />} />
         <Route path="import" element={<ImportPage />} />

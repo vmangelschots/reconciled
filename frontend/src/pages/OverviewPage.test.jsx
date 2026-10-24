@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { OverviewPage } from "./OverviewPage";
 import { ToastProvider } from "../components/ui/Toast";
-import { OverviewAccountProvider } from "../overview/OverviewAccountContext";
+import { AccountsProvider } from "../accounts/AccountsContext";
 import * as accountsApi from "../api/accounts";
 import * as overviewApi from "../api/overview";
 import * as reportsApi from "../api/reports";
@@ -25,7 +25,8 @@ const eur = (cents) => formatMoney(cents).replace(/[.,]00$/, "");
 function overview(overrides = {}) {
   const base = {
     month: "2026-10",
-    account: { id: 1, name: "Joint", balance_cents: 348200, last_import_date: "2026-10-22" },
+    balance_cents: 348200,
+    accounts: [{ id: 1, name: "Joint", balance_cents: 348200, last_import_date: "2026-10-22" }],
     in_out: { in_cents: 240000, out_cents: 119000 },
     budget: {
       has_limits: true,
@@ -37,12 +38,6 @@ function overview(overrides = {}) {
       days_left: 8,
     },
     attention: { review_count: 0, uncategorized_count: 0, categories: [] },
-    forecast: {
-      low_cents: 41000,
-      low_date: "2026-11-28",
-      next: { payee: "Rent", amount_cents: -95000, date: "2026-11-01" },
-      has_recurring: true,
-    },
     recent: [],
   };
   return {
@@ -50,8 +45,7 @@ function overview(overrides = {}) {
     ...overrides,
     budget: { ...base.budget, ...overrides.budget },
     attention: { ...base.attention, ...overrides.attention },
-    forecast: { ...base.forecast, ...overrides.forecast },
-    account: { ...base.account, ...overrides.account },
+
   };
 }
 
@@ -80,12 +74,12 @@ function renderPage() {
   return render(
     <MemoryRouter initialEntries={["/"]}>
       <ToastProvider>
-        <OverviewAccountProvider>
+        <AccountsProvider>
           <Routes>
             <Route path="/" element={<OverviewPage />} />
             <Route path="*" element={<Where />} />
           </Routes>
-        </OverviewAccountProvider>
+        </AccountsProvider>
       </ToastProvider>
     </MemoryRouter>,
   );
@@ -111,29 +105,17 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-describe("Overview account and month", () => {
-  it("opens on this month for the first account", async () => {
+describe("Overview month", () => {
+  it("opens on this month for all accounts, with no account picker", async () => {
+    accountsApi.listAccounts.mockResolvedValue([JOINT, SAVINGS]);
     renderPage();
 
     expect(await screen.findByText(/^Oct(ober)? 2026$/)).toBeInTheDocument();
-    await waitFor(() => expect(overviewApi.getOverview).toHaveBeenCalledWith("2026-10", 1));
+    await waitFor(() => expect(overviewApi.getOverview).toHaveBeenCalledWith("2026-10"));
     expect(reportsApi.getCashFlow).toHaveBeenCalledWith("2026-10");
     expect(reportsApi.getCategorySpending).toHaveBeenCalledWith("2026-10");
     expect(screen.getByRole("button", { name: "Next month" })).toBeDisabled();
-  });
-
-  it("offers an account picker only with more than one account, and remembers the choice", async () => {
-    const { unmount } = renderPage();
-    await screen.findByText(/^Oct(ober)? 2026$/);
     expect(screen.queryByRole("combobox", { name: "Account" })).toBeNull();
-    unmount();
-
-    accountsApi.listAccounts.mockResolvedValue([JOINT, SAVINGS]);
-    window.localStorage.setItem("reconciled.overviewAccount", "2");
-    renderPage();
-
-    expect(await screen.findByRole("combobox", { name: "Account" })).toHaveTextContent("Savings");
-    await waitFor(() => expect(overviewApi.getOverview).toHaveBeenLastCalledWith("2026-10", 2));
   });
 
   it("points to Accounts when there are none", async () => {
@@ -149,6 +131,38 @@ describe("Overview account and month", () => {
     renderPage();
 
     expect(await screen.findByRole("link", { name: "Import" })).toHaveAttribute("href", "/import");
+  });
+});
+
+describe("Accounts tile", () => {
+  const TWO = [
+    { id: 1, name: "Revolut", balance_cents: 214000, last_import_date: "2026-10-21" },
+    { id: 2, name: "Crelan", balance_cents: 134200, last_import_date: "2026-10-12" },
+  ];
+
+  it("lists each account with its balance and import freshness", async () => {
+    overviewApi.getOverview.mockResolvedValue(overview({ accounts: TWO, balance_cents: 348200 }));
+    renderPage();
+    const tile = await screen.findByRole("region", { name: "Accounts" });
+
+    const rows = await within(tile).findAllByRole("link");
+    expect(rows.map((r) => r.textContent)).toEqual([
+      expect.stringMatching(new RegExp(`Revolut.*imported 3 days ago.*${eur(214000)}`)),
+      expect.stringMatching(new RegExp(`Crelan.*imported 12 days ago.*${eur(134200)}`)),
+    ]);
+    expect(within(rows[0]).getByText("imported 3 days ago")).not.toHaveClass("text-warning");
+    expect(within(rows[1]).getByText("imported 12 days ago")).toHaveClass("text-warning");
+    expect(rows.map((r) => r.getAttribute("href"))).toEqual(["/transactions/1", "/transactions/2"]);
+  });
+
+  it("says when an account was never imported", async () => {
+    overviewApi.getOverview.mockResolvedValue(
+      overview({ accounts: [{ id: 3, name: "Savings", balance_cents: 0, last_import_date: null }] }),
+    );
+    renderPage();
+    const tile = await screen.findByRole("region", { name: "Accounts" });
+
+    expect(await within(tile).findByText("No imports yet")).toHaveClass("text-warning");
   });
 });
 
@@ -227,7 +241,10 @@ describe("Needs attention", () => {
   it("lists everything in order, with links", async () => {
     overviewApi.getOverview.mockResolvedValue(
       overview({
-        account: { last_import_date: "2026-10-12" },
+        accounts: [
+          { id: 1, name: "Revolut", balance_cents: 0, last_import_date: "2026-10-21" },
+          { id: 2, name: "Crelan", balance_cents: 0, last_import_date: "2026-10-12" },
+        ],
         attention: {
           review_count: 12,
           uncategorized_count: 4,
@@ -248,14 +265,14 @@ describe("Needs attention", () => {
       `4 uncategorized (${eur(21300)} this month)`,
       `Groceries ${eur(6200)} over`,
       "Restaurants at 90%",
-      "Last import 12 days ago",
+      "Crelan: last import 12 days ago",
     ]);
     expect(links.map((l) => l.getAttribute("href"))).toEqual([
       "/review",
       "/review",
       "/budgets?month=2026-10",
       "/budgets?month=2026-10",
-      "/import",
+      "/import?account=2",
     ]);
   });
 
@@ -287,54 +304,53 @@ describe("Needs attention", () => {
     expect(await screen.findByText("Everything is in order.")).toBeInTheDocument();
   });
 
-  it("reminds about a stale or missing import, but not a recent one", async () => {
-    overviewApi.getOverview.mockResolvedValue(overview({ account: { last_import_date: null } }));
+  it("reminds about one stale account by name, several by count, and none when fresh", async () => {
+    overviewApi.getOverview.mockResolvedValue(
+      overview({ accounts: [{ id: 1, name: "Joint", balance_cents: 0, last_import_date: null }] }),
+    );
     const { unmount } = renderPage();
-    expect(await screen.findByRole("link", { name: /No imports yet/ })).toHaveAttribute("href", "/import");
+    expect(await screen.findByRole("link", { name: /Joint: no imports yet/ })).toHaveAttribute(
+      "href",
+      "/import?account=1",
+    );
     unmount();
 
-    overviewApi.getOverview.mockResolvedValue(overview({ account: { last_import_date: "2026-10-22" } }));
+    overviewApi.getOverview.mockResolvedValue(
+      overview({
+        accounts: [
+          { id: 1, name: "Revolut", balance_cents: 0, last_import_date: "2026-10-15" },
+          { id: 2, name: "Crelan", balance_cents: 0, last_import_date: null },
+        ],
+      }),
+    );
+    const second = renderPage();
+    expect(await screen.findByRole("link", { name: /2 accounts not imported this week/ })).toHaveAttribute(
+      "href",
+      "/import?account=2",
+    );
+    second.unmount();
+
+    overviewApi.getOverview.mockResolvedValue(overview());
     renderPage();
     await screen.findByText("Everything is in order.");
-    expect(screen.queryByText(/Last import/)).toBeNull();
-  });
-});
-
-describe("Forecast tile", () => {
-  it("shows the low point and the next recurring transaction", async () => {
-    renderPage();
-    const tile = await screen.findByRole("region", { name: "Forecast" });
-
-    await waitFor(() => expect(tile).toHaveTextContent(eur(41000)));
-    expect(tile).toHaveTextContent(/on 28 Nov|on Nov 28/);
-    expect(tile).toHaveTextContent(new RegExp(`Next: Rent -${eur(95000).replace("€", "€")}`));
-  });
-
-  it("shows a low point below zero in the critical colour", async () => {
-    overviewApi.getOverview.mockResolvedValue(overview({ forecast: { low_cents: -12000 } }));
-    renderPage();
-    const tile = await screen.findByRole("region", { name: "Forecast" });
-
-    expect(await within(tile).findByText(eur(-12000))).toHaveClass("text-critical");
-  });
-
-  it("links to Forecast when nothing recurs", async () => {
-    overviewApi.getOverview.mockResolvedValue(overview({ forecast: { has_recurring: false, next: null } }));
-    renderPage();
-    const tile = await screen.findByRole("region", { name: "Forecast" });
-
-    expect(await within(tile).findByRole("link", { name: /Add them/ })).toHaveAttribute("href", "/forecast");
+    expect(screen.queryByText(/last import|not imported/)).toBeNull();
   });
 });
 
 describe("Recent transactions", () => {
-  it("lists the rows it gets, with a View all link", async () => {
+  const row = (fields) => ({ category_label: null, is_tab: false, transfer_account_name: null, part_count: 0, ...fields });
+
+  it("lists rows across accounts with their account, and a transfer once", async () => {
     overviewApi.getOverview.mockResolvedValue(
       overview({
+        accounts: [
+          { id: 1, name: "Revolut", balance_cents: 0, last_import_date: "2026-10-22" },
+          { id: 2, name: "Crelan", balance_cents: 0, last_import_date: "2026-10-22" },
+        ],
         recent: [
-          { id: 1, date: "2026-10-23", payee: "SALARY", amount_cents: 240000, category_label: "Income", is_tab: false, transfer_account_name: null, part_count: 0 },
-          { id: 2, date: "2026-10-22", payee: "Pizzeria", amount_cents: -6000, category_label: null, is_tab: false, transfer_account_name: null, part_count: 2 },
-          { id: 3, date: "2026-10-21", payee: "To savings", amount_cents: -50000, category_label: null, is_tab: false, transfer_account_name: "Savings", part_count: 0 },
+          row({ id: 1, date: "2026-10-23", payee: "SALARY", amount_cents: 240000, account_name: "Crelan", category_label: "Income" }),
+          row({ id: 2, date: "2026-10-22", payee: "Pizzeria", amount_cents: -6000, account_name: "Revolut", part_count: 2 }),
+          row({ id: 3, date: "2026-10-21", payee: "To savings", amount_cents: -50000, account_name: "Revolut", transfer_account_name: "Crelan" }),
         ],
       }),
     );
@@ -343,11 +359,23 @@ describe("Recent transactions", () => {
 
     const rows = await within(recent).findAllByRole("listitem");
     expect(rows.map((r) => r.textContent)).toEqual([
-      expect.stringMatching(/SALARY.*Income.*\+€2,400\.00/),
-      expect.stringMatching(/Pizzeria.*Split · 2/),
-      expect.stringMatching(/To savings.*→ Savings/),
+      expect.stringMatching(/SALARY.*Income.*\+€2,400\.00.*Crelan/),
+      expect.stringMatching(/Pizzeria.*Split · 2.*Revolut/),
+      expect.stringMatching(/Revolut → Crelan.*Transfer.*€500\.00$/),
     ]);
+    expect(rows[2].textContent).not.toMatch(/[-+]€500/);
     expect(within(recent).getByRole("link", { name: /View all/ })).toHaveAttribute("href", "/transactions");
+  });
+
+  it("leaves out account names with a single account", async () => {
+    overviewApi.getOverview.mockResolvedValue(
+      overview({ recent: [row({ id: 1, date: "2026-10-23", payee: "SALARY", amount_cents: 240000, account_name: "Joint" })] }),
+    );
+    renderPage();
+    const recent = await screen.findByRole("region", { name: "Recent transactions" });
+
+    const [only] = await within(recent).findAllByRole("listitem");
+    expect(only.textContent).not.toMatch(/Joint/);
   });
 });
 

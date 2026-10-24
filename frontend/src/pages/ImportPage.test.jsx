@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ImportPage } from "./ImportPage";
+import { AccountsProvider } from "../accounts/AccountsContext";
 import { ToastProvider } from "../components/ui/Toast";
 import * as accountsApi from "../api/accounts";
 import * as importsApi from "../api/imports";
@@ -217,5 +218,51 @@ describe("ImportPage while committing", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("Import starts on the right account", () => {
+  const ACCOUNTS = [
+    { id: 1, name: "Revolut", current_balance_cents: 0, archived: false },
+    { id: 2, name: "Crelan", current_balance_cents: 0, archived: false },
+  ];
+
+  function renderAt(path) {
+    render(
+      <MemoryRouter initialEntries={[path]}>
+        <ToastProvider>
+          <ReviewCountProvider>
+            <AccountsProvider>
+              <ImportPage />
+            </AccountsProvider>
+          </ReviewCountProvider>
+        </ToastProvider>
+      </MemoryRouter>,
+    );
+  }
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    accountsApi.listAccounts.mockResolvedValue(ACCOUNTS);
+  });
+
+  it("preselects the account in the address", async () => {
+    window.localStorage.setItem("reconciled.lastAccount", "1");
+    renderAt("/import?account=2");
+
+    await waitFor(() => expect(screen.getByRole("combobox", { name: /account/i })).toHaveTextContent("Crelan"));
+  });
+
+  it("otherwise starts on the last-opened account", async () => {
+    window.localStorage.setItem("reconciled.lastAccount", "2");
+    renderAt("/import");
+
+    await waitFor(() => expect(screen.getByRole("combobox", { name: /account/i })).toHaveTextContent("Crelan"));
+  });
+
+  it("ignores an account that isn't active", async () => {
+    renderAt("/import?account=99");
+
+    await waitFor(() => expect(screen.getByRole("combobox", { name: /account/i })).toHaveTextContent("Revolut"));
   });
 });

@@ -1,6 +1,6 @@
 from datetime import date
 
-from django.db.models import BigIntegerField, Case, Count, Sum, When
+from django.db.models import BigIntegerField, Case, Count, Max, Sum, When
 from django.db.models.functions import TruncMonth
 from django.utils import timezone
 from rest_framework.response import Response
@@ -10,7 +10,6 @@ from accounts.models import Account
 from budgets.models import Category
 from budgets.summary import budget_rows
 from budgets.utils import month_range, parse_month
-from forecasting.utils import generate_forecast
 from imports.models import ImportSession
 from transactions.categorize import needs_review, uncategorized
 from transactions.models import Transaction
@@ -133,7 +132,6 @@ def _today():
 # of the month's pace - see openspec/specs/overview.
 WARNING_SHARE = 85
 RECENT_COUNT = 8
-FORECAST_DAYS = 90
 
 
 def _attention_categories(rows, pace):
@@ -180,6 +178,7 @@ def _recent_row(txn):
         "date": txn.date,
         "payee": txn.payee,
         "amount_cents": txn.amount_cents,
+        "account_name": txn.account.name,
         "category_label": _category_label(category),
         "is_tab": bool(category and category.parent_id and category.parent.is_tab_group),
         "transfer_account_name": counterpart.account.name if counterpart else None,
@@ -188,25 +187,36 @@ def _recent_row(txn):
 
 
 class OverviewView(APIView):
-    """Every figure the overview shows for one account and one month, in
-    one request - see openspec/specs/overview. Budget and attention
-    figures are household-wide, like the Budgets page; balance, in/out,
-    forecast and recent belong to the account."""
+    """Every figure the overview shows for one month across all active
+    accounts, in one request - see openspec/specs/overview."""
 
     def get(self, request):
         month, error = _month_param(request, "month")
         if error:
             return error
-        try:
-            account = Account.objects.get(pk=request.query_params.get("account"))
-        except (Account.DoesNotExist, ValueError, TypeError):
-            return Response({"detail": "Account not found."}, status=404)
 
         today = _today()
         current = month == today.replace(day=1)
         month_end = month_range(month)
 
-        in_month = active_transactions().filter(account=account, date__gte=month, date__lt=month_end)
+        accounts = list(Account.objects.filter(archived=False).order_by("name", "id"))
+        last_imports = dict(
+            ImportSession.objects.filter(account__in=accounts, status=ImportSession.Status.COMMITTED)
+            .values("account_id")
+            .annotate(last=Max("updated_at"))
+            .values_list("account_id", "last")
+        )
+        account_rows = [
+            {
+                "id": a.id,
+                "name": a.name,
+                "balance_cents": a.current_balance_cents,
+                "last_import_date": timezone.localdate(last_imports[a.id]) if a.id in last_imports else None,
+            }
+            for a in accounts
+        ]
+
+        in_month = active_transactions().filter(date__gte=month, date__lt=month_end)
         totals = in_month.aggregate(
             money_in=Sum(Case(When(amount_cents__gt=0, then="amount_cents"), default=0, output_field=BigIntegerField())),
             money_out=Sum(Case(When(amount_cents__lt=0, then="amount_cents"), default=0, output_field=BigIntegerField())),
@@ -218,18 +228,13 @@ class OverviewView(APIView):
         days_in_month = (month_end - month).days
         pace = today.day / days_in_month if current else None
 
-        last_import = (
-            account.import_sessions.filter(status=ImportSession.Status.COMMITTED).order_by("-updated_at").first()
-        )
-
-        forecast = generate_forecast(account, FORECAST_DAYS, today=today)
-        low = min(forecast["points"], key=lambda p: p["balance_cents"])
-        upcoming = forecast["occurrences"][0] if forecast["occurrences"] else None
-
+        # A transfer between two active accounts is listed once, by its
+        # outgoing leg.
         recent = (
             Transaction.objects.ledger_rows()
-            .filter(account=account)
-            .select_related("category__parent", "transfer_counterpart__account")
+            .filter(account__in=accounts)
+            .exclude(amount_cents__gt=0, transfer_counterpart__account__archived=False)
+            .select_related("account", "category__parent", "transfer_counterpart__account")
             .annotate(part_count=Count("parts"))
             .order_by("-date", "-id")[:RECENT_COUNT]
         )
@@ -237,12 +242,8 @@ class OverviewView(APIView):
         return Response(
             {
                 "month": month.strftime("%Y-%m"),
-                "account": {
-                    "id": account.id,
-                    "name": account.name,
-                    "balance_cents": account.current_balance_cents,
-                    "last_import_date": timezone.localdate(last_import.updated_at) if last_import else None,
-                },
+                "balance_cents": sum(a["balance_cents"] for a in account_rows),
+                "accounts": account_rows,
                 "in_out": {
                     "in_cents": totals["money_in"] or 0,
                     "out_cents": -(totals["money_out"] or 0),
@@ -262,16 +263,6 @@ class OverviewView(APIView):
                     "review_count": needs_review().count(),
                     "uncategorized_count": uncategorized().count(),
                     "categories": _attention_categories(rows, pace),
-                },
-                "forecast": {
-                    "low_cents": low["balance_cents"],
-                    "low_date": low["date"],
-                    "next": (
-                        {"payee": upcoming["payee"], "amount_cents": upcoming["amount_cents"], "date": upcoming["date"]}
-                        if upcoming
-                        else None
-                    ),
-                    "has_recurring": account.recurring_transactions.exists(),
                 },
                 "recent": [_recent_row(t) for t in recent],
             }

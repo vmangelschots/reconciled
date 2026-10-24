@@ -8,7 +8,6 @@ from rest_framework.test import APIClient
 
 from accounts.models import Account
 from budgets.models import Category, CategoryLimit
-from forecasting.models import RecurringTransaction
 from imports.models import ImportSession
 from transactions.models import Transaction
 from transactions.splits import SplitLine, save_split
@@ -44,10 +43,8 @@ class OverviewTests(TestCase):
     def limit(self, category, cents, month=None):
         CategoryLimit.objects.create(category=category, month=month, limit_cents=cents)
 
-    def get(self, month="2026-10", account=None):
-        return self.client.get(
-            reverse("report-overview"), {"month": month, "account": (account or self.joint).pk}
-        )
+    def get(self, month="2026-10"):
+        return self.client.get(reverse("report-overview"), {"month": month})
 
     def body(self, **kwargs):
         response = self.get(**kwargs)
@@ -56,7 +53,21 @@ class OverviewTests(TestCase):
 
     # --- balance ---
 
-    def test_balance_and_the_months_change_without_transfers_or_tabs(self):
+    def test_total_and_per_account_balances(self):
+        self.txn(240000, 1, category=self.income)
+        self.txn(-119000, 3, category=self.groceries)
+        self.txn(50000, 4, account=self.savings, category=self.income)
+
+        body = self.body()
+
+        self.assertEqual(
+            [(a["name"], a["balance_cents"]) for a in body["accounts"]],
+            [("Joint", 121000), ("Savings", 50000)],
+        )
+        self.assertEqual(body["balance_cents"], 171000)
+        self.assertEqual(body["in_out"], {"in_cents": 290000, "out_cents": 119000})
+
+    def test_the_months_change_leaves_out_transfers_and_tabs(self):
         tabs = Category.objects.create(name="Tabs", is_tab_group=True)
         jan = Category.objects.create(name="Jan", parent=tabs)
         self.txn(240000, 1, category=self.income)
@@ -67,8 +78,26 @@ class OverviewTests(TestCase):
 
         body = self.body()
 
-        self.assertEqual(body["account"]["balance_cents"], 240000 - 119000 - 50000 - 3000 - 1000)
+        self.assertEqual(body["balance_cents"], 240000 - 119000 - 3000 - 1000)
         self.assertEqual(body["in_out"], {"in_cents": 240000, "out_cents": 119000})
+
+    def test_a_transfer_between_accounts_changes_nothing(self):
+        self.txn(100000, 1, month=9)
+        before = self.body()["balance_cents"]
+        link_transfer(self.txn(-50000, 5), self.savings)
+
+        body = self.body()
+
+        self.assertEqual(body["balance_cents"], before)
+        self.assertEqual(body["in_out"], {"in_cents": 0, "out_cents": 0})
+
+    def test_archived_accounts_are_left_out(self):
+        old = Account.objects.create(name="Old", account_type="checking", starting_balance_cents=50000, archived=True)
+
+        body = self.body()
+
+        self.assertNotIn(old.id, [a["id"] for a in body["accounts"]])
+        self.assertEqual(body["balance_cents"], 0)
 
     # --- budget ---
 
@@ -185,37 +214,18 @@ class OverviewTests(TestCase):
 
         self.assertEqual((attention["review_count"], attention["uncategorized_count"]), (1, 2))
 
-    def test_last_import_date(self):
-        self.assertIsNone(self.body()["account"]["last_import_date"])
+    def test_last_import_date_per_account(self):
+        self.assertEqual([a["last_import_date"] for a in self.body()["accounts"]], [None, None])
 
-        for status, day in ((ImportSession.Status.COMMITTED, 12), (ImportSession.Status.PENDING, 20)):
+        for status, day in ((ImportSession.Status.COMMITTED, 12), (ImportSession.Status.COMMITTED, 3),
+                            (ImportSession.Status.PENDING, 20)):
             session = ImportSession.objects.create(account=self.joint, file_format="csv", raw_content="", status=status)
             ImportSession.objects.filter(pk=session.pk).update(
                 updated_at=datetime(2026, 10, day, 10, tzinfo=dt_timezone.utc)
             )
 
-        self.assertEqual(self.body()["account"]["last_import_date"], "2026-10-12")
-
-    # --- forecast ---
-
-    def test_low_point_and_next_recurring(self):
-        self.txn(136000, 1)
-        RecurringTransaction.objects.create(
-            account=self.joint, amount_cents=-95000, payee="Rent", frequency="monthly", start_date=date(2026, 11, 1)
-        )
-
-        forecast = self.body()["forecast"]
-
-        self.assertEqual(forecast["next"], {"payee": "Rent", "amount_cents": -95000, "date": "2026-11-01"})
-        self.assertEqual((forecast["low_cents"], forecast["low_date"]), (136000 - 3 * 95000, "2027-01-01"))
-        self.assertTrue(forecast["has_recurring"])
-
-    def test_nothing_recurring(self):
-        self.txn(5000, 1)
-
-        forecast = self.body()["forecast"]
-
-        self.assertEqual((forecast["next"], forecast["has_recurring"], forecast["low_cents"]), (None, False, 5000))
+        accounts = {a["name"]: a["last_import_date"] for a in self.body()["accounts"]}
+        self.assertEqual(accounts, {"Joint": "2026-10-12", "Savings": None})
 
     # --- recent ---
 
@@ -224,12 +234,39 @@ class OverviewTests(TestCase):
             self.txn(-100 * day, day, payee=f"p{day}")
         dinner = self.txn(-6000, 20, payee="Pizzeria")
         save_split(dinner, [SplitLine(-3000, category=self.restaurants), SplitLine(-3000)])
-        self.txn(-500, 21, payee="other account", account=self.savings)
+        self.txn(-500, 15, payee="other account", account=self.savings)
 
         recent = self.body()["recent"]
 
-        self.assertEqual([r["payee"] for r in recent], ["Pizzeria"] + [f"p{d}" for d in range(10, 3, -1)])
+        self.assertEqual(
+            [r["payee"] for r in recent], ["Pizzeria", "other account"] + [f"p{d}" for d in range(10, 4, -1)]
+        )
         self.assertEqual((recent[0]["part_count"], recent[0]["category_label"]), (2, None))
+        self.assertEqual((recent[0]["account_name"], recent[1]["account_name"]), ("Joint", "Savings"))
+
+    def test_a_transfer_shows_once(self):
+        for day in range(1, 11):
+            self.txn(-100 * day, day, payee=f"p{day}")
+        link_transfer(self.txn(-50000, 20, payee="to savings"), self.savings)
+
+        recent = self.body()["recent"]
+
+        self.assertEqual(len(recent), 8)
+        self.assertEqual(
+            (recent[0]["payee"], recent[0]["account_name"], recent[0]["transfer_account_name"], recent[0]["amount_cents"]),
+            ("to savings", "Joint", "Savings", -50000),
+        )
+        self.assertNotIn(50000, [r["amount_cents"] for r in recent])
+
+    def test_a_transfer_from_an_archived_account_keeps_its_incoming_leg(self):
+        old = Account.objects.create(name="Old", account_type="checking", starting_balance_cents=0)
+        link_transfer(self.txn(-50000, 20, account=old, payee="closing"), self.joint)
+        old.archived = True
+        old.save()
+
+        recent = self.body()["recent"]
+
+        self.assertEqual([(r["account_name"], r["amount_cents"]) for r in recent], [("Joint", 50000)])
 
     def test_recent_labels(self):
         supermarket = Category.objects.create(name="Supermarket", parent=self.groceries)
@@ -247,10 +284,6 @@ class OverviewTests(TestCase):
 
     # --- errors ---
 
-    def test_bad_month_and_unknown_account(self):
+    def test_bad_or_missing_month(self):
         self.assertEqual(self.get(month="2026-13").status_code, 400)
-        self.assertEqual(self.client.get(reverse("report-overview"), {"account": self.joint.pk}).status_code, 400)
-        self.assertEqual(
-            self.client.get(reverse("report-overview"), {"month": "2026-10", "account": 99999}).status_code, 404
-        )
-        self.assertEqual(self.client.get(reverse("report-overview"), {"month": "2026-10"}).status_code, 404)
+        self.assertEqual(self.client.get(reverse("report-overview")).status_code, 400)

@@ -1,15 +1,39 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { TransactionsPage } from "./TransactionsPage";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
+import { TransactionsIndex, TransactionsPage } from "./TransactionsPage";
+import { AccountsProvider } from "../accounts/AccountsContext";
 import { ToastProvider } from "../components/ui/Toast";
 import * as accountsApi from "../api/accounts";
 import * as categoriesApi from "../api/categories";
 import * as transactionsApi from "../api/transactions";
 
+function Where() {
+  const location = useLocation();
+  return <p data-testid="where">{location.pathname + location.search}</p>;
+}
+
+// The ledger lives at /transactions/:accountId, inside the accounts context.
+function renderAt(path) {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <ToastProvider>
+        <AccountsProvider>
+          <Routes>
+            <Route path="/transactions" element={<TransactionsIndex />} />
+            <Route path="/transactions/:accountId" element={<TransactionsPage />} />
+            <Route path="*" element={<Where />} />
+          </Routes>
+        </AccountsProvider>
+      </ToastProvider>
+    </MemoryRouter>,
+  );
+}
+
 vi.mock("../api/accounts", async () => {
   const actual = await vi.importActual("../api/accounts");
-  return { ...actual, listAccounts: vi.fn() };
+  return { ...actual, listAccounts: vi.fn(), getAccount: vi.fn() };
 });
 
 vi.mock("../api/categories", async () => {
@@ -76,11 +100,7 @@ function apiError(detail, line = null) {
 
 function renderPage(rows = [splitDinner(), BISTRO, TO_SAVINGS]) {
   transactionsApi.listTransactions.mockResolvedValue(rows);
-  render(
-    <ToastProvider>
-      <TransactionsPage />
-    </ToastProvider>,
-  );
+  renderAt("/transactions/1");
 }
 
 async function findTable() {
