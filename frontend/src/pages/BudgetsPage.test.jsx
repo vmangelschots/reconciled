@@ -1,6 +1,7 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { BudgetsPage } from "./BudgetsPage";
 import { ToastProvider } from "../components/ui/Toast";
 import * as budgetsApi from "../api/budgets";
@@ -40,11 +41,28 @@ const SUMMARY = {
   uncategorized_spent_cents: 0,
 };
 
-function renderPage() {
+function Where() {
+  const location = useLocation();
+  return <p data-testid="where">{location.search}</p>;
+}
+
+function renderPage(path = "/budgets") {
   return render(
-    <ToastProvider>
-      <BudgetsPage />
-    </ToastProvider>,
+    <MemoryRouter initialEntries={[path]}>
+      <ToastProvider>
+        <Routes>
+          <Route
+            path="/budgets"
+            element={
+              <>
+                <BudgetsPage />
+                <Where />
+              </>
+            }
+          />
+        </Routes>
+      </ToastProvider>
+    </MemoryRouter>,
   );
 }
 
@@ -144,5 +162,36 @@ describe("BudgetsPage tab groups", () => {
     await userEvent.click(within(janRow).getByRole("button", { name: "Rename" }));
 
     expect(screen.getByText("Tab, from Tabs")).toBeInTheDocument();
+  });
+});
+
+describe("BudgetsPage month", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("opens on the month in the address", async () => {
+    renderPage("/budgets?month=2026-09");
+
+    await waitFor(() => expect(budgetsApi.getBudgetSummary).toHaveBeenCalledWith("2026-09"));
+    expect(screen.getByText(new Date(2026, 8, 1).toLocaleString(undefined, { month: "long", year: "numeric" }))).toBeInTheDocument();
+  });
+
+  it("writes the month back to the address when switching", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 9, 24));
+    renderPage();
+    await waitFor(() => expect(budgetsApi.getBudgetSummary).toHaveBeenCalledWith("2026-10"));
+
+    await userEvent.click(screen.getByRole("button", { name: "Previous month" }));
+
+    await waitFor(() => expect(budgetsApi.getBudgetSummary).toHaveBeenLastCalledWith("2026-09"));
+    expect(screen.getByTestId("where")).toHaveTextContent("?month=2026-09");
+  });
+
+  it("takes the current month from local time", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 10, 1, 0, 30)); // 1 Nov 00:30 local
+    renderPage();
+
+    await waitFor(() => expect(budgetsApi.getBudgetSummary).toHaveBeenCalledWith("2026-11"));
   });
 });

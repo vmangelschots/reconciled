@@ -1,5 +1,6 @@
 import { HandCoins } from "lucide-react";
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { getBudgetSummary } from "../api/budgets";
 import {
   createCategory,
@@ -11,14 +12,18 @@ import {
 import { listTabs } from "../api/tabs";
 import { CategoryCombobox } from "../components/CategoryCombobox";
 import { Button } from "../components/ui/Button";
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
+import { EmptyState } from "../components/ui/EmptyState";
 import { Input } from "../components/ui/Input";
 import { Label } from "../components/ui/Label";
+import { MonthSwitcher } from "../components/ui/MonthSwitcher";
+import { PageHeader } from "../components/ui/PageHeader";
+import { Panel } from "../components/ui/Panel";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/Table";
 import { useToast } from "../components/ui/Toast";
 import { buildCategoryTree } from "../lib/categoryTree";
 import { cn } from "../lib/cn";
 import { formatMoney } from "../lib/money";
+import { currentMonth, isMonth } from "../lib/months";
 import { tabSentence, TONE_CLASS } from "../lib/tabs";
 
 // A missing limit shows as a dash rather than an amount.
@@ -27,13 +32,13 @@ function formatCents(cents) {
   return formatMoney(cents);
 }
 
-function currentMonth() {
-  return new Date().toISOString().slice(0, 7);
-}
-
 export function BudgetsPage() {
   const [categories, setCategories] = useState([]);
-  const [month, setMonth] = useState(currentMonth());
+  // The month lives in the address (?month=YYYY-MM) so the overview can
+  // link to a given month - see specs/budgets.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const month = isMonth(searchParams.get("month")) ? searchParams.get("month") : currentMonth();
+  const setMonth = (m) => setSearchParams({ month: m }, { replace: true });
   const [summary, setSummary] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [pendingIds, setPendingIds] = useState(new Set());
@@ -118,13 +123,12 @@ export function BudgetsPage() {
 
   return (
     <section className="flex flex-col gap-6">
-      <h1 className="text-xl font-semibold text-ink-primary">Budgets</h1>
+      <PageHeader title="Budgets">
+        <MonthSwitcher month={month} onChange={setMonth} />
+      </PageHeader>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Categories</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
+      <Panel title="Categories">
+        <div className="flex flex-col gap-4">
           <CategoryForm categories={categories} onSubmit={handleAddCategory} submitLabel="Add category" />
 
           <ul className="flex flex-col gap-3">
@@ -163,35 +167,23 @@ export function BudgetsPage() {
               </li>
             ))}
             {categoryTree.length === 0 && (
-              <li className="text-sm text-ink-secondary">No categories yet - add one above.</li>
+              <li>
+                <EmptyState>No categories yet - add one above.</EmptyState>
+              </li>
             )}
           </ul>
-        </CardContent>
-      </Card>
-
-      <div className="flex flex-col gap-4">
-        <div className="flex items-end justify-between">
-          <h2 className="text-lg font-semibold text-ink-primary">Monthly summary</h2>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="summary-month">Month</Label>
-            <Input
-              id="summary-month"
-              type="month"
-              value={month}
-              onChange={(e) => setMonth(e.target.value)}
-              className="w-40"
-            />
-          </div>
         </div>
+      </Panel>
 
+      <Panel title="Monthly summary" flush loading={!summary} className="overflow-hidden">
         {summary && (
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Category</TableHead>
-                <TableHead>Limit</TableHead>
-                <TableHead>Spent</TableHead>
-                <TableHead>Remaining</TableHead>
+                <TableHead className="text-right">Limit</TableHead>
+                <TableHead className="text-right">Spent</TableHead>
+                <TableHead className="text-right">Remaining</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Set limit</TableHead>
               </TableRow>
@@ -202,16 +194,16 @@ export function BudgetsPage() {
               ))}
               <TableRow>
                 <TableCell>Uncategorized</TableCell>
-                <TableCell>—</TableCell>
-                <TableCell>{formatCents(summary.uncategorized_spent_cents)}</TableCell>
-                <TableCell>—</TableCell>
+                <TableCell className="text-right text-ink-muted">—</TableCell>
+                <TableCell className="num text-right">{formatCents(summary.uncategorized_spent_cents)}</TableCell>
+                <TableCell className="text-right text-ink-muted">—</TableCell>
                 <TableCell>—</TableCell>
                 <TableCell />
               </TableRow>
             </TableBody>
           </Table>
         )}
-      </div>
+      </Panel>
     </section>
   );
 }
@@ -221,10 +213,12 @@ function SummaryRows({ row, onSetLimit, indent = false }) {
     <>
       <TableRow>
         <TableCell className={indent ? "pl-8 text-ink-secondary" : undefined}>{row.category_name}</TableCell>
-        <TableCell>{formatCents(row.limit_cents)}</TableCell>
-        <TableCell>{formatCents(row.spent_cents)}</TableCell>
-        <TableCell>{formatCents(row.remaining_cents)}</TableCell>
-        <TableCell className={cn(row.over_limit && "font-semibold text-critical")}>
+        <TableCell className="num text-right">{formatCents(row.limit_cents)}</TableCell>
+        <TableCell className="num text-right">{formatCents(row.spent_cents)}</TableCell>
+        <TableCell className={cn("num text-right", row.over_limit && "text-critical")}>
+          {formatCents(row.remaining_cents)}
+        </TableCell>
+        <TableCell className={cn(row.over_limit ? "font-semibold text-critical" : "text-ink-secondary")}>
           {row.limit_cents == null ? "No limit" : row.over_limit ? "Over limit" : "OK"}
         </TableCell>
         <TableCell>
