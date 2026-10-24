@@ -99,3 +99,59 @@ class TabGroupIsNotAssignableTests(TabApiTestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertUnchanged()
+
+
+class TabEndpointTests(TabApiTestCase):
+    def test_list(self):
+        employer = Category.objects.create(name="Employer", parent=self.tabs)
+        self.txn(-3000, 3, category=self.jan)
+        self.txn(-41250, 1, month=9, category=employer)
+
+        body = self.client.get(reverse("tab-list")).json()
+
+        self.assertEqual(
+            body,
+            [
+                {"id": employer.pk, "name": "Employer", "group_name": "Tabs", "balance_cents": 41250,
+                 "open_since": "2026-09-01", "row_count": 1},
+                {"id": self.jan.pk, "name": "Jan", "group_name": "Tabs", "balance_cents": 3000,
+                 "open_since": "2026-10-03", "row_count": 1},
+            ],
+        )
+
+    def test_list_is_empty_without_tabs(self):
+        self.jan.delete()
+
+        self.assertEqual(self.client.get(reverse("tab-list")).json(), [])
+
+    def test_detail_rows(self):
+        dinner = self.txn(-6000, 3, payee="Pizzeria")
+        self.client.put(
+            reverse("transaction-split", args=[dinner.pk]),
+            {"parts": [{"amount_cents": -3000, "category": self.restaurants.pk},
+                       {"amount_cents": -3000, "category": self.jan.pk, "notes": "Jan's half"}]},
+            format="json",
+        )
+        repaid = self.txn(3000, 12, payee="JAN PEETERS", category=self.jan)
+        part = dinner.parts.get(category=self.jan)
+
+        body = self.client.get(reverse("tab-detail", args=[self.jan.pk])).json()
+
+        self.assertEqual((body["balance_cents"], body["open_since"], body["row_count"]), (0, None, 2))
+        self.assertEqual(
+            body["rows"],
+            [
+                {"id": part.pk, "date": "2026-10-03", "payee": "Pizzeria", "notes": "Jan's half",
+                 "amount_cents": -3000, "running_balance_cents": 3000, "split_parent": dinner.pk,
+                 "parent_amount_cents": -6000},
+                {"id": repaid.pk, "date": "2026-10-12", "payee": "JAN PEETERS", "notes": "",
+                 "amount_cents": 3000, "running_balance_cents": 0, "split_parent": None,
+                 "parent_amount_cents": None},
+            ],
+        )
+
+    def test_detail_404s_for_anything_but_a_tab(self):
+        for pk in (self.restaurants.pk, self.tabs.pk, 99999, "x"):
+            with self.subTest(pk=pk):
+                response = self.client.get(f"/api/tabs/{pk}/")
+                self.assertEqual(response.status_code, 404)

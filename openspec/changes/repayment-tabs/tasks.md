@@ -17,7 +17,7 @@
 
 ## 3. Tab balances API
 
-- [ ] 3.1 Implement `transactions/tabs.py` (`tab_rows`, `summarize`, `balances`). Verify with `transactions/tests_tabs.py` covering:
+- [x] 3.1 Implement `transactions/tabs.py` (`tab_rows`, `summarize`, `balances`). Verify with `transactions/tests_tabs.py` covering:
   - "Half a dinner to a tab";
   - "A repayment settles the tab";
   - partial and lump-sum repayments;
@@ -26,7 +26,7 @@
   - both "open since" scenarios;
   - running balances per row;
   - a tab with rows in an archived account still counting.
-- [ ] 3.2 Add `GET /api/tabs/` and `GET /api/tabs/{id}/`. Verify with API tests:
+- [x] 3.2 Add `GET /api/tabs/` and `GET /api/tabs/{id}/`. Verify with API tests:
   - the list's fields and order (largest balance first);
   - an empty list when no tab exists;
   - the detail rows with `parent_amount_cents` on a part;
