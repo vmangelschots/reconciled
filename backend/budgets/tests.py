@@ -352,3 +352,35 @@ class TabGroupTests(TestCase):
 
         self.assertEqual((rows["Tabs"]["is_tab_group"], rows["Jan"]["is_tab"]), (True, True))
         self.assertEqual(rows["Jan"]["transaction_count"], 0)
+
+
+class TabsAreNotBudgetedTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        user = get_user_model().objects.create_user(username="budgeter", password="x")
+        self.client.force_authenticate(user=user)
+        self.account = Account.objects.create(
+            name="Main Checking", account_type="checking", starting_balance_cents=0
+        )
+        self.groceries = Category.objects.create(name="Groceries")
+        self.tabs = Category.objects.create(name="Tabs", is_tab_group=True)
+        self.jan = Category.objects.create(name="Jan", parent=self.tabs)
+
+    def test_tabs_are_not_in_the_summary(self):
+        Transaction.objects.create(
+            account=self.account, date="2026-10-03", amount_cents=-3000, payee="Pizzeria", category=self.jan
+        )
+
+        summary = self.client.get(reverse("budget-summary"), {"month": "2026-10"}).json()
+
+        self.assertEqual([c["category_name"] for c in summary["categories"]], ["Groceries"])
+        self.assertEqual(summary["uncategorized_spent_cents"], 0)
+
+    def test_no_limit_on_a_tab(self):
+        for category in (self.jan, self.tabs):
+            with self.subTest(category=category.name):
+                response = self.client.put(
+                    reverse("category-set-limit", args=[category.id]), {"limit_cents": 1000}, format="json"
+                )
+                self.assertEqual(response.status_code, 400)
+        self.assertFalse(CategoryLimit.objects.exists())

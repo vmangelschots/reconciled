@@ -11,9 +11,9 @@
 
 ## 2. Reports leave tabs out
 
-- [ ] 2.1 Add `outside_tabs()` to `reports._active_transactions()`. Verify with `reports/tests.py` cases for "Half a dinner to a tab" (money out 30.00, "Restaurants" 30.00, no "Tabs" entry) and "A repayment is not income".
-- [ ] 2.2 Make `BudgetSummaryView` skip tab groups and tabs, and `set_limit` return 400 for them. Verify with `budgets/tests.py` cases for "Tabs are not in the summary" (including the uncategorized total) and "No limit on a tab".
-- [ ] 2.3 Leave tab groups and tabs out of `category_labels()`, and drop AI answers naming them. Verify with `tests_categorize.py` cases for "Tabs are not sent to the AI" (fake guesser records its categories), an AI answer naming a tab being ignored, and "History learns a repayer".
+- [x] 2.1 Add `outside_tabs()` to `reports._active_transactions()`. Verify with `reports/tests.py` cases for "Half a dinner to a tab" (money out 30.00, "Restaurants" 30.00, no "Tabs" entry) and "A repayment is not income".
+- [x] 2.2 Make `BudgetSummaryView` skip tab groups and tabs, and `set_limit` return 400 for them. Verify with `budgets/tests.py` cases for "Tabs are not in the summary" (including the uncategorized total) and "No limit on a tab".
+- [x] 2.3 Leave tab groups and tabs out of `category_labels()`, and drop AI answers naming them. Verify with `tests_categorize.py` cases for "Tabs are not sent to the AI" (fake guesser records its categories), an AI answer naming a tab being ignored, and "History learns a repayer".
 
 ## 3. Tab balances API
 

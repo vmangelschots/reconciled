@@ -97,10 +97,15 @@ class CategorizeResult:
 
 
 def category_labels():
-    """[(id, label)] for every category, "Parent / Child" for a subcategory."""
+    """[(id, label)] for every category the AI may guess, "Parent / Child"
+    for a subcategory. Tab groups and tabs are left out: whether someone
+    owes money back isn't something a payee name can tell."""
     return [
         (c.id, f"{c.parent.name} / {c.name}" if c.parent_id else c.name)
-        for c in Category.objects.select_related("parent").order_by("id")
+        for c in Category.objects.select_related("parent")
+        .filter(is_tab_group=False)
+        .exclude(parent__is_tab_group=True)
+        .order_by("id")
     ]
 
 
