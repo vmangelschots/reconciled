@@ -246,11 +246,19 @@ export function OverviewPage() {
   const tabs = useReport(listTabs, "tabs");
 
   const header = (
-    <PageHeader title="Overview">
+    <PageHeader
+      title="Overview"
+      actions={
+        <Link to="/import" className={buttonVariants({ variant: "outline" })}>
+          <Upload className="h-4 w-4" aria-hidden="true" />
+          Import
+        </Link>
+      }
+    >
       <MonthSwitcher month={month} onChange={setMonth} short={!isWide} />
       {accounts.length > 1 && (
         <Select value={accountId != null ? String(accountId) : ""} onValueChange={(v) => setAccountId(Number(v))}>
-          <SelectTrigger className="w-full sm:w-48" aria-label="Account">
+          <SelectTrigger className="min-w-0 flex-1 sm:w-48 sm:flex-none" aria-label="Account">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -262,10 +270,6 @@ export function OverviewPage() {
           </SelectContent>
         </Select>
       )}
-      <Link to="/import" className={buttonVariants({ variant: "outline" })}>
-        <Upload className="h-4 w-4" aria-hidden="true" />
-        Import
-      </Link>
     </PageHeader>
   );
 
@@ -298,7 +302,7 @@ export function OverviewPage() {
     <section className="flex flex-col gap-6">
       {header}
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-3">
         <Panel aria-label="Balance" loading={tileLoading} error={overviewError}>
           {data && <BalanceTile data={data} month={month} isCurrent={isCurrent} />}
         </Panel>

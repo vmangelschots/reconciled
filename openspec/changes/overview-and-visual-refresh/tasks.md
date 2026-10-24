@@ -60,7 +60,7 @@
   - layout: the tabs panel scenarios and "One panel fails".
 
   Move the useful `DashboardPage.test.jsx` cases over and delete the old page.
-- [ ] 3.2 Lay the overview out with `grid-template-areas` at `lg` and the phone order as DOM order. On a phone, the tiles are compact and "all in order" is a single line. Verify in the browser at 1440px, 1024px, 800px and 390px:
+- [x] 3.2 Lay the overview out with `grid-template-areas` at `lg` and the phone order as DOM order. On a phone, the tiles are compact and "all in order" is a single line. Verify in the browser at 1440px, 1024px, 800px and 390px:
   - the order matches the spec;
   - "No tabs, no gap" holds;
   - nothing scrolls sideways;
@@ -77,7 +77,7 @@
   - **the tab page.**
 
   Verify that their test suites pass, add Budgets tests for "A link opens the right month", "Switching updates the address" and "Local time decides the current month", and check each page in the browser at desktop width and at 390px.
-- [ ] 4.3 Run the whole flow in the local stack in both themes:
+- [x] 4.3 Run the whole flow in the local stack in both themes:
   - navigate everything from the sidebar and from the tab bar's More sheet;
   - switch the overview's month and account;
   - follow each needs-attention link;

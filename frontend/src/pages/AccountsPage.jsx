@@ -92,9 +92,10 @@ export function AccountsPage() {
 
   return (
     <section className="flex flex-col gap-6">
-      <PageHeader title="Accounts">
-        {!showAddForm && <Button onClick={() => setAdding(true)}>Add account</Button>}
-      </PageHeader>
+      <PageHeader
+        title="Accounts"
+        actions={!showAddForm && <Button onClick={() => setAdding(true)}>Add account</Button>}
+      />
 
       {showAddForm && (
         <Card>
