@@ -1,5 +1,7 @@
 # Proposal
 
+Issue: #7
+
 ## Why
 
 Some money leaves the joint account only for a while:
