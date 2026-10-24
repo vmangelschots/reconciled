@@ -2,12 +2,12 @@
 
 ## 1. Tab groups and tab rows
 
-- [ ] 1.1 Add `Category.is_tab_group` with a migration. Add `in_tabs()`/`outside_tabs()` to `TransactionQuerySet`. Expose writable `is_tab_group` and read-only `is_tab` and `transaction_count` on `CategorySerializer`. Validate:
+- [x] 1.1 Add `Category.is_tab_group` with a migration. Add `in_tabs()`/`outside_tabs()` to `TransactionQuerySet`. Expose writable `is_tab_group` and read-only `is_tab` and `transaction_count` on `CategorySerializer`. Validate:
   - only top-level categories take the flag;
   - a category with its own transactions can't become a tab group, and the error carries the count.
 
   Verify with `budgets/tests.py` cases for "Make a tab group", "Subcategories can't be marked", "A group with its own transactions can't become a tab group" and "A subcategory of a tab group is a tab", plus re-parenting out of a group ("Moving a category out of a tab group"). Also check that `makemigrations --check` is clean.
-- [ ] 1.2 Add `budgets/tabs.py` `check_assignable()` and call it from `TransactionSerializer.validate_category`, `SplitLineSerializer` (which also covers the unsplit keep) and `confirm_categories`. Verify with API tests: a tab group is rejected on PATCH, on a split line, on unsplit keep and on bulk confirm, and nothing changes.
+- [x] 1.2 Add `budgets/tabs.py` `check_assignable()` and call it from `TransactionSerializer.validate_category`, `SplitLineSerializer` (which also covers the unsplit keep) and `confirm_categories`. Verify with API tests: a tab group is rejected on PATCH, on a split line, on unsplit keep and on bulk confirm, and nothing changes.
 
 ## 2. Reports leave tabs out
 

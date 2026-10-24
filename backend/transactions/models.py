@@ -14,6 +14,16 @@ class TransactionQuerySet(models.QuerySet):
         sum over."""
         return self.exclude(Exists(Transaction.objects.filter(split_parent=OuterRef("pk"))))
 
+    def in_tabs(self):
+        """Rows whose category is a tab. A tab group itself never has
+        rows, so checking the parent is enough."""
+        return self.filter(category__parent__is_tab_group=True)
+
+    def outside_tabs(self):
+        """Everything except tab rows - what income and spending reports
+        count. Uncategorized rows stay in."""
+        return self.exclude(category__parent__is_tab_group=True)
+
 
 class Transaction(models.Model):
     class CategorySource(models.TextChoices):

@@ -267,3 +267,88 @@ class BudgetSummaryTests(TestCase):
 
         self.assertEqual(summary["categories"][0]["spent_cents"], 4000)
         self.assertEqual(summary["uncategorized_spent_cents"], 2000)
+
+
+class TabGroupTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        user = get_user_model().objects.create_user(username="budgeter", password="x")
+        self.client.force_authenticate(user=user)
+        self.account = Account.objects.create(
+            name="Main Checking", account_type="checking", starting_balance_cents=0
+        )
+        self.tabs = Category.objects.create(name="Tabs")
+
+    def patch(self, category, data):
+        return self.client.patch(reverse("category-detail", args=[category.id]), data, format="json")
+
+    def get(self, category):
+        return self.client.get(reverse("category-detail", args=[category.id])).json()
+
+    def test_make_a_tab_group(self):
+        jan = Category.objects.create(name="Jan", parent=self.tabs)
+
+        response = self.patch(self.tabs, {"is_tab_group": True})
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual((response.json()["is_tab_group"], response.json()["is_tab"]), (True, False))
+        self.assertEqual((self.get(jan)["is_tab_group"], self.get(jan)["is_tab"]), (False, True))
+
+    def test_a_tab_group_can_be_created_directly(self):
+        response = self.client.post(
+            reverse("category-list"), {"name": "Owed", "is_tab_group": True}, format="json"
+        )
+
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertTrue(Category.objects.get(name="Owed").is_tab_group)
+
+    def test_subcategories_cant_be_marked(self):
+        groceries = Category.objects.create(name="Groceries")
+        supermarket = Category.objects.create(name="Supermarket", parent=groceries)
+
+        response = self.patch(supermarket, {"is_tab_group": True})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("is_tab_group", response.json())
+        supermarket.refresh_from_db()
+        self.assertFalse(supermarket.is_tab_group)
+
+    def test_a_group_with_its_own_transactions_cant_become_a_tab_group(self):
+        for day in (1, 2):
+            Transaction.objects.create(
+                account=self.account, date=f"2026-01-0{day}", amount_cents=-1000, payee="x", category=self.tabs
+            )
+
+        response = self.patch(self.tabs, {"is_tab_group": True})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("2 transaction(s)", response.json()["is_tab_group"][0])
+
+    def test_rows_in_subcategories_dont_block_the_switch(self):
+        jan = Category.objects.create(name="Jan", parent=self.tabs)
+        Transaction.objects.create(account=self.account, date="2026-01-01", amount_cents=-1000, payee="x", category=jan)
+
+        self.assertEqual(self.patch(self.tabs, {"is_tab_group": True}).status_code, 200)
+        self.assertEqual(self.get(self.tabs)["transaction_count"], 0)
+        self.assertEqual(self.get(jan)["transaction_count"], 1)
+
+    def test_moving_a_category_out_of_a_tab_group(self):
+        self.tabs.is_tab_group = True
+        self.tabs.save()
+        gifts = Category.objects.create(name="Gifts")
+        jan = Category.objects.create(name="Jan", parent=self.tabs)
+        self.assertTrue(self.get(jan)["is_tab"])
+
+        self.patch(jan, {"parent": gifts.id})
+
+        self.assertFalse(self.get(jan)["is_tab"])
+
+    def test_list_carries_the_tab_fields(self):
+        self.tabs.is_tab_group = True
+        self.tabs.save()
+        Category.objects.create(name="Jan", parent=self.tabs)
+
+        rows = {c["name"]: c for c in self.client.get(reverse("category-list")).json()}
+
+        self.assertEqual((rows["Tabs"]["is_tab_group"], rows["Jan"]["is_tab"]), (True, True))
+        self.assertEqual(rows["Jan"]["transaction_count"], 0)

@@ -2,6 +2,7 @@ from rest_framework import serializers
 
 from accounts.models import Account
 from budgets.models import Category
+from budgets.tabs import check_assignable
 
 from .models import Transaction
 from .splits import SplitLine, sync_parts
@@ -90,6 +91,9 @@ class TransactionSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Amount must not be zero.")
         return value
 
+    def validate_category(self, category):
+        return check_assignable(category)
+
     def validate(self, attrs):
         # The transactions spec lists date/amount/payee/category/notes as
         # editable; account is deliberately not in that list, so a
@@ -171,6 +175,9 @@ class SplitLineSerializer(serializers.Serializer):
         queryset=Account.objects.all(), required=False, allow_null=True
     )
     notes = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate_category(self, category):
+        return check_assignable(category)
 
     def to_line(self):
         return SplitLine(

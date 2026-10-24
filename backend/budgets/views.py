@@ -1,4 +1,4 @@
-from django.db.models import Sum
+from django.db.models import Count, Sum
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -12,7 +12,7 @@ from .utils import month_range, parse_month
 
 
 class CategoryViewSet(viewsets.ModelViewSet):
-    queryset = Category.objects.all()
+    queryset = Category.objects.select_related("parent").annotate(transaction_count=Count("transactions"))
     serializer_class = CategorySerializer
 
     def destroy(self, request, *args, **kwargs):

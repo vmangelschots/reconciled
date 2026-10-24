@@ -7,6 +7,7 @@ from rest_framework.response import Response
 
 from accounts.models import Account
 from budgets.models import Category
+from budgets.tabs import TAB_GROUP_ERROR
 
 from .ai import get_guesser
 from .categorize import categorize, needs_review, review_groups, uncategorized
@@ -172,6 +173,8 @@ class TransactionViewSet(viewsets.ModelViewSet):
             category = Category.objects.get(pk=request.data["category"])
         except (Category.DoesNotExist, ValueError, TypeError):
             return Response({"category": ["Unknown category."]}, status=status.HTTP_400_BAD_REQUEST)
+        if category.is_tab_group:
+            return Response({"category": [TAB_GROUP_ERROR]}, status=status.HTTP_400_BAD_REQUEST)
         now = timezone.now()
         with db_transaction.atomic():
             kept = rows.filter(category=category).update(category_confirmed=True, updated_at=now)

@@ -4,10 +4,31 @@ from .models import Category
 
 
 class CategorySerializer(serializers.ModelSerializer):
+    is_tab = serializers.SerializerMethodField()
+    # Rows assigned directly to this category, so the settings know when
+    # changing a group's kind moves money in or out of the reports.
+    transaction_count = serializers.SerializerMethodField()
+
     class Meta:
         model = Category
-        fields = ["id", "name", "parent", "created_at", "updated_at"]
+        fields = [
+            "id",
+            "name",
+            "parent",
+            "is_tab_group",
+            "is_tab",
+            "transaction_count",
+            "created_at",
+            "updated_at",
+        ]
         read_only_fields = ["created_at", "updated_at"]
+
+    def get_is_tab(self, category):
+        return category.is_tab
+
+    def get_transaction_count(self, category):
+        count = getattr(category, "transaction_count", None)
+        return category.transactions.count() if count is None else count
 
     def validate_parent(self, parent):
         if parent is None:
@@ -36,4 +57,25 @@ class CategorySerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError(
                     {"name": "A category with this name already exists at this level."}
                 )
+        self._validate_tab_group(attrs, parent)
         return attrs
+
+    def _validate_tab_group(self, attrs, parent):
+        is_tab_group = attrs.get("is_tab_group", getattr(self.instance, "is_tab_group", False))
+        if not is_tab_group:
+            return
+        if parent is not None:
+            raise serializers.ValidationError(
+                {"is_tab_group": "Only a top-level category can be a tab group."}
+            )
+        if self.instance is not None and not self.instance.is_tab_group:
+            count = self.instance.transactions.count()
+            if count:
+                raise serializers.ValidationError(
+                    {
+                        "is_tab_group": (
+                            f"{count} transaction(s) are assigned to this category itself. "
+                            "Reassign them before making it a tab group."
+                        )
+                    }
+                )

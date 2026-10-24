@@ -22,6 +22,9 @@ class Category(models.Model):
     parent = models.ForeignKey(
         "self", null=True, blank=True, on_delete=models.CASCADE, related_name="subcategories"
     )
+    # Only a top-level category can be a tab group; its subcategories are
+    # the tabs. See budgets/tabs.py and openspec/specs/repayment-tabs.
+    is_tab_group = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -43,6 +46,10 @@ class Category(models.Model):
 
     def __str__(self):
         return self.name
+
+    @property
+    def is_tab(self):
+        return self.parent_id is not None and self.parent.is_tab_group
 
     def clean(self):
         if self.parent_id is not None:
