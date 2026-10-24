@@ -35,8 +35,8 @@
 
 ## 4. Frontend
 
-- [ ] 4.1 Add `saveSplit(id, parts)` and `unsplit(id, keep)` to `api/transactions.js`. Add an optional `onSplit` prop to `CategoryCombobox`: a "Split…" action after a separator with the `Split` icon, ranked last but first while the search is a prefix of "split". Verify with `CategoryCombobox.test.jsx`: "sp" plus Enter calls `onSplit` even with a "Sports" category, "gro" plus Enter still picks "Groceries", and no option is listed without the prop.
-- [ ] 4.2 Right-align the ledger's Amount column with `tabular-nums`. Then show split groups:
+- [x] 4.1 Add `saveSplit(id, parts)` and `unsplit(id, keep)` to `api/transactions.js`. Add an optional `onSplit` prop to `CategoryCombobox`: a "Split…" action after a separator with the `Split` icon, ranked last but first while the search is a prefix of "split". Verify with `CategoryCombobox.test.jsx`: "sp" plus Enter calls `onSplit` even with a "Sports" category, "gro" plus Enter still picks "Groceries", and no option is listed without the prop.
+- [x] 4.2 Right-align the ledger's Amount column with `tabular-nums`. Then show split groups:
   - the "Split · n" cell button opens the editor;
   - part rows sit beneath their transaction with a left bar, no inner dividers, a shared hover, empty Date/Payee, `↳` notes and muted amounts;
   - part rows have no Delete, and their Edit opens the editor;
@@ -44,7 +44,7 @@
   - inline category and transfer edits on a part are optimistic and revert, through a helper that finds parts.
 
   Verify with `TransactionsPage.test.jsx` cases for "Split row and its parts", "Editing a part opens the split editor", "Filter finds a split" (the faded part), and recategorizing a part optimistically and reverting it.
-- [ ] 4.3 Build `SplitEditor` with its line state and opening rules:
+- [x] 4.3 Build `SplitEditor` with its line state and opening rules:
   - it replaces the part rows and shares `editingId` with the edit form;
   - "Split…" is offered only on unsplit, non-transfer rows;
   - a new split starts with the full amount plus the current target (a guess is carried over as a normal choice) and an empty second line with focus;
@@ -55,7 +55,7 @@
   - Save is enabled only when allowed.
 
   Verify with page tests for "Lines replace part rows", "Split a dinner with one number", "An edited first line stops following", "Left to assign", "Over-assigned", "A line without an amount", "A new line appears while money is left", "Parts and transfers don't offer Split", "Typing finds Split before matching categories" and "One editor at a time".
-- [ ] 4.4 Add saving, unsplitting and errors to the editor:
+- [x] 4.4 Add saving, unsplitting and errors to the editor:
   - Save sends the signed parts and replaces the row;
   - Enter saves, and Escape cancels with focus on the row's cell;
   - Unsplit uses an inline confirmation and keeps the shared target or none;
@@ -66,7 +66,7 @@
   - the layout wraps below `sm` and stays sticky inside the scrolling table.
 
   Verify with page tests for "Enter saves", "Escape cancels", "Unsplit restores a shared category", "Down to one line", "Transfer target refused", and the save payload.
-- [ ] 4.5 In `TransactionForm`, show a split transaction's parts read-only in place of the picker, with an "Edit split" button that opens the editor. Disable the amount with "Unsplit to change the amount", and omit `category` from the payload. Verify with form tests for "Edit a split transaction's payee" and "Edit split from the form".
+- [x] 4.5 In `TransactionForm`, show a split transaction's parts read-only in place of the picker, with an "Edit split" button that opens the editor. Disable the amount with "Unsplit to change the amount", and omit `category` from the payload. Verify with form tests for "Edit a split transaction's payee" and "Edit split from the form".
 
 ## 5. Integration check
 

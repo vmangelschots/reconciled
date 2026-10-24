@@ -26,6 +26,7 @@
   --border: rgba(11, 11, 11, 0.1);
   --accent: #4f46e5;
   --success: #0ca30c;
+  --warning: #b26b00;
   --critical: #d03b3b;
 
   --chart-gridline: #e1e0d9;
@@ -43,6 +44,7 @@
   --border: rgba(255, 255, 255, 0.1);
   --accent: #818cf8;
   --success: #0ca30c;
+  --warning: #e3a03c;
   --critical: #e66767;
 
   --chart-gridline: #2c2c2a;
@@ -60,6 +62,7 @@
   --color-border: var(--border);
   --color-accent: var(--accent);
   --color-success: var(--success);
+  --color-warning: var(--warning);
   --color-critical: var(--critical);
 }
 

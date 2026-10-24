@@ -408,4 +408,58 @@ describe("CategoryCombobox restoreFocusOnSelect", () => {
 
     expect(screen.getByRole("button", { name: "Elsewhere" })).toHaveFocus();
   });
+
+  describe("Split…", () => {
+    const WITH_SPORTS = [...CATEGORIES, { id: 4, name: "Sports", parent_id: null }];
+
+    it("is listed last when the search is empty", async () => {
+      render(<CategoryCombobox categories={CATEGORIES} value={null} onSelect={vi.fn()} onSplit={vi.fn()} />);
+      await open();
+      const options = screen.getAllByRole("option");
+      expect(options.at(-1)).toHaveTextContent("Split…");
+    });
+
+    it("comes first while typing the start of split, ahead of a matching category", async () => {
+      const onSplit = vi.fn();
+      const onSelect = vi.fn();
+      render(<CategoryCombobox categories={WITH_SPORTS} value={null} onSelect={onSelect} onSplit={onSplit} />);
+      await open();
+      await userEvent.type(screen.getByPlaceholderText("Search categories…"), "sp{Enter}");
+
+      expect(onSplit).toHaveBeenCalledOnce();
+      expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it("leaves other searches to the categories", async () => {
+      const onSplit = vi.fn();
+      const onSelect = vi.fn();
+      render(<CategoryCombobox categories={CATEGORIES} value={null} onSelect={onSelect} onSplit={onSplit} />);
+      await open();
+      await userEvent.type(screen.getByPlaceholderText("Search categories…"), "gro{Enter}");
+
+      expect(onSelect).toHaveBeenCalledWith(1);
+      expect(onSplit).not.toHaveBeenCalled();
+      await open();
+      await userEvent.type(screen.getByPlaceholderText("Search categories…"), "gro");
+      expect(screen.queryByText("Split…")).not.toBeInTheDocument();
+    });
+
+    it("Tab never picks it", async () => {
+      const onSplit = vi.fn();
+      const onSelect = vi.fn();
+      render(<CategoryCombobox categories={CATEGORIES} value={null} onSelect={onSelect} onSplit={onSplit} />);
+      await open();
+      await userEvent.type(screen.getByPlaceholderText("Search categories…"), "spl");
+      await userEvent.tab();
+
+      expect(onSplit).not.toHaveBeenCalled();
+      expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it("is not offered without onSplit", async () => {
+      render(<CategoryCombobox categories={CATEGORIES} value={null} onSelect={vi.fn()} />);
+      await open();
+      expect(screen.queryByText("Split…")).not.toBeInTheDocument();
+    });
+  });
 });
