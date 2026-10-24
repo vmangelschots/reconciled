@@ -1,16 +1,40 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { TransactionsPage } from "./TransactionsPage";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
+import { TransactionsIndex, TransactionsPage } from "./TransactionsPage";
+import { AccountsProvider } from "../accounts/AccountsContext";
 import { ToastProvider } from "../components/ui/Toast";
 import * as accountsApi from "../api/accounts";
 import * as categoriesApi from "../api/categories";
 import * as transactionsApi from "../api/transactions";
 import { ReviewCountProvider } from "../review/ReviewCountContext";
 
+function Where() {
+  const location = useLocation();
+  return <p data-testid="where">{location.pathname + location.search}</p>;
+}
+
+// The ledger lives at /transactions/:accountId, inside the accounts context.
+function renderAt(path) {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <ToastProvider>
+        <AccountsProvider>
+          <Routes>
+            <Route path="/transactions" element={<TransactionsIndex />} />
+            <Route path="/transactions/:accountId" element={<TransactionsPage />} />
+            <Route path="*" element={<Where />} />
+          </Routes>
+        </AccountsProvider>
+      </ToastProvider>
+    </MemoryRouter>,
+  );
+}
+
 vi.mock("../api/accounts", async () => {
   const actual = await vi.importActual("../api/accounts");
-  return { ...actual, listAccounts: vi.fn() };
+  return { ...actual, listAccounts: vi.fn(), getAccount: vi.fn() };
 });
 
 vi.mock("../api/categories", async () => {
@@ -38,12 +62,8 @@ const TRANSACTIONS = [
   { id: 2, date: "2026-10-02", payee: "Store B", category: null, amount_cents: -2000 },
 ];
 
-function renderPage() {
-  return render(
-    <ToastProvider>
-      <TransactionsPage />
-    </ToastProvider>,
-  );
+function renderPage(path = "/transactions/1") {
+  return renderAt(path);
 }
 
 // Generous timeout: under a full parallel test run the first render can
@@ -301,11 +321,17 @@ describe("TransactionsPage", () => {
       transactionsApi.updateTransaction.mockResolvedValue({});
       transactionsApi.getReviewCount.mockResolvedValue({ count: 1 });
       render(
-        <ToastProvider>
-          <ReviewCountProvider>
-            <TransactionsPage />
-          </ReviewCountProvider>
-        </ToastProvider>,
+        <MemoryRouter initialEntries={["/transactions/1"]}>
+          <ToastProvider>
+            <ReviewCountProvider>
+              <AccountsProvider>
+                <Routes>
+                  <Route path="/transactions/:accountId" element={<TransactionsPage />} />
+                </Routes>
+              </AccountsProvider>
+            </ReviewCountProvider>
+          </ToastProvider>
+        </MemoryRouter>,
       );
       await findTable();
       await waitFor(() => expect(transactionsApi.getReviewCount).toHaveBeenCalledTimes(1));
@@ -553,5 +579,83 @@ describe("TransactionsPage", () => {
       );
       expect(transactionsApi.linkTransfer).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("ledger per account", () => {
+  const REVOLUT = { id: 1, name: "Revolut", current_balance_cents: 214000, archived: false };
+  const CRELAN = { id: 2, name: "Crelan", current_balance_cents: 134200, archived: false };
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    accountsApi.listAccounts.mockResolvedValue([REVOLUT, CRELAN]);
+    transactionsApi.listTransactions.mockResolvedValue(TRANSACTIONS);
+  });
+
+  it("opens the account in the address and remembers it", async () => {
+    renderPage("/transactions/2");
+    await findTable();
+
+    expect(transactionsApi.listTransactions).toHaveBeenCalledWith(expect.objectContaining({ account: 2 }));
+    expect(window.localStorage.getItem("reconciled.lastAccount")).toBe("2");
+    expect(screen.queryByRole("combobox", { name: "Account" })).toBeNull();
+  });
+
+  it("opens the last account from the plain address, else the first", async () => {
+    window.localStorage.setItem("reconciled.lastAccount", "2");
+    const { unmount } = renderPage("/transactions");
+    await findTable();
+    expect(transactionsApi.listTransactions).toHaveBeenCalledWith(expect.objectContaining({ account: 2 }));
+    unmount();
+
+    window.localStorage.clear();
+    vi.clearAllMocks();
+    accountsApi.listAccounts.mockResolvedValue([REVOLUT, CRELAN]);
+    transactionsApi.listTransactions.mockResolvedValue(TRANSACTIONS);
+    renderPage("/transactions");
+    await findTable();
+    expect(transactionsApi.listTransactions).toHaveBeenCalledWith(expect.objectContaining({ account: 1 }));
+  });
+
+  it("shows an archived account without the add form", async () => {
+    accountsApi.getAccount.mockResolvedValue({ id: 9, name: "Old", current_balance_cents: 0, archived: true });
+    renderPage("/transactions/9");
+    await findTable();
+
+    expect(screen.getByText("Archived")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Add transaction" })).toBeNull();
+    expect(transactionsApi.listTransactions).toHaveBeenCalledWith(expect.objectContaining({ account: 9 }));
+    expect(window.localStorage.getItem("reconciled.lastAccount")).toBeNull();
+  });
+
+  it("sends an unknown account back with a notice", async () => {
+    accountsApi.getAccount.mockRejectedValue(Object.assign(new Error("Not found."), { status: 404 }));
+    renderPage("/transactions/99");
+
+    expect(await screen.findByText("That account wasn't found.")).toBeInTheDocument();
+    await findTable();
+    expect(transactionsApi.listTransactions).toHaveBeenLastCalledWith(expect.objectContaining({ account: 1 }));
+  });
+
+  it("switches account with the pills", async () => {
+    renderPage("/transactions/1");
+    await findTable();
+    const pills = screen.getByRole("navigation", { name: "Accounts" });
+    expect(within(pills).getByRole("link", { name: "Revolut" })).toHaveAttribute("aria-current", "page");
+
+    await userEvent.click(within(pills).getByRole("link", { name: "Crelan" }));
+
+    await waitFor(() =>
+      expect(transactionsApi.listTransactions).toHaveBeenLastCalledWith(expect.objectContaining({ account: 2 })),
+    );
+    expect(within(pills).getByRole("link", { name: "Crelan" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("offers Import on an empty ledger", async () => {
+    transactionsApi.listTransactions.mockResolvedValue([]);
+    renderPage("/transactions/2");
+
+    const link = await screen.findByRole("link", { name: "Import" });
+    expect(link).toHaveAttribute("href", "/import?account=2");
   });
 });

@@ -37,7 +37,7 @@
 
 ## 3. Ledger per account
 
-- [ ] 3.1 Route `transactions` to a redirecting index and `transactions/:accountId` to `TransactionsPage`:
+- [x] 3.1 Route `transactions` to a redirecting index and `transactions/:accountId` to `TransactionsPage`:
   - read the account from the address and load it with `getAccount`;
   - set it as last opened when active;
   - for an archived account, show "Archived" and hide the add form;
