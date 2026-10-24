@@ -129,8 +129,8 @@ first, each with its date, payee, "lent" for money out or "repaid" for
 money in, its amount without a sign, and the running balance after it.
 A split part SHALL be marked as part of its transaction, with that
 transaction's full amount. Where the running balance reaches zero, the
-page SHALL show a "Settled" divider. Rows before the last divider SHALL
-be collapsed until the user expands them.
+page SHALL show a "Settled" divider. Only the latest stretch of rows
+SHALL show until the user expands the earlier ones.
 
 #### Scenario: Rows with a running balance
 - **WHEN** "Tabs / Jan" has a -30.00 part of a -60.00 "Pizzeria" dinner on

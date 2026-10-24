@@ -46,7 +46,7 @@
 ## 5. Frontend: dashboard, tab page and settings
 
 - [x] 5.1 Add `OpenTabsCard` as the first card on `DashboardPage`, and the "Excludes transfers and tabs" footnote under the in vs out chart. Verify with `DashboardPage.test.jsx` cases for "Open tabs are listed" (order, sentences, open-since and stale tone), "Everything settled", "No tabs", "Open a tab" (link target) and "The chart says what it leaves out".
-- [ ] 5.2 Add `TabPage` at `/tabs/:id`:
+- [x] 5.2 Add `TabPage` at `/tabs/:id`:
   - a header with the sentence;
   - rows oldest first with lent/repaid, the unsigned amount, "part of €X" and the running balance;
   - "Settled" dividers, with earlier stretches collapsed behind "Show earlier";
