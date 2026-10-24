@@ -15,10 +15,11 @@
 - Settings come from environment variables (`.env` locally, the
   `reconciled-secrets` Secret and `reconciled-config` ConfigMap in k8s).
   The backend image is Python 3.12.
-- The user chose Claude Haiku 5.5 (`claude-haiku-5-5`). On that model,
-  adaptive thinking is on by default and `effort` defaults to `medium`.
-  `temperature` and assistant prefill are rejected. Refusals have no
-  server-side fallback.
+- The provider is OpenAI: the user already has an OpenAI account. The
+  default model is GPT-6 Luna (`gpt-6-luna`), OpenAI's cheapest current
+  model, meant for focused, high-volume tasks. It's a reasoning model with
+  a configurable `reasoning.effort`. A refusal comes back as a `refusal`
+  content item, not as an error.
 - gunicorn runs with its default 30s worker timeout (`backend/Dockerfile`,
   `k8s/30-backend.yaml`). Import commit currently calls `categorize()`
   inside its `db_transaction.atomic()` block.
@@ -67,9 +68,9 @@ def get_guesser() -> CategoryGuesser | None
 ```
 
 `get_guesser()` returns `None` when `AI_CATEGORIZATION_ENABLED` is false
-or `ANTHROPIC_API_KEY` is unset, and `ClaudeGuesser` otherwise. Tests
+or `OPENAI_API_KEY` is unset, and `OpenAIGuesser` otherwise. Tests
 patch `get_guesser` with a fake. The protocol is the seam for another
-provider later. Nothing else in the app imports `anthropic`.
+provider later. Nothing else in the app imports `openai`.
 
 *Alternative:* call the SDK directly from `categorize()`. Rejected: it
 mixes the API's error handling into the categorizer and makes every
@@ -123,25 +124,30 @@ would then roll back the whole import. So:
   that did finish. 20s of AI plus the history work stays under gunicorn's
   30s.
 
-### 4. The Claude request
+### 4. The OpenAI request
+
+Through the Responses API:
 
 ```
-client = anthropic.Anthropic(max_retries=0)
-client.with_options(timeout=remaining_budget).messages.create(
-    model=settings.AI_CATEGORIZATION_MODEL,     # default "claude-haiku-5-5"
-    max_tokens=8000,
-    output_config={
-        "effort": "low",
-        "format": {"type": "json_schema", "schema": SCHEMA},
-    },
-    system=SYSTEM_PROMPT,                        # fixed text
-    messages=[{"role": "user", "content": json.dumps({"categories": [...], "payees": [...]})}],
+client = openai.OpenAI(max_retries=0)
+client.with_options(timeout=remaining_budget).responses.create(
+    model=settings.AI_CATEGORIZATION_MODEL,     # default "gpt-6-luna"
+    reasoning={"effort": "low"},
+    max_output_tokens=8000,
+    instructions=SYSTEM_PROMPT,                  # fixed text
+    input=json.dumps({"categories": [...], "payees": [...]}),
+    text={"format": {
+        "type": "json_schema", "name": "category_guesses",
+        "schema": SCHEMA, "strict": True,
+    }},
 )
 ```
 
 - **Schema:** `{"guesses": [{"key": <enum of sent keys>, "category_id":
-  <enum of sent ids> | null, "reason": string}]}`, with
-  `additionalProperties: false` and every field required. The enums are
+  <enum of sent ids and null>, "reason": string}]}`, with
+  `additionalProperties: false` and every field required, as strict mode
+  needs. `category_id` is `{"type": ["integer", "null"], "enum": [...ids,
+  null]}`. The enums are
   built per request, so the model can only answer with real keys and
   category ids. The server still re-checks them (decision 2), because the
   schema is a guarantee about shape, not about which keys come back.
@@ -153,14 +159,15 @@ client.with_options(timeout=remaining_budget).messages.create(
   the category name. Payees and notes are bank data, not instructions.
   Payee text is inserted as JSON data, never interpolated into the
   instructions.
-- **Effort `low`** because this is short classification. Thinking stays
-  adaptive (Haiku 5.5's default) and no `temperature` is sent. `max_tokens`
-  leaves room for thinking plus about 30 tokens per payee.
+- **Effort `low`** because this is short classification. No
+  `temperature` is sent. `max_output_tokens` leaves room for reasoning
+  plus about 30 tokens per payee.
 - **Chunking:** at most 100 questions per request, sent one after another
   within the deadline. A failure only drops that chunk.
-- **Response handling:** if `stop_reason` is `refusal` or `max_tokens`, or
-  there's no text block, or the text isn't valid JSON, the chunk counts as
-  failed. Otherwise `json.loads` the first text block.
+- **Response handling:** if `status` is `incomplete` (for example
+  `max_output_tokens`), or the message holds a `refusal` item, or there's
+  no `output_text`, or the text isn't valid JSON, the chunk counts as
+  failed. Otherwise `json.loads` the `output_text`.
 - **Reason cleanup:** trim it and cut it to 80 characters. A reason that's
   empty or just the category name is stored empty; the UI then shows the
   guess without a reason.
@@ -170,16 +177,16 @@ client.with_options(timeout=remaining_budget).messages.create(
 
 ### 5. Failure handling
 
-`ClaudeGuesser.guess` returns `(guesses, status)` and never raises. It
+`OpenAIGuesser.guess` returns `(guesses, status)` and never raises. It
 catches the SDK's typed errors from most to least specific:
 
-- `anthropic.AuthenticationError` / `PermissionDeniedError`: status
-  `key_rejected`, logged as an error ("check ANTHROPIC_API_KEY"), and no
+- `openai.AuthenticationError` / `PermissionDeniedError`: status
+  `key_rejected`, logged as an error ("check OPENAI_API_KEY"), and no
   further chunks are sent;
-- `anthropic.RateLimitError`, `APIStatusError`, `APIConnectionError`
+- `openai.RateLimitError`, `APIStatusError`, `APIConnectionError`
   (which includes timeouts): status `failed`, logged as a warning;
-- JSON or shape errors, refusal, `max_tokens`, or the deadline: status
-  `failed`.
+- JSON or shape errors, refusal, an incomplete response, or the deadline:
+  status `failed`.
 
 Guesses from chunks that succeeded are kept. Logging goes through the
 `transactions.ai` logger.
@@ -250,7 +257,7 @@ reviews.
   - the toast splits by source: "Guessed 35 of 40: 25 from history, 10 by
     AI.";
   - AI outcome lines come from `ai` in the response: "AI guessing didn't
-    respond.", "AI is not working: check ANTHROPIC_API_KEY.", or "3 new
+    respond.", "AI is not working: check OPENAI_API_KEY.", or "3 new
     payees couldn't be guessed." They're shown under the result;
   - **nothing guessed with AI on:** "Couldn't guess a category for any of
     the 40 uncategorized transactions." with the Transactions link and a
@@ -280,14 +287,14 @@ reviews.
 
 ### 9. Configuration
 
-- `ANTHROPIC_API_KEY` is optional and secret. It goes in `.env.example`
+- `OPENAI_API_KEY` is optional and secret. It goes in `.env.example`
   (commented, empty) and as an optional key in
   `k8s/examples/secret.example.yaml`, with a line in `k8s/README.md`.
 - `AI_CATEGORIZATION_ENABLED` defaults to `true`, but only takes effect
   when a key is set. `AI_CATEGORIZATION_MODEL` defaults to
-  `claude-haiku-5-5`, and `AI_CATEGORIZATION_DEADLINE` to 20 seconds. All
+  `gpt-6-luna`, and `AI_CATEGORIZATION_DEADLINE` to 20 seconds. All
   three are plain settings, documented in the same places.
-- `anthropic` is pinned in `backend/requirements.txt`, at the current
+- `openai` is pinned in `backend/requirements.txt`, at the current
   release when this is implemented.
 
 ## Risks / Trade-offs
@@ -309,14 +316,14 @@ reviews.
   wait starts. The button shows it's working, and #2 removes the wait.
 - [Payee data leaves the server] → Only the fields listed in the spec are
   sent. AI is off without a key, and can be turned off with a key present.
-- [The `anthropic` SDK's own dependencies] → It's the official SDK, and no
+- [The `openai` SDK's own dependencies] → It's the official SDK, and no
   other provider SDK is added.
 
 ## Migration Plan
 
 - Deploy as usual. The migration only adds a choice and a field with a
   default.
-- Without `ANTHROPIC_API_KEY`, nothing changes in behavior. Adding the key
+- Without `OPENAI_API_KEY`, nothing changes in behavior. Adding the key
   to `15-secret.yaml` (or `.env`) and restarting the backend turns AI on.
 - Rollback: remove the key (or set `AI_CATEGORIZATION_ENABLED=false`) to
   stop AI calls at once; reverting the code is safe because existing `ai`

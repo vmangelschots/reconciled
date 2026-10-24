@@ -82,7 +82,7 @@ couldn't guess. A successful run with nothing declined SHALL add nothing.
 #### Scenario: Rejected key is named
 - **WHEN** the API key is rejected during a backfill
 - **THEN** the result says AI is not working and to check
-  ANTHROPIC_API_KEY, and the history guesses are still listed
+  OPENAI_API_KEY, and the history guesses are still listed
 
 ## MODIFIED Requirements
 

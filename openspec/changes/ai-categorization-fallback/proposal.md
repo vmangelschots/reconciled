@@ -15,7 +15,7 @@ and out of scope here.
 
 - **AI fallback after history:** when the categorizer runs (on import
   commit and from the Review page's backfill), transactions that history
-  couldn't categorize go to Claude through the Anthropic API. Each one gets
+  couldn't categorize go to OpenAI through the OpenAI API. Each one gets
   one of the user's existing categories, or stays uncategorized when the
   model isn't confident.
   - Payees are batched: one request covers the distinct normalized payees
@@ -38,7 +38,7 @@ and out of scope here.
     import still commits, and the backfill still reports its result;
   - the import summary and the backfill say when AI didn't respond, when
     the key was rejected, and how many new payees couldn't be guessed.
-- **Model:** Claude Haiku 5.5 (`claude-haiku-5-5`) by default, changeable
+- **Model:** GPT-6 Luna (`gpt-6-luna`), OpenAI's cheapest current model, by default, changeable
   through a setting.
 - **Review page:**
   - AI guesses appear in their own "AI guesses" section below the history
@@ -54,14 +54,14 @@ and out of scope here.
     "can take up to a minute" hint when AI is on;
   - the summary reads "14 got a category (10 from your history, 4 by
     AI)".
-- **Configuration:** `ANTHROPIC_API_KEY` (a secret, optional), plus
+- **Configuration:** `OPENAI_API_KEY` (a secret, optional), plus
   settings for the model and for turning AI off. These are added to
   `.env.example` and the k8s secret example.
 
 Not in scope:
 - Running the AI call in the background (issue #2).
 - Other providers or local models: the code goes through a small provider
-  interface so one can be added later, but only Claude is built.
+  interface so one can be added later, but only OpenAI is built.
 - AI guesses for manually added transactions, and re-guessing transactions
   that already have a category.
 - Learning or fine-tuning from corrections beyond the existing history
@@ -87,8 +87,8 @@ Not in scope:
 ## Impact
 
 - **Backend:**
-  - adds the `anthropic` Python SDK dependency;
-  - a new `transactions/ai.py` (provider interface plus the Claude
+  - adds the `openai` Python SDK dependency;
+  - a new `transactions/ai.py` (provider interface plus the OpenAI
     implementation);
   - `categorize()` gains an AI pass and now runs after the import's
     database transaction commits;
@@ -96,7 +96,7 @@ Not in scope:
     field;
   - the import commit and the review endpoints report AI counts, the
     reason, and whether AI is enabled;
-  - new settings: `ANTHROPIC_API_KEY`, `AI_CATEGORIZATION_MODEL`,
+  - new settings: `OPENAI_API_KEY`, `AI_CATEGORIZATION_MODEL`,
     `AI_CATEGORIZATION_ENABLED`, `AI_CATEGORIZATION_DEADLINE`.
 - **Frontend:**
   - the Review page's AI section, evidence and focus rule;
@@ -104,8 +104,8 @@ Not in scope:
   - the import button's running state and the summary card;
   - the reason in the ledger's AI tooltip (the Sparkles marker is already
     reserved in `CategoryCombobox`).
-- **Deployment:** an optional `ANTHROPIC_API_KEY` in `.env.example`,
+- **Deployment:** an optional `OPENAI_API_KEY` in `.env.example`,
   `k8s/examples/secret.example.yaml` and `k8s/README.md`. No other
   manifest changes.
-- **Cost and privacy:** with Haiku 5.5, an import costs well under a cent.
-  Payee names, notes and amounts are sent to Anthropic.
+- **Cost and privacy:** with GPT-6 Luna, an import costs well under a cent.
+  Payee names, notes and amounts are sent to OpenAI.
