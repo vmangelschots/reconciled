@@ -1,5 +1,7 @@
 # Proposal
 
+Issue: #9
+
 ## Why
 
 The app works but feels plain, generic and a bit clunky, and there is no

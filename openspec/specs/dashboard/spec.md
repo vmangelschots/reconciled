@@ -8,8 +8,8 @@ cash flow and spending across the user's active accounts.
 ## Requirements
 
 ### Requirement: Monthly money in and money out
-For each of the last 12 calendar months, ending with the current one, the
-system SHALL report money in (the sum of positive transaction amounts) and
+For each of the 12 calendar months ending with a chosen month (the
+current one when none is chosen), the system SHALL report money in (the sum of positive transaction amounts) and
 money out (the sum of negative amounts, as a positive figure). Only
 non-archived accounts count, and transfers between the user's accounts
 SHALL count toward neither. A month with no transactions SHALL report
@@ -41,7 +41,9 @@ a part that is a transfer counts toward neither.
 
 ### Requirement: In vs out chart
 The dashboard SHALL show money in and money out as paired bars, one pair
-per month, oldest month on the left. The two series SHALL be told apart
+per month, oldest month on the left, for the 12 months ending with the
+overview's chosen month, labelled as covering all active accounts. Money
+in SHALL use the positive colour and money out a neutral colour. The two series SHALL be told apart
 by a legend as well as by colour. Hovering a bar SHALL show that month's
 money in, money out and the difference. A table view SHALL list the same
 figures.
@@ -54,6 +56,10 @@ figures.
 - **WHEN** the user switches the chart to its table view
 - **THEN** a table lists every month with its money in, money out and
   difference
+
+#### Scenario: Follows the overview's month
+- **WHEN** the user switches the overview to June 2026
+- **THEN** the chart shows July 2025 to June 2026
 
 ### Requirement: Category spending for a month
 For a chosen month, the system SHALL report each category's spending:
@@ -92,19 +98,18 @@ SHALL be counted through its parts, never as "Uncategorized" itself.
 ### Requirement: Expenses per category chart
 The dashboard SHALL show the chosen month's category spending as
 horizontal bars, largest first, with each bar labelled by its category
-name and amount. It SHALL open on the current month and offer previous-
-and next-month navigation, with no navigating past the current month.
-A table view SHALL list the same figures.
+name and amount. The month SHALL be the overview's chosen month; the
+chart SHALL NOT have a month navigation of its own. A table view SHALL
+list the same figures.
 
 #### Scenario: Opens on the current month
-- **WHEN** the user opens the dashboard
+- **WHEN** the user opens the overview
 - **THEN** the chart shows the current month's spending, largest category
   first
 
 #### Scenario: Move to the previous month
-- **WHEN** the user presses "previous month"
-- **THEN** the chart shows the previous month's spending, and "next month"
-  becomes available
+- **WHEN** the user moves the overview's month switcher back one month
+- **THEN** the chart shows the previous month's spending
 
 #### Scenario: Empty month
 - **WHEN** the chosen month has no spending
