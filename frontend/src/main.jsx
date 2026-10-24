@@ -5,6 +5,7 @@ import App from "./App.jsx";
 import { AuthProvider } from "./auth/AuthContext.jsx";
 import { ToastProvider } from "./components/ui/Toast.jsx";
 import { ThemeProvider } from "./theme/ThemeProvider.jsx";
+import "@fontsource-variable/inter";
 import "./index.css";
 
 createRoot(document.getElementById("root")).render(

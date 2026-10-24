@@ -123,7 +123,7 @@ describe("DashboardPage open tabs", () => {
     ]);
     renderPage();
 
-    const card = (await screen.findByText("Open tabs")).closest("div.rounded-lg");
+    const card = (await screen.findByText("Open tabs")).closest("div.rounded-xl");
     const links = within(card).getAllByRole("link");
     expect(links.map((l) => l.textContent)).toEqual([
       expect.stringContaining(`Employer owes you ${formatMoney(41250)}`),

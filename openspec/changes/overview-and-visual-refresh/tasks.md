@@ -18,7 +18,7 @@
 
 ## 2. Visual foundation
 
-- [ ] 2.1 Lay the visual base:
+- [x] 2.1 Lay the visual base:
   - add `@fontsource-variable/inter`, set `--font-sans` in `@theme`, add the `num` utility, and add `viewport-fit=cover` to `index.html`;
   - set the token values from design.md (light and dark), with `--surface-2`, `--positive` and `--on-accent` added to `@theme`, `--success` aliased to positive, and the chart series tokens changed;
   - point `InOutChart` at the positive and neutral series;

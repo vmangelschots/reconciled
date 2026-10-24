@@ -345,7 +345,7 @@ export function ImportPage() {
                   accept=".csv,.ofx"
                   onChange={(e) => setFile(e.target.files[0])}
                   required
-                  className="text-sm text-ink-secondary file:mr-3 file:rounded-md file:border-0 file:bg-accent file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:opacity-90"
+                  className="text-sm text-ink-secondary file:mr-3 file:rounded-md file:border-0 file:bg-accent file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-on-accent hover:file:opacity-90"
                 />
               </div>
               <Button type="submit" disabled={submitting || !file}>

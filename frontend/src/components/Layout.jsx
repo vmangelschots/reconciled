@@ -26,7 +26,7 @@ function ReviewCountPill({ isActive }) {
     <span
       className={cn(
         'ml-1.5 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1.5 text-[11px] leading-none font-semibold tabular-nums',
-        isActive ? 'bg-white/25 text-white' : 'bg-accent/15 text-accent',
+        isActive ? 'bg-on-accent/20 text-on-accent' : 'bg-accent/15 text-accent',
       )}
     >
       {count > 99 ? '99+' : count}
@@ -47,8 +47,8 @@ function NavLinks({ className, onNavigate }) {
             cn(
               'inline-flex items-center justify-between rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
               isActive
-                ? 'bg-accent text-white'
-                : 'text-ink-secondary hover:bg-background hover:text-ink-primary',
+                ? 'bg-accent text-on-accent'
+                : 'text-ink-secondary hover:bg-surface-2 hover:text-ink-primary',
             )
           }
         >

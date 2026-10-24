@@ -418,7 +418,7 @@ export function TransactionsPage() {
             }
             return (
               <tbody key={t.id} className="group border-b border-border last:border-b-0">
-                <TableRow className={cn("hover:bg-transparent group-hover:bg-background", splitOpen && "bg-background")}>
+                <TableRow className={cn("hover:bg-transparent group-hover:bg-surface-2", splitOpen && "bg-surface-2")}>
                   <TableCell className={barCell}>{t.date}</TableCell>
                   <TableCell>{t.payee}</TableCell>
                   {/* Long notes stay on one line; the full text is in the tooltip. */}
@@ -483,7 +483,7 @@ export function TransactionsPage() {
                     <TableRow
                       key={part.id}
                       className={cn(
-                        "hover:bg-transparent group-hover:bg-background",
+                        "hover:bg-transparent group-hover:bg-surface-2",
                         // While filtering by a category, the parts that
                         // didn't match step back.
                         filters.category != null && part.category !== filters.category && "opacity-60",

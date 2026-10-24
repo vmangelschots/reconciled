@@ -7,7 +7,7 @@ import { formatMoney, formatMoneyCompact } from "../lib/money";
 const HEIGHT = 280;
 
 const SERIES = [
-  { key: "in_cents", name: "Money in", color: "var(--chart-series-1)" },
+  { key: "in_cents", name: "Money in", color: "var(--positive)" },
   { key: "out_cents", name: "Money out", color: "var(--chart-series-2)" },
 ];
 

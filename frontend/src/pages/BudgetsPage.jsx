@@ -285,7 +285,7 @@ function KindSwitch({ isTabGroup, onChange }) {
       onClick={() => onChange(value)}
       className={cn(
         "flex h-8 items-center gap-1.5 px-3 text-sm",
-        isTabGroup === value ? "bg-accent text-white" : "bg-surface text-ink-secondary hover:text-ink-primary",
+        isTabGroup === value ? "bg-accent text-on-accent" : "bg-surface text-ink-secondary hover:text-ink-primary",
       )}
     >
       {value && <HandCoins className="h-3.5 w-3.5" aria-hidden="true" />}

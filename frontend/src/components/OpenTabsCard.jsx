@@ -17,7 +17,7 @@ function TabRow({ tab }) {
     <li>
       <Link
         to={`/tabs/${tab.id}`}
-        className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
         <span className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
           <span className={cn("flex items-center gap-1.5 text-sm", TONE_CLASS[sentence.tone])}>
