@@ -8,6 +8,7 @@ from rest_framework.test import APIClient
 from accounts.models import Account
 from budgets.models import Category
 from transactions.models import Transaction
+from transactions.splits import SplitLine, save_split
 from transactions.transfers import link_transfer
 
 
@@ -72,6 +73,15 @@ class CashFlowTests(ReportTestCase):
 
         self.assertEqual(months[-1], {"month": "2026-03", "in_cents": 0, "out_cents": 0})
 
+    def test_a_split_counts_once_without_its_transfer_part(self):
+        restaurants = Category.objects.create(name="Restaurants")
+        dinner = self.txn(-6000, date(2026, 3, 3))
+        save_split(dinner, [SplitLine(-3000, category=restaurants), SplitLine(-3000, transfer_account=self.savings)])
+
+        months = self.get("2026-03").json()["months"]
+
+        self.assertEqual(months[-1], {"month": "2026-03", "in_cents": 0, "out_cents": 3000})
+
     def test_missing_or_malformed_end_is_rejected(self):
         self.assertEqual(self.client.get(reverse("report-cash-flow")).status_code, 400)
         self.assertEqual(self.get("2026-13").status_code, 400)
@@ -124,6 +134,18 @@ class CategorySpendingTests(ReportTestCase):
         link_transfer(self.txn(-50000, date(2026, 3, 6)), self.savings)
 
         self.assertEqual(self.get().json()["uncategorized_cents"], 4000)
+
+    def test_split_parts_count_toward_their_categories(self):
+        household = Category.objects.create(name="Household")
+        shop = self.txn(-6000, date(2026, 3, 5))
+        save_split(shop, [SplitLine(-4000, category=self.groceries), SplitLine(-2000, category=household)])
+
+        body = self.get().json()
+
+        self.assertEqual(
+            {c["name"]: c["spent_cents"] for c in body["categories"]}, {"Groceries": 4000, "Household": 2000}
+        )
+        self.assertEqual(body["uncategorized_cents"], 0)
 
     def test_sorted_largest_first(self):
         self.txn(-100, date(2026, 3, 1), category=self.clothing)

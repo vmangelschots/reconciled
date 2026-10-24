@@ -36,7 +36,11 @@ def _counterpart_payee(txn):
 def _find_match(txn, target_account):
     window = timedelta(days=TRANSFER_MATCH_DAYS)
     candidates = (
-        Transaction.objects.select_for_update()
+        # A split transaction or a part is never the other side: the
+        # bank line and its parts carry the amount separately.
+        Transaction.objects.counted_rows()
+        .ledger_rows()
+        .select_for_update()
         .filter(
             account=target_account,
             transfer_counterpart__isnull=True,
@@ -78,6 +82,8 @@ def link_transfer(txn, target_account):
         raise TransferError("A transfer must go to a different account.")
     if target_account.archived:
         raise TransferError("Archived accounts can't be used for new transfers.")
+    if txn.parts.exists():
+        raise TransferError("A split transaction can't be a transfer. Unsplit it first.")
 
     if txn.transfer_counterpart_id is not None:
         if txn.transfer_counterpart.account_id == target_account.pk:

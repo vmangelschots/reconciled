@@ -8,8 +8,9 @@ from accounts.models import Account
 from budgets.models import Category
 
 from .ai import Guess, PayeeQuestion
-from .categorize import categorize, normalize_payee
+from .categorize import categorize, normalize_payee, uncategorized
 from .models import Transaction
+from .splits import SplitLine, save_split
 from .transfers import link_transfer
 
 
@@ -50,6 +51,28 @@ class CategorizeTests(TestCase):
     def categorized(self, txn):
         categorize([txn])
         return Transaction.objects.get(pk=txn.pk)
+
+    def test_parts_are_not_history(self):
+        dinner = self.txn("PIZZERIA NAPOLI", amount_cents=-6000)
+        save_split(dinner, [SplitLine(-3000, category=self.groceries), SplitLine(-3000)])
+        new = self.txn("Pizzeria Napoli", day=20)
+
+        self.assertIsNone(self.categorized(new).category)
+
+    def test_splits_are_skipped_and_not_counted_as_uncategorized(self):
+        self.txn("CARREFOUR", category=self.groceries)
+        shop = self.txn("CARREFOUR", amount_cents=-6000, day=2)
+        save_split(shop, [SplitLine(-3000, category=self.household), SplitLine(-3000)])
+        parts = list(Transaction.objects.filter(split_parent=shop))
+
+        self.assertEqual(list(uncategorized()), [])
+        categorize([shop, *parts, *uncategorized()])
+
+        self.assertIsNone(Transaction.objects.get(pk=shop.pk).category)
+        self.assertEqual(
+            sorted((p.category_id or 0) for p in Transaction.objects.filter(split_parent=shop)),
+            sorted([self.household.pk, 0]),
+        )
 
     def test_repeat_payee_gets_its_usual_category_across_noise(self):
         for day in (1, 2, 3):
@@ -139,8 +162,9 @@ class CategorizeTests(TestCase):
         self.txn("NMBS", category=self.transport)
         new = [self.txn("Carrefour", day=20), self.txn("NMBS", day=21), self.txn("Unknown", day=22)]
 
-        # One history read plus one bulk update, however many candidates.
-        with self.assertNumQueries(2):
+        # One split check, one history read and one bulk update, however
+        # many candidates.
+        with self.assertNumQueries(3):
             self.assertEqual(categorize(new).categorized, 2)
 
     def test_without_a_key_only_history_runs(self):

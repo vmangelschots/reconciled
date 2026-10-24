@@ -2,8 +2,8 @@
 
 ## 1. Split model and service
 
-- [ ] 1.1 Add `split_parent` (self FK, `CASCADE`, `related_name="parts"`) to `Transaction` with a migration, plus a `TransactionQuerySet` with `ledger_rows()` and `counted_rows()`. Verify that `makemigrations --check` is clean and the existing backend suite passes.
-- [ ] 1.2 Implement `transactions/splits.py` (`save_split`, `unsplit`, `delete_transaction`, `sync_parts`). Verify with `transactions/tests_splits.py` covering every transaction-splits backend scenario:
+- [x] 1.1 Add `split_parent` (self FK, `CASCADE`, `related_name="parts"`) to `Transaction` with a migration, plus a `TransactionQuerySet` with `ledger_rows()` and `counted_rows()`. Verify that `makemigrations --check` is clean and the existing backend suite passes.
+- [x] 1.2 Implement `transactions/splits.py` (`save_split`, `unsplit`, `delete_transaction`, `sync_parts`). Verify with `transactions/tests_splits.py` covering every transaction-splits backend scenario:
   - splitting, including from a categorized transaction;
   - rejection for a bad sum, a single part, mixed signs, splitting a part, splitting a transfer, and an unknown part id;
   - editing with kept ids, which preserves a transfer part's link;
@@ -11,27 +11,27 @@
   - unsplitting, with a created counterpart and a real one, and with `keep` set to nothing, a category, or a transfer account (which matches the whole amount);
   - deleting a split transaction;
   - `sync_parts` moving date and payee and mirroring created counterparts.
-- [ ] 1.3 Guard `transfers.py`: `link_transfer` refuses a split transaction, and `_find_match` skips split transactions and parts. Verify with `tests_transfers.py` cases for the "Splits are never matched" scenario and the refusal.
+- [x] 1.3 Guard `transfers.py`: `link_transfer` refuses a split transaction, and `_find_match` skips split transactions and parts. Verify with `tests_transfers.py` cases for the "Splits are never matched" scenario and the refusal.
 
 ## 2. API
 
-- [ ] 2.1 Add `PUT`/`DELETE /api/transactions/{id}/split/` (DELETE with an optional `category` or `transfer_account` to keep), the read-only `split_parent` and `parts` serializer fields, and route `perform_destroy` through `splits.delete_transaction`. Verify with `tests_split_api.py`: the response shapes, 400s with field errors (including PUT on a transfer or a part), and DELETE unsplitting with and without a kept target.
-- [ ] 2.2 Add serializer guards:
+- [x] 2.1 Add `PUT`/`DELETE /api/transactions/{id}/split/` (DELETE with an optional `category` or `transfer_account` to keep), the read-only `split_parent` and `parts` serializer fields, and route `perform_destroy` through `splits.delete_transaction`. Verify with `tests_split_api.py`: the response shapes, 400s with field errors (including PUT on a transfer or a part), and DELETE unsplitting with and without a kept target.
+- [x] 2.2 Add serializer guards:
   - reject `category`/`amount_cents` on a split transaction, and call `sync_parts` on its date or payee change;
   - reject `amount_cents`/`date`/`payee` on a part, while its `category`/`notes` and the transfer endpoints work on it.
 
   Verify with API tests for each guard and for recategorizing a part and making it a transfer.
-- [ ] 2.3 Make the list endpoint return `ledger_rows()` with prefetched parts. The category filter matches a part's category (distinct), and search matches part notes. Verify with API tests for "Filter finds a split", search on part notes, and parts never appearing as top-level rows.
+- [x] 2.3 Make the list endpoint return `ledger_rows()` with prefetched parts. The category filter matches a part's category (distinct), and search matches part notes. Verify with API tests for "Filter finds a split", search on part notes, and parts never appearing as top-level rows.
 
 ## 3. Totals count each amount once
 
-- [ ] 3.1 Switch `Account.current_balance_cents` to `ledger_rows()`. Verify with an accounts test for "Splitting does not change the balance".
-- [ ] 3.2 Base `reports/views._active_transactions()` and `BudgetSummaryView`'s uncategorized sum on `counted_rows()`. Verify with `reports/tests.py` and `budgets/tests.py` cases:
+- [x] 3.1 Switch `Account.current_balance_cents` to `ledger_rows()`. Verify with an accounts test for "Splitting does not change the balance".
+- [x] 3.2 Base `reports/views._active_transactions()` and `BudgetSummaryView`'s uncategorized sum on `counted_rows()`. Verify with `reports/tests.py` and `budgets/tests.py` cases:
   - "A split counts once, without its transfer part";
   - dashboard "Split parts count toward their categories";
   - budgets "Split parts count toward their categories".
-- [ ] 3.3 Make `flag_duplicates` scan `ledger_rows()`. Verify with `imports/tests.py` cases for "A re-imported split transaction is a duplicate" and "Parts are not duplicates".
-- [ ] 3.4 In `categorize.py`, exclude parts from `confirmed_history()`, and parts and split transactions from `uncategorized()`/`categorize()` candidates. Verify with `tests_categorize.py` cases for "Parts are not history" and "Splits are skipped", including the Review page's uncategorized count.
+- [x] 3.3 Make `flag_duplicates` scan `ledger_rows()`. Verify with `imports/tests.py` cases for "A re-imported split transaction is a duplicate" and "Parts are not duplicates".
+- [x] 3.4 In `categorize.py`, exclude parts from `confirmed_history()`, and parts and split transactions from `uncategorized()`/`categorize()` candidates. Verify with `tests_categorize.py` cases for "Parts are not history" and "Splits are skipped", including the Review page's uncategorized count.
 
 ## 4. Frontend
 

@@ -128,8 +128,8 @@ and lose an import-confirmed link.
 - **`categorize.py`:**
   - `confirmed_history()` excludes parts.
   - `uncategorized()` excludes parts and split transactions.
-  - `categorize()` drops parts from its candidates. Freshly imported rows
-    are never split.
+  - `categorize()` drops parts and split transactions from its
+    candidates, with one query for the latter.
 - **`flag_duplicates`:** iterates `ledger_rows()`.
 
 ### API
@@ -146,6 +146,8 @@ and lose an import-confirmed link.
   - a read-only `parts` list: id, amount, category fields, notes and
     `transfer`, in id order. `null` for a part, `[]` for an unsplit
     transaction.
+  - `transfer` also carries the counterpart's `created_by_transfer`, so
+    the editor knows when removing a part also removes a transaction.
 - **List endpoint:**
   - Returns only `ledger_rows()`, with parts prefetched.
   - The category filter becomes `Q(category=c) | Q(parts__category=c)`

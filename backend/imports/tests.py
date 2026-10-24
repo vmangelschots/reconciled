@@ -10,6 +10,7 @@ from rest_framework.test import APIClient
 from accounts.models import Account
 from budgets.models import Category
 from transactions.models import Transaction
+from transactions.splits import SplitLine, save_split
 from transactions.tests_categorize import FakeGuesser
 from transactions.transfers import link_transfer
 
@@ -388,6 +389,41 @@ class DuplicateDetectionTests(TestCase):
         )
         candidates = response.json()["candidates"]
         self.assertTrue(candidates[0]["is_duplicate"])
+
+    def preview(self, content):
+        upload = self.client.post(
+            reverse("importsession-list"),
+            {"account": self.account.id, "file": csv_file(content)},
+            format="multipart",
+        )
+        response = self.client.post(
+            reverse("importsession-map", args=[upload.json()["id"]]),
+            {"date": "Posted Date", "date_format": "YYYY-MM-DD", "amount": "Amount", "description": "Description"},
+            format="json",
+        )
+        return response.json()["candidates"]
+
+    def split_pizzeria(self):
+        dinner = Transaction.objects.create(
+            account=self.account, date="2026-03-03", amount_cents=-6000, payee="Pizzeria"
+        )
+        save_split(dinner, [SplitLine(-3000), SplitLine(-3000)])
+        return dinner
+
+    def test_a_reimported_split_transaction_is_a_duplicate(self):
+        dinner = self.split_pizzeria()
+
+        [candidate] = self.preview("Posted Date,Amount,Description\n2026-03-03,-60.00,Pizzeria\n")
+
+        self.assertTrue(candidate["is_duplicate"])
+        self.assertEqual(Transaction.objects.filter(split_parent=dinner).count(), 2)
+
+    def test_parts_are_not_duplicates(self):
+        self.split_pizzeria()
+
+        [candidate] = self.preview("Posted Date,Amount,Description\n2026-03-03,-30.00,Pizzeria\n")
+
+        self.assertFalse(candidate["is_duplicate"])
 
 
 @override_settings(OPENAI_API_KEY="")

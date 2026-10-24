@@ -186,7 +186,9 @@ def flag_duplicates(account, candidates):
     from transactions.models import Transaction
 
     by_date_amount = {}
-    for txn in Transaction.objects.filter(account=account):
+    # The bank's lines only: a split transaction is compared, its parts
+    # never are.
+    for txn in Transaction.objects.ledger_rows().filter(account=account):
         by_date_amount.setdefault((txn.date.isoformat(), txn.amount_cents), []).append(txn)
 
     flagged = []
