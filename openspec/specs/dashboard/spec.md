@@ -13,7 +13,8 @@ system SHALL report money in (the sum of positive transaction amounts) and
 money out (the sum of negative amounts, as a positive figure). Only
 non-archived accounts count, and transfers between the user's accounts
 SHALL count toward neither. A month with no transactions SHALL report
-zero for both.
+zero for both. A split transaction SHALL be counted through its parts, so
+a part that is a transfer counts toward neither.
 
 #### Scenario: Income and spending are totalled separately
 - **WHEN** an active account has +2,000.00 and -1,500.00 in March, and
@@ -32,6 +33,11 @@ zero for both.
 - **WHEN** in March -500.00 in "Checking" is a transfer to "Savings"
   (+500.00), and there are no other transactions
 - **THEN** March reports zero money in and zero money out
+
+#### Scenario: A split counts once, without its transfer part
+- **WHEN** March's only transaction in "Checking" is -60.00, split into
+  -30.00 "Restaurants" and -30.00 as a transfer to "Savings"
+- **THEN** March reports money out 30.00 and zero money in
 
 ### Requirement: In vs out chart
 The dashboard SHALL show money in and money out as paired bars, one pair
@@ -55,7 +61,8 @@ the net outflow of its transactions in active accounts, so refunds reduce
 it. A top-level category's figure SHALL include its subcategories. A
 category with no net outflow SHALL be left out. Spending without a
 category SHALL be reported as "Uncategorized", counting outflows only and
-leaving out transfers between the user's accounts.
+leaving out transfers between the user's accounts. A split transaction
+SHALL be counted through its parts, never as "Uncategorized" itself.
 
 #### Scenario: Subcategories roll into their parent
 - **WHEN** in March "Groceries" has -50.00 directly and its subcategory
@@ -75,6 +82,12 @@ leaving out transfers between the user's accounts.
 - **WHEN** in March there is -40.00 uncategorized spending and a -500.00
   transfer to "Savings"
 - **THEN** "Uncategorized" reports 40.00
+
+#### Scenario: Split parts count toward their categories
+- **WHEN** in March a -60.00 transaction is split into -40.00 "Groceries"
+  and -20.00 "Household"
+- **THEN** "Groceries" reports 40.00, "Household" reports 20.00, and
+  nothing is reported as "Uncategorized"
 
 ### Requirement: Expenses per category chart
 The dashboard SHALL show the chosen month's category spending as

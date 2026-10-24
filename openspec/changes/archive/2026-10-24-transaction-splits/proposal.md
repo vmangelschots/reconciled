@@ -1,5 +1,7 @@
 # Proposal
 
+Issue: #5
+
 ## Why
 
 A transaction can carry only one category, but one bank line often pays
