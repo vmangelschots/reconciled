@@ -57,7 +57,12 @@ function AccountPills({ accounts, current }) {
   }, [current?.id]);
   return (
     <div className="flex items-center gap-3 lg:hidden">
-      <nav aria-label="Accounts" className="-mx-4 flex min-w-0 flex-1 gap-2 overflow-x-auto px-4 pb-1">
+      {/* Bleeds to the left screen edge only, so the balance stays clear;
+          no visible scrollbar - the row is swiped. */}
+      <nav
+        aria-label="Accounts"
+        className="-ml-4 flex min-w-0 flex-1 gap-2 overflow-x-auto pl-4 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
         {accounts.map((a) => (
           <NavLink
             key={a.id}

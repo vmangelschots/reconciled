@@ -75,7 +75,7 @@
   - "Everything that needs attention", "Nothing to do", and the three stale-import scenarios;
   - "Last eight" and "A transfer shows once";
   - the unchanged budget, chart, tabs and loading cases.
-- [ ] 4.2 Check in the local stack, with two seeded accounts and a transfer between them:
+- [x] 4.2 Check in the local stack, with two seeded accounts and a transfer between them:
   - the sidebar accounts and total, at desktop width;
   - the pills, at 390px and 800px;
   - the overview's total, Accounts tile, stale line and single transfer row;
