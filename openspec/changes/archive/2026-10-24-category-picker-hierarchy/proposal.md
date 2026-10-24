@@ -1,5 +1,7 @@
 # Proposal
 
+Issue: #13
+
 ## Why
 
 With an empty search, the category picker lists categories in the order
