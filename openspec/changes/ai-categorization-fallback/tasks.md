@@ -7,7 +7,7 @@
 
 ## 2. AI guesser
 
-- [ ] 2.1 Implement `transactions/ai.py`: the `PayeeQuestion` / `Guess` data classes, the `CategoryGuesser` protocol, `get_guesser()`, and `ClaudeGuesser`, following design decisions 4 and 5 (per-request enum schema via `output_config.format`, effort `low`, `max_retries=0`, timeout set to the remaining deadline, chunks of 100, JSON payload, reason cleanup, typed error chain mapped to `ok` / `failed` / `key_rejected`, never raises). Verify with `transactions/tests_ai.py`, using a mocked SDK client, no network:
+- [x] 2.1 Implement `transactions/ai.py`: the `PayeeQuestion` / `Guess` data classes, the `CategoryGuesser` protocol, `get_guesser()`, and `ClaudeGuesser`, following design decisions 4 and 5 (per-request enum schema via `output_config.format`, effort `low`, `max_retries=0`, timeout set to the remaining deadline, chunks of 100, JSON payload, reason cleanup, typed error chain mapped to `ok` / `failed` / `key_rejected`, never raises). Verify with `transactions/tests_ai.py`, using a mocked SDK client, no network:
   - `get_guesser()` returns `None` without a key or when disabled;
   - the request has the expected model, effort, schema enums and payload, and the payload has no account name, date or balance;
   - answers parse into `Guess`es;
