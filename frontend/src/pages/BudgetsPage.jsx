@@ -1,3 +1,4 @@
+import { HandCoins } from "lucide-react";
 import { useEffect, useState } from "react";
 import { getBudgetSummary } from "../api/budgets";
 import {
@@ -7,6 +8,7 @@ import {
   setCategoryLimit,
   updateCategory,
 } from "../api/categories";
+import { listTabs } from "../api/tabs";
 import { CategoryCombobox } from "../components/CategoryCombobox";
 import { Button } from "../components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
@@ -17,6 +19,7 @@ import { useToast } from "../components/ui/Toast";
 import { buildCategoryTree } from "../lib/categoryTree";
 import { cn } from "../lib/cn";
 import { formatMoney } from "../lib/money";
+import { tabSentence, TONE_CLASS } from "../lib/tabs";
 
 // A missing limit shows as a dash rather than an amount.
 function formatCents(cents) {
@@ -34,6 +37,7 @@ export function BudgetsPage() {
   const [summary, setSummary] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [pendingIds, setPendingIds] = useState(new Set());
+  const [tabBalances, setTabBalances] = useState({});
   const toast = useToast();
 
   function setPending(id, isPending) {
@@ -49,6 +53,10 @@ export function BudgetsPage() {
   }
 
   function reloadCategories() {
+    // Tab balances come along, since re-parenting can make a category a tab.
+    listTabs()
+      .then((tabs) => setTabBalances(Object.fromEntries(tabs.map((t) => [t.id, t.balance_cents]))))
+      .catch(() => setTabBalances({}));
     return listCategories().then(setCategories);
   }
 
@@ -66,7 +74,7 @@ export function BudgetsPage() {
   }, [month]);
 
   async function handleAddCategory(values) {
-    await createCategory(values.name, values.parent);
+    await createCategory(values.name, values.parent, values.is_tab_group);
     toast.success("Category created.");
     await reloadCategories();
     await reloadSummary();
@@ -125,6 +133,7 @@ export function BudgetsPage() {
                 <CategoryRow
                   category={parent}
                   categories={categories}
+                  tabBalance={tabBalances[parent.id]}
                   editing={editingId === parent.id}
                   disabled={pendingIds.has(parent.id)}
                   onEdit={() => setEditingId(parent.id)}
@@ -139,6 +148,7 @@ export function BudgetsPage() {
                         <CategoryRow
                           category={sub}
                           categories={categories}
+                          tabBalance={tabBalances[sub.id]}
                           editing={editingId === sub.id}
                           disabled={pendingIds.has(sub.id)}
                           onEdit={() => setEditingId(sub.id)}
@@ -228,7 +238,7 @@ function SummaryRows({ row, onSetLimit, indent = false }) {
   );
 }
 
-function CategoryRow({ category, categories, editing, disabled, onEdit, onCancelEdit, onSave, onDelete }) {
+function CategoryRow({ category, categories, tabBalance, editing, disabled, onEdit, onCancelEdit, onSave, onDelete }) {
   if (editing) {
     return (
       <CategoryForm
@@ -242,7 +252,16 @@ function CategoryRow({ category, categories, editing, disabled, onEdit, onCancel
   }
   return (
     <div className="flex items-center gap-3">
-      <span className="flex-1 text-sm text-ink-primary">{category.name}</span>
+      <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-0.5 text-sm text-ink-primary">
+        <span className="flex items-center gap-1.5">
+          {(category.is_tab_group || category.is_tab) && (
+            <HandCoins className="h-3.5 w-3.5 text-ink-muted" aria-label="Tab" />
+          )}
+          {category.name}
+        </span>
+        {category.is_tab_group && <span className="text-xs text-ink-muted">Tab group · not budgeted</span>}
+        {category.is_tab && <TabBalance name={category.name} cents={tabBalance ?? 0} />}
+      </span>
       <Button variant="outline" size="sm" disabled={disabled} onClick={onEdit}>
         Rename
       </Button>
@@ -253,11 +272,52 @@ function CategoryRow({ category, categories, editing, disabled, onEdit, onCancel
   );
 }
 
+function TabBalance({ name, cents }) {
+  const sentence = tabSentence(name, cents);
+  return <span className={cn("text-xs", TONE_CLASS[sentence.tone])}>{sentence.text}</span>;
+}
+
+function KindSwitch({ isTabGroup, onChange }) {
+  const option = (value, label) => (
+    <button
+      type="button"
+      aria-pressed={isTabGroup === value}
+      onClick={() => onChange(value)}
+      className={cn(
+        "flex h-8 items-center gap-1.5 px-3 text-sm",
+        isTabGroup === value ? "bg-accent text-white" : "bg-surface text-ink-secondary hover:text-ink-primary",
+      )}
+    >
+      {value && <HandCoins className="h-3.5 w-3.5" aria-hidden="true" />}
+      {label}
+    </button>
+  );
+  return (
+    <div role="group" aria-label="Kind" className="flex overflow-hidden rounded-md border border-border">
+      {option(false, "Budget")}
+      {option(true, "Tab")}
+    </div>
+  );
+}
+
 function CategoryForm({ initialValues, categories, onSubmit, onCancel, submitLabel }) {
   const [name, setName] = useState(initialValues?.name ?? "");
   const [parentId, setParentId] = useState(initialValues?.parent ?? null);
+  const [isTabGroup, setIsTabGroup] = useState(initialValues?.is_tab_group ?? false);
+  const [confirming, setConfirming] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const toast = useToast();
+
+  const parent = categories.find((c) => c.id === parentId);
+  const tabGroup = parentId == null && isTabGroup;
+  // Rows already in this group's subcategories move in or out of the
+  // reports when its kind changes, so that asks first.
+  const movedRows =
+    initialValues && parentId == null && tabGroup !== Boolean(initialValues.is_tab_group)
+      ? categories
+          .filter((c) => c.parent === initialValues.id)
+          .reduce((n, c) => n + (c.transaction_count ?? 0), 0)
+      : 0;
 
   // Only top-level categories are valid parents (two levels max), and a
   // category can't be its own parent.
@@ -267,12 +327,18 @@ function CategoryForm({ initialValues, categories, onSubmit, onCancel, submitLab
 
   async function handleSubmit(event) {
     event.preventDefault();
+    if (movedRows > 0 && !confirming) {
+      setConfirming(true);
+      return;
+    }
+    setConfirming(false);
     setSubmitting(true);
     try {
-      await onSubmit({ name, parent: parentId });
+      await onSubmit({ name, parent: parentId, is_tab_group: tabGroup });
       if (!initialValues) {
         setName("");
         setParentId(null);
+        setIsTabGroup(false);
       }
     } catch (e) {
       toast.error(e.data ? Object.values(e.data).flat().join(" ") : e.message);
@@ -291,19 +357,54 @@ function CategoryForm({ initialValues, categories, onSubmit, onCancel, submitLab
         <Label>Parent</Label>
         <CategoryCombobox
           categories={parentCandidates}
+          offerTabGroups
           value={parentId}
           onSelect={setParentId}
           clearLabel="No parent (top-level)"
           placeholder="No parent (top-level)"
         />
       </div>
-      <Button type="submit" disabled={submitting}>
-        {submitLabel}
-      </Button>
-      {onCancel && (
-        <Button type="button" variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
+      <div className="flex flex-col gap-1.5">
+        <Label>Kind</Label>
+        {parentId == null ? (
+          <KindSwitch
+            isTabGroup={isTabGroup}
+            onChange={(value) => {
+              setIsTabGroup(value);
+              setConfirming(false);
+            }}
+          />
+        ) : (
+          <span className="flex h-8 items-center gap-1.5 text-sm text-ink-muted">
+            {parent?.is_tab_group && <HandCoins className="h-3.5 w-3.5" aria-hidden="true" />}
+            {parent?.is_tab_group ? "Tab" : "Budget"}, from {parent?.name}
+          </span>
+        )}
+      </div>
+      {confirming ? (
+        <div className="flex w-full flex-wrap items-center gap-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-ink-primary">
+          <span className="flex-1">
+            {movedRows} {movedRows === 1 ? "transaction" : "transactions"} in its subcategories will{" "}
+            {tabGroup ? "stop counting" : "count again"} in budgets and the dashboard.
+          </span>
+          <Button type="submit" size="sm" disabled={submitting}>
+            {tabGroup ? "Make it a tab group" : "Make it a budget group"}
+          </Button>
+          <Button type="button" size="sm" variant="ghost" onClick={() => setConfirming(false)}>
+            Cancel
+          </Button>
+        </div>
+      ) : (
+        <>
+          <Button type="submit" disabled={submitting}>
+            {submitLabel}
+          </Button>
+          {onCancel && (
+            <Button type="button" variant="outline" onClick={onCancel}>
+              Cancel
+            </Button>
+          )}
+        </>
       )}
     </form>
   );

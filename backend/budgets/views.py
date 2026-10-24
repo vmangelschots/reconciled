@@ -1,4 +1,4 @@
-from django.db.models import Sum
+from django.db.models import Count, Sum
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -12,7 +12,7 @@ from .utils import month_range, parse_month
 
 
 class CategoryViewSet(viewsets.ModelViewSet):
-    queryset = Category.objects.all()
+    queryset = Category.objects.select_related("parent").annotate(transaction_count=Count("transactions"))
     serializer_class = CategorySerializer
 
     def destroy(self, request, *args, **kwargs):
@@ -48,6 +48,8 @@ class CategoryViewSet(viewsets.ModelViewSet):
         """Set the default limit (month omitted/null) or a specific
         month's override (month="YYYY-MM") for this category."""
         category = self.get_object()
+        if category.is_tab_group or category.is_tab:
+            return Response({"detail": "Tabs aren't budgeted, so they take no limit."}, status=400)
         limit_cents = request.data.get("limit_cents")
         if limit_cents is None:
             return Response({"limit_cents": "This field is required."}, status=400)
@@ -81,7 +83,9 @@ class BudgetSummaryView(APIView):
         period_end = month_range(period_start)
 
         categories = []
-        for category in Category.objects.all():
+        # Tab groups and tabs aren't budgeted - see openspec/specs/repayment-tabs.
+        budgeted = Category.objects.filter(is_tab_group=False).exclude(parent__is_tab_group=True)
+        for category in budgeted:
             spent = (
                 category.transactions.filter(date__gte=period_start, date__lt=period_end)
                 .aggregate(total=Sum("amount_cents"))["total"]

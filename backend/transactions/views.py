@@ -7,7 +7,9 @@ from rest_framework.response import Response
 
 from accounts.models import Account
 from budgets.models import Category
+from budgets.tabs import TAB_GROUP_ERROR
 
+from . import tabs
 from .ai import get_guesser
 from .categorize import categorize, needs_review, review_groups, uncategorized
 from .models import Transaction
@@ -172,6 +174,8 @@ class TransactionViewSet(viewsets.ModelViewSet):
             category = Category.objects.get(pk=request.data["category"])
         except (Category.DoesNotExist, ValueError, TypeError):
             return Response({"category": ["Unknown category."]}, status=status.HTTP_400_BAD_REQUEST)
+        if category.is_tab_group:
+            return Response({"category": [TAB_GROUP_ERROR]}, status=status.HTTP_400_BAD_REQUEST)
         now = timezone.now()
         with db_transaction.atomic():
             kept = rows.filter(category=category).update(category_confirmed=True, updated_at=now)
@@ -202,3 +206,43 @@ class TransactionViewSet(viewsets.ModelViewSet):
 
     def _serialized(self, pk):
         return self.get_serializer(self.get_queryset().get(pk=pk)).data
+
+
+def _tab_body(summary, with_rows=False):
+    category = summary.category
+    body = {
+        "id": category.id,
+        "name": category.name,
+        "group_name": category.parent.name,
+        "balance_cents": summary.balance_cents,
+        "open_since": summary.open_since,
+        "row_count": len(summary.rows),
+    }
+    if with_rows:
+        body["rows"] = [
+            {
+                "id": row.id,
+                "date": row.date,
+                "payee": row.payee,
+                "notes": row.notes,
+                "amount_cents": row.amount_cents,
+                "running_balance_cents": running,
+                "split_parent": row.split_parent_id,
+                "parent_amount_cents": row.split_parent.amount_cents if row.split_parent_id else None,
+            }
+            for row, running in summary.rows
+        ]
+    return body
+
+
+class TabViewSet(viewsets.ViewSet):
+    """What each tab's person owes; see transactions/tabs.py."""
+
+    def list(self, request):
+        return Response([_tab_body(s) for s in tabs.balances()])
+
+    def retrieve(self, request, pk=None):
+        category = tabs.tabs().filter(pk=pk).first() if str(pk).isdigit() else None
+        if category is None:
+            return Response({"detail": "Tab not found."}, status=status.HTTP_404_NOT_FOUND)
+        return Response(_tab_body(tabs.tab_detail(category), with_rows=True))

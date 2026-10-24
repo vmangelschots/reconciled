@@ -4,11 +4,13 @@ export function listCategories() {
   return apiFetch("/api/categories/");
 }
 
-export function createCategory(name, parent = null) {
-  return apiFetch("/api/categories/", { method: "POST", body: { name, parent } });
+// isTabGroup: a top-level category whose subcategories are tabs - see
+// specs/repayment-tabs.
+export function createCategory(name, parent = null, isTabGroup = false) {
+  return apiFetch("/api/categories/", { method: "POST", body: { name, parent, is_tab_group: isTabGroup } });
 }
 
-// data: { name?, parent? } - either or both; parent: null clears it (top-level).
+// data: { name?, parent?, is_tab_group? }; parent: null clears it (top-level).
 export function updateCategory(id, data) {
   return apiFetch(`/api/categories/${id}/`, { method: "PATCH", body: data });
 }

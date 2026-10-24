@@ -104,6 +104,17 @@ class CategorizeTests(TestCase):
 
         self.assertEqual(self.categorized(new).category, self.household)
 
+    def test_history_learns_a_repayer(self):
+        tabs = Category.objects.create(name="Tabs", is_tab_group=True)
+        jan = Category.objects.create(name="Jan", parent=tabs)
+        self.txn("JAN PEETERS", amount_cents=3000, category=jan)
+        new = self.txn("JAN PEETERS", amount_cents=2000, day=20)
+
+        guessed = self.categorized(new)
+
+        self.assertEqual((guessed.category, guessed.category_confirmed), (jan, False))
+        self.assertEqual(guessed.category_source, Transaction.CategorySource.HISTORY)
+
     def test_inflows_and_outflows_are_matched_separately(self):
         self.txn("Carrefour", amount_cents=-2000, category=self.groceries)
         refund = self.txn("Carrefour", amount_cents=500, day=20)
@@ -293,6 +304,28 @@ class AICategorizeTests(TestCase):
 
         self.assertIn((self.lunch.id, "Food / Lunch"), guesser.categories)
         self.assertIn((self.groceries.id, "Groceries"), guesser.categories)
+
+    def test_tabs_are_not_sent_to_the_ai(self):
+        tabs = Category.objects.create(name="Tabs", is_tab_group=True)
+        Category.objects.create(name="Jan", parent=tabs)
+        guesser = FakeGuesser()
+
+        self.run_with(guesser, [self.txn("Bistro", day=20)])
+
+        labels = [label for _, label in guesser.categories]
+        self.assertIn("Groceries", labels)
+        self.assertFalse([label for label in labels if "Tabs" in label or "Jan" in label])
+
+    def test_an_answer_naming_a_tab_is_ignored(self):
+        tabs = Category.objects.create(name="Tabs", is_tab_group=True)
+        jan = Category.objects.create(name="Jan", parent=tabs)
+        new = self.txn("JAN PEETERS", amount_cents=3000, day=20)
+
+        result = self.run_with(FakeGuesser({"JAN PEETERS": (jan, "a friend")}), [new])
+
+        new.refresh_from_db()
+        self.assertIsNone(new.category)
+        self.assertEqual(result.ai, 0)
 
     def assert_history_kept(self, guesser):
         Transaction.objects.create(

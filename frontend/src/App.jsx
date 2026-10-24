@@ -8,6 +8,7 @@ import { ForecastingPage } from "./pages/ForecastingPage";
 import { ImportPage } from "./pages/ImportPage";
 import { LoginPage } from "./pages/LoginPage";
 import { ReviewPage } from "./pages/ReviewPage";
+import { TabPage } from "./pages/TabPage";
 import { TransactionsPage } from "./pages/TransactionsPage";
 
 export default function App() {
@@ -29,6 +30,7 @@ export default function App() {
         <Route path="budgets" element={<BudgetsPage />} />
         <Route path="import" element={<ImportPage />} />
         <Route path="forecast" element={<ForecastingPage />} />
+        <Route path="tabs/:id" element={<TabPage />} />
       </Route>
     </Routes>
   );

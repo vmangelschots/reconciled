@@ -29,6 +29,39 @@ class ReportTestCase(TestCase):
         )
 
 
+class TabRowsTests(ReportTestCase):
+    def setUp(self):
+        super().setUp()
+        self.restaurants = Category.objects.create(name="Restaurants")
+        tabs = Category.objects.create(name="Tabs", is_tab_group=True)
+        self.jan = Category.objects.create(name="Jan", parent=tabs)
+
+    def test_half_a_dinner_to_a_tab(self):
+        dinner = self.txn(-6000, date(2026, 3, 3))
+        save_split(dinner, [SplitLine(-3000, category=self.restaurants), SplitLine(-3000, category=self.jan)])
+
+        months = self.client.get(reverse("report-cash-flow"), {"end": "2026-03"}).json()["months"]
+        spending = self.client.get(reverse("report-category-spending"), {"month": "2026-03"}).json()
+
+        self.assertEqual(months[-1], {"month": "2026-03", "in_cents": 0, "out_cents": 3000})
+        self.assertEqual({c["name"]: c["spent_cents"] for c in spending["categories"]}, {"Restaurants": 3000})
+        self.assertEqual(spending["uncategorized_cents"], 0)
+
+    def test_a_repayment_is_not_income(self):
+        self.txn(3000, date(2026, 3, 12), category=self.jan)
+
+        months = self.client.get(reverse("report-cash-flow"), {"end": "2026-03"}).json()["months"]
+
+        self.assertEqual(months[-1], {"month": "2026-03", "in_cents": 0, "out_cents": 0})
+
+    def test_uncategorized_rows_still_count(self):
+        self.txn(-4000, date(2026, 3, 3))
+
+        months = self.client.get(reverse("report-cash-flow"), {"end": "2026-03"}).json()["months"]
+
+        self.assertEqual(months[-1]["out_cents"], 4000)
+
+
 class CashFlowTests(ReportTestCase):
     def get(self, end):
         return self.client.get(reverse("report-cash-flow"), {"end": end})
