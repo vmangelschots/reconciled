@@ -8,6 +8,7 @@ from rest_framework.response import Response
 from accounts.models import Account
 from budgets.models import Category
 
+from .ai import get_guesser
 from .categorize import categorize, needs_review, review_groups, uncategorized
 from .models import Transaction
 from .serializers import TransactionSerializer
@@ -73,8 +74,15 @@ class TransactionViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["get"], url_path="review-groups")
     def review_groups(self, request):
         """The Review page: unconfirmed guesses grouped by payee and guess,
-        plus how many transactions the backfill could still try."""
-        return Response({"groups": review_groups(), "uncategorized_count": uncategorized().count()})
+        how many transactions the backfill could still try, and whether it
+        would use AI."""
+        return Response(
+            {
+                "groups": review_groups(),
+                "uncategorized_count": uncategorized().count(),
+                "ai_enabled": get_guesser() is not None,
+            }
+        )
 
     @action(detail=False, methods=["get"], url_path="review-count")
     def review_count(self, request):
@@ -115,8 +123,9 @@ class TransactionViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["post"])
     def categorize(self, request):
-        """POST {} guesses categories for every uncategorized transaction
-        from history; {"account": id} limits it to that account."""
+        """POST {} guesses categories for every uncategorized transaction,
+        from history and then AI when it's configured; {"account": id}
+        limits it to that account."""
         rows = uncategorized()
         account_id = request.data.get("account")
         if account_id is not None:
@@ -126,7 +135,7 @@ class TransactionViewSet(viewsets.ModelViewSet):
                 return Response({"account": ["Unknown account."]}, status=status.HTTP_400_BAD_REQUEST)
             rows = rows.filter(account=account)
         rows = list(rows)
-        return Response({"categorized_count": categorize(rows), "attempted_count": len(rows)})
+        return Response({**categorize(rows).summary(), "attempted_count": len(rows)})
 
     def _serialized(self, pk):
         return self.get_serializer(self.get_queryset().get(pk=pk)).data

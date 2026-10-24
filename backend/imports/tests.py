@@ -1,14 +1,16 @@
 import io
+from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from rest_framework.test import APIClient
 
 from accounts.models import Account
 from budgets.models import Category
 from transactions.models import Transaction
+from transactions.tests_categorize import FakeGuesser
 from transactions.transfers import link_transfer
 
 from .models import ImportSession
@@ -293,6 +295,7 @@ class DateFormatTests(TestCase):
         self.assertEqual(response.status_code, 400)
 
 
+@override_settings(ANTHROPIC_API_KEY="")
 class SemicolonEndToEndTests(TestCase):
     """The full upload -> map -> preview -> commit flow against a
     semicolon-delimited, DD/MM/YYYY-dated file - the exact shape of the
@@ -387,6 +390,7 @@ class DuplicateDetectionTests(TestCase):
         self.assertTrue(candidates[0]["is_duplicate"])
 
 
+@override_settings(ANTHROPIC_API_KEY="")
 class CommitImportTests(TestCase):
     def setUp(self):
         self.client = APIClient()
@@ -516,6 +520,7 @@ class CommitImportTests(TestCase):
         self.assertEqual(Transaction.objects.filter(account=self.account).count(), 1)
 
 
+@override_settings(ANTHROPIC_API_KEY="")
 class TransferCounterpartImportTests(TestCase):
     """A bank line confirms a transfer counterpart the app created."""
 
@@ -566,7 +571,16 @@ class TransferCounterpartImportTests(TestCase):
 
         response = self.commit(session_id, [c["index"] for c in candidates])
 
-        self.assertEqual(response.json(), {"created_count": 0, "confirmed_transfer_count": 1, "categorized_count": 0})
+        self.assertEqual(
+            response.json(),
+            {
+                "created_count": 0,
+                "confirmed_transfer_count": 1,
+                "categorized_count": 0,
+                "categorized_by_source": {"history": 0, "ai": 0},
+                "ai": {"status": "off", "declined_count": 0},
+            },
+        )
         rows = Transaction.objects.filter(account=self.savings)
         self.assertEqual(rows.count(), 1)
         confirmed = rows.get()
@@ -621,11 +635,21 @@ class TransferCounterpartImportTests(TestCase):
 
         response = self.commit(session_id, [c["index"] for c in candidates])
 
-        self.assertEqual(response.json(), {"created_count": 1, "confirmed_transfer_count": 0, "categorized_count": 0})
+        self.assertEqual(
+            response.json(),
+            {
+                "created_count": 1,
+                "confirmed_transfer_count": 0,
+                "categorized_count": 0,
+                "categorized_by_source": {"history": 0, "ai": 0},
+                "ai": {"status": "off", "declined_count": 0},
+            },
+        )
         self.assertEqual(Transaction.objects.get(account=self.savings).payee, "OVERSCHRIJVING BE12")
 
 
 
+@override_settings(ANTHROPIC_API_KEY="")
 class ImportCategorizationTests(TestCase):
     """Committing an import guesses categories from history - see
     openspec/specs/transaction-import and auto-categorization."""
@@ -681,3 +705,75 @@ class ImportCategorizationTests(TestCase):
         self.assertEqual(rows["NMBS 909"].category, self.transport)
         self.assertIsNone(rows["Bistro Lumiere"].category)
         self.assertTrue(rows["Bistro Lumiere"].category_confirmed)
+
+    ROWS = [
+        ("2026-10-02", "-38.10", "Carrefour Market 0987"),
+        ("2026-10-03", "-15.30", "NMBS 909"),
+        ("2026-10-04", "-48.00", "Bistro Lumiere"),
+        ("2026-10-05", "-12.00", "PAYPAL *X123"),
+    ]
+
+    def import_with(self, guesser):
+        with mock.patch("transactions.categorize.get_guesser", return_value=guesser):
+            return self.import_rows(self.ROWS)
+
+    def test_commit_counts_split_by_source(self):
+        eating_out = Category.objects.create(name="Eating out")
+        guesser = FakeGuesser({"Bistro Lumiere": (eating_out, "Restaurant name"), "PAYPAL *X123": None})
+
+        body = self.import_with(guesser).json()
+
+        self.assertEqual(body["categorized_count"], 3)
+        self.assertEqual(body["categorized_by_source"], {"history": 2, "ai": 1})
+        self.assertEqual(body["ai"], {"status": "ok", "declined_count": 1})
+        bistro = Transaction.objects.get(payee="Bistro Lumiere")
+        self.assertEqual((bistro.category, bistro.category_source), (eating_out, "ai"))
+        self.assertEqual(bistro.category_reason, "Restaurant name")
+
+    def test_a_rejected_key_still_commits_with_history_guesses(self):
+        body = self.import_with(FakeGuesser(status="key_rejected")).json()
+
+        self.assertEqual(body["created_count"], 4)
+        self.assertEqual(body["categorized_by_source"], {"history": 2, "ai": 0})
+        self.assertEqual(body["ai"]["status"], "key_rejected")
+
+    def test_a_raising_guesser_leaves_the_import_saved_with_its_history_guesses(self):
+        # The "AI slower than the deadline" scenario: the AI step fails
+        # mid-commit, and the import is kept regardless.
+        with self.assertLogs("transactions.categorize", "ERROR"):
+            response = self.import_with(FakeGuesser(error=TimeoutError("deadline")))
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["ai"]["status"], "failed")
+        self.assertEqual(Transaction.objects.filter(date__gte="2026-10-01").count(), 4)
+        self.assertEqual(Transaction.objects.get(payee="NMBS 909").category, self.transport)
+        self.assertIsNone(Transaction.objects.get(payee="Bistro Lumiere").category)
+        self.assertEqual(ImportSession.objects.get().status, ImportSession.Status.COMMITTED)
+
+    def test_the_import_is_saved_before_guessing_starts(self):
+        # Even if categorizing itself blows up (or the worker dies), the
+        # created transactions and the committed session are already saved.
+        self.client.raise_request_exception = False
+        with mock.patch("imports.views.categorize", side_effect=RuntimeError("worker killed")):
+            with self.assertLogs("django.request", "ERROR"):
+                response = self.import_rows(self.ROWS)
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(Transaction.objects.filter(date__gte="2026-10-01").count(), 4)
+        self.assertEqual(ImportSession.objects.get().status, ImportSession.Status.COMMITTED)
+
+    def test_the_session_says_whether_ai_is_enabled(self):
+        for guesser, expected in ((None, False), (FakeGuesser(), True)):
+            with self.subTest(enabled=expected), mock.patch("imports.views.get_guesser", return_value=guesser):
+                upload = self.client.post(
+                    reverse("importsession-list"),
+                    {"account": self.account.id, "file": csv_file("Date,Amount,Description\n2026-10-02,-1.00,X\n")},
+                    format="multipart",
+                ).json()
+                self.assertEqual(upload["ai_enabled"], expected)
+                mapped = self.client.post(
+                    reverse("importsession-map", args=[upload["id"]]),
+                    {"date": "Date", "date_format": "YYYY-MM-DD", "amount": "Amount", "description": "Description"},
+                    format="json",
+                ).json()
+                self.assertEqual(mapped["ai_enabled"], expected)

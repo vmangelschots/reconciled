@@ -1,5 +1,7 @@
+from unittest import mock
+
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from rest_framework.test import APIClient
 
@@ -7,11 +9,14 @@ from accounts.models import Account
 from budgets.models import Category
 
 from .models import Transaction
+from .tests_categorize import FakeGuesser
 from .transfers import link_transfer
 
 HISTORY = Transaction.CategorySource.HISTORY
+AI = Transaction.CategorySource.AI
 
 
+@override_settings(ANTHROPIC_API_KEY="")
 class ReviewApiTests(TestCase):
     """The Review page's endpoints - see openspec/specs/auto-categorization."""
 
@@ -73,6 +78,29 @@ class ReviewApiTests(TestCase):
             set(carrefour["transactions"][0]), {"id", "date", "account", "payee", "amount_cents", "notes"}
         )
         self.assertEqual(groups[2]["evidence"], {"matching": 1, "total": 8})
+
+    def test_ai_groups_come_after_history_groups_with_their_reason(self):
+        self.txn("Carrefour", category=self.groceries)
+        for day in (10, 11):
+            self.txn("Carrefour", day=day, category=self.groceries, guessed=True)
+        for day in range(12, 18):
+            Transaction.objects.create(
+                account=self.checking, date=f"2026-10-{day}", amount_cents=-4800, payee="Bistro Lumiere",
+                category=self.household, category_confirmed=False, category_source=AI,
+                category_reason="Restaurant name",
+            )
+
+        groups = self.groups()["groups"]
+
+        self.assertEqual([(g["source"], g["count"]) for g in groups], [("history", 2), ("ai", 6)])
+        self.assertIsNone(groups[0]["reason"])
+        self.assertEqual(groups[1]["reason"], "Restaurant name")
+        self.assertIsNone(groups[1]["evidence"])
+
+    def test_ai_enabled_follows_the_guesser(self):
+        self.assertFalse(self.groups()["ai_enabled"])
+        with mock.patch("transactions.views.get_guesser", return_value=FakeGuesser()):
+            self.assertTrue(self.groups()["ai_enabled"])
 
     def test_direction_splits_groups(self):
         self.txn("Carrefour", category=self.groceries, guessed=True)
@@ -150,6 +178,22 @@ class ReviewApiTests(TestCase):
         self.assertTrue(guess.category_confirmed)
         self.assertEqual(guess.category_source, "history")
 
+    def test_confirming_an_ai_guess_keeps_its_reason_and_correcting_it_clears_it(self):
+        kept, corrected = (
+            Transaction.objects.create(
+                account=self.checking, date="2026-10-02", amount_cents=-4800, payee=payee,
+                category=self.household, category_confirmed=False, category_source=AI, category_reason="Shop",
+            )
+            for payee in ("Bistro", "Other")
+        )
+        self.confirm({"ids": [kept.id]})
+        self.confirm({"ids": [corrected.id], "category": self.groceries.id})
+
+        kept.refresh_from_db()
+        corrected.refresh_from_db()
+        self.assertEqual((kept.category_source, kept.category_reason), ("ai", "Shop"))
+        self.assertEqual((corrected.category_source, corrected.category_reason), ("manual", ""))
+
     def test_confirm_rejects_bad_input(self):
         self.assertEqual(self.confirm({}).status_code, 400)
         self.assertEqual(self.confirm({"ids": "1,2"}).status_code, 400)
@@ -173,7 +217,10 @@ class ReviewApiTests(TestCase):
 
         # The transfer's created counterpart is excluded; the guessed row
         # and the transfer keep what they had.
-        self.assertEqual(response.json(), {"categorized_count": 25, "attempted_count": 40})
+        body = response.json()
+        self.assertEqual((body["categorized_count"], body["attempted_count"]), (25, 40))
+        self.assertEqual(body["categorized_by_source"], {"history": 25, "ai": 0})
+        self.assertEqual(body["ai"], {"status": "off", "declined_count": 0})
         guessed.refresh_from_db()
         transfer.refresh_from_db()
         self.assertEqual(guessed.category, self.household)
@@ -186,7 +233,35 @@ class ReviewApiTests(TestCase):
 
         response = self.client.post(reverse("transaction-categorize"), {"account": self.joint.id}, format="json")
 
-        self.assertEqual(response.json(), {"categorized_count": 1, "attempted_count": 1})
+        self.assertEqual((response.json()["categorized_count"], response.json()["attempted_count"]), (1, 1))
+
+    def backfill_40(self, guesser):
+        """40 uncategorized rows: 25 with history, 15 new payees."""
+        self.txn("Carrefour", category=self.groceries)
+        for i in range(25):
+            self.txn("Carrefour", day=10)
+        for i in range(15):
+            self.txn(f"Unknown shop {chr(97 + i)}", day=11)
+        with mock.patch("transactions.categorize.get_guesser", return_value=guesser):
+            return self.client.post(reverse("transaction-categorize"), {}, format="json").json()
+
+    def test_backfill_with_ai(self):
+        # The model guesses 10 of the 15 new payees and declines 5.
+        answers = {f"Unknown shop {chr(97 + i)}": (self.household, "Shop") if i < 10 else None for i in range(15)}
+
+        body = self.backfill_40(FakeGuesser(answers))
+
+        self.assertEqual((body["categorized_count"], body["attempted_count"]), (35, 40))
+        self.assertEqual(body["categorized_by_source"], {"history": 25, "ai": 10})
+        self.assertEqual(body["ai"], {"status": "ok", "declined_count": 5})
+        groups = self.groups()["groups"]
+        self.assertEqual([g["source"] for g in groups], ["history"] + ["ai"] * 10)
+
+    def test_backfill_reports_a_rejected_key(self):
+        body = self.backfill_40(FakeGuesser(status="key_rejected"))
+
+        self.assertEqual(body["categorized_by_source"], {"history": 25, "ai": 0})
+        self.assertEqual(body["ai"]["status"], "key_rejected")
 
     def test_categorize_rejects_an_unknown_account(self):
         response = self.client.post(reverse("transaction-categorize"), {"account": 99999}, format="json")
