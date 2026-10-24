@@ -384,3 +384,19 @@ class TabsAreNotBudgetedTests(TestCase):
                 )
                 self.assertEqual(response.status_code, 400)
         self.assertFalse(CategoryLimit.objects.exists())
+
+
+class BudgetSummaryQueryTests(TestCase):
+    def test_query_count_does_not_grow_with_categories(self):
+        client = APIClient()
+        client.force_authenticate(user=get_user_model().objects.create_user(username="b", password="x"))
+        account = Account.objects.create(name="Main", account_type="checking", starting_balance_cents=0)
+        for i in range(6):
+            category = Category.objects.create(name=f"C{i}")
+            CategoryLimit.objects.create(category=category, month=None, limit_cents=1000)
+            Transaction.objects.create(account=account, date="2026-01-05", amount_cents=-100, payee="x", category=category)
+
+        with self.assertNumQueries(4):
+            response = client.get(reverse("budget-summary"), {"month": "2026-01"})
+
+        self.assertEqual([c["spent_cents"] for c in response.json()["categories"]], [100] * 6)

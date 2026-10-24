@@ -1,14 +1,13 @@
-from django.db.models import Count, Sum
+from django.db.models import Count
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from transactions.models import Transaction
-
 from .models import Category, CategoryLimit
 from .serializers import CategorySerializer
-from .utils import month_range, parse_month
+from .summary import budget_rows, uncategorized_spent
+from .utils import parse_month
 
 
 class CategoryViewSet(viewsets.ModelViewSet):
@@ -80,54 +79,10 @@ class BudgetSummaryView(APIView):
                 raise ValueError(month_param)
         except ValueError:
             return Response({"detail": "month must be in YYYY-MM format."}, status=400)
-        period_end = month_range(period_start)
-
-        categories = []
-        # Tab groups and tabs aren't budgeted - see openspec/specs/repayment-tabs.
-        budgeted = Category.objects.filter(is_tab_group=False).exclude(parent__is_tab_group=True)
-        for category in budgeted:
-            spent = (
-                category.transactions.filter(date__gte=period_start, date__lt=period_end)
-                .aggregate(total=Sum("amount_cents"))["total"]
-                or 0
-            )
-            spent_cents = -spent
-
-            override = category.limits.filter(month=period_start).first()
-            default = category.limits.filter(month__isnull=True).first()
-            limit = override or default
-            limit_cents = limit.limit_cents if limit else None
-
-            remaining_cents = limit_cents - spent_cents if limit_cents is not None else None
-            over_limit = limit_cents is not None and spent_cents > limit_cents
-
-            categories.append(
-                {
-                    "category_id": category.id,
-                    "category_name": category.name,
-                    "parent_id": category.parent_id,
-                    "limit_cents": limit_cents,
-                    "spent_cents": spent_cents,
-                    "remaining_cents": remaining_cents,
-                    "over_limit": over_limit,
-                }
-            )
-
-        uncategorized_spent = (
-            Transaction.objects.counted_rows()  # a split counts through its parts
-            .filter(
-                category__isnull=True,
-                transfer_counterpart__isnull=True,  # transfers aren't spending
-                date__gte=period_start,
-                date__lt=period_end,
-            ).aggregate(total=Sum("amount_cents"))["total"]
-            or 0
-        )
-
         return Response(
             {
                 "month": month_param,
-                "categories": categories,
-                "uncategorized_spent_cents": -uncategorized_spent,
+                "categories": budget_rows(period_start),
+                "uncategorized_spent_cents": uncategorized_spent(period_start),
             }
         )

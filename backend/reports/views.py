@@ -7,7 +7,8 @@ from rest_framework.views import APIView
 
 from budgets.models import Category
 from budgets.utils import month_range, parse_month
-from transactions.models import Transaction
+
+from .spending import active_transactions, month_spending
 
 CASH_FLOW_MONTHS = 12
 
@@ -31,18 +32,6 @@ def _shift_months(month, delta):
     return date(index // 12, index % 12 + 1, 1)
 
 
-def _active_transactions():
-    # Transfers between the user's own accounts are neither income nor
-    # spending, so no report counts them (they never have a category), and
-    # neither are tab rows: money lent out or paid back. A split
-    # transaction counts through its parts.
-    return (
-        Transaction.objects.counted_rows()
-        .outside_tabs()
-        .filter(account__archived=False, transfer_counterpart__isnull=True)
-    )
-
-
 class CashFlowView(APIView):
     """Money in vs money out per month, for the 12 months ending at `end`."""
 
@@ -53,7 +42,7 @@ class CashFlowView(APIView):
         start = _shift_months(end, -(CASH_FLOW_MONTHS - 1))
 
         rows = (
-            _active_transactions()
+            active_transactions()
             .filter(date__gte=start, date__lt=month_range(end))
             .annotate(month=TruncMonth("date"))
             .values("month")
@@ -92,20 +81,7 @@ class CategorySpendingView(APIView):
         month, error = _month_param(request, "month")
         if error:
             return error
-        in_month = _active_transactions().filter(date__gte=month, date__lt=month_range(month))
-
-        spent = {
-            row["category_id"]: -row["net"]
-            for row in in_month.filter(category__isnull=False)
-            .values("category_id")
-            .annotate(net=Sum("amount_cents"))
-        }
-        uncategorized = -(
-            in_month.filter(category__isnull=True, amount_cents__lt=0).aggregate(total=Sum("amount_cents"))[
-                "total"
-            ]
-            or 0
-        )
+        spent, uncategorized = month_spending(month)
 
         categories = list(Category.objects.all())
         children = {}
