@@ -33,7 +33,7 @@
   - `formatMoneyWhole` gives "€3,482" for 348217;
   - `ProgressBar` is capped at 100%, turns critical when over, and draws the marker;
   - `Panel` shows its loading and error states.
-- [ ] 2.3 Add `OverviewAccountProvider`, which keeps the chosen account in `localStorage` (wrapped in try/catch) and falls back to the first active account when the stored one is missing or archived. Rewrite `Layout`:
+- [x] 2.3 Add `OverviewAccountProvider`, which keeps the chosen account in `localStorage` (wrapped in try/catch) and falls back to the first active account when the stored one is missing or archived. Rewrite `Layout`:
   - a sidebar at `lg` with the wordmark, two groups, the review count, and a footer with the account balance and theme and sign-out icons;
   - below `lg`, a centred bottom tab bar with Overview, Transactions, Review, Budgets and More, where More opens a sheet;
   - "Dashboard" renamed "Overview";
