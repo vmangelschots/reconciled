@@ -54,7 +54,7 @@
   - "Settled outside the account…" with a category picker that PATCHes and reloads.
 
   Verify with `TabPage.test.jsx` cases for "Rows with a running balance", "Older settled stretches are collapsed", "Unknown tab" and "Paid back in cash".
-- [ ] 5.3 In `BudgetsPage`:
+- [x] 5.3 In `BudgetsPage`:
   - add the "Budget | Tab" control to `CategoryForm` for top-level categories, with the inherited kind shown read-only for subcategories;
   - add an inline confirmation when the kind changes and the group's subcategories have transactions;
   - in the category tree, show `HandCoins` and the balance sentence on tabs.
