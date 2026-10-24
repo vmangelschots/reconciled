@@ -348,6 +348,26 @@ describe("TransactionsPage", () => {
     expect(within(storeB).getAllByRole("cell")[2]).not.toHaveAttribute("title");
   });
 
+  it("marks a row whose category is a tab, and doesn't offer the tab group", async () => {
+    categoriesApi.listCategories.mockResolvedValue([
+      ...CATEGORIES,
+      { id: 10, name: "Tabs", parent: null, is_tab_group: true, is_tab: false },
+      { id: 11, name: "Jan", parent: 10, is_tab_group: false, is_tab: true },
+    ]);
+    transactionsApi.listTransactions.mockResolvedValue([{ ...TRANSACTIONS[0], category: 11 }, TRANSACTIONS[1]]);
+    renderPage();
+    const tbl = await findTable();
+
+    const row = tbl.getByText("Store A").closest("tr");
+    const cell = within(row).getAllByRole("button")[0];
+    expect(cell).toHaveTextContent("Tabs / Jan");
+    expect(cell.querySelector("[data-testid='tab-icon']")).not.toBeNull();
+
+    await userEvent.click(cell);
+    expect(screen.queryByRole("option", { name: "Tabs" })).toBeNull();
+    expect(screen.getByRole("option", { name: "Jan" })).toBeInTheDocument();
+  });
+
   describe("transfers in the ledger", () => {
     const TWO_ACCOUNTS = [
       { id: 1, name: "Main Checking" },

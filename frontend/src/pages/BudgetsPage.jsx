@@ -291,6 +291,7 @@ function CategoryForm({ initialValues, categories, onSubmit, onCancel, submitLab
         <Label>Parent</Label>
         <CategoryCombobox
           categories={parentCandidates}
+          offerTabGroups
           value={parentId}
           onSelect={setParentId}
           clearLabel="No parent (top-level)"

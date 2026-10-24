@@ -1,10 +1,11 @@
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList, CommandSeparator } from "cmdk";
-import { Check, ChevronsUpDown, History, Plus, Sparkles, Split } from "lucide-react";
+import { Check, ChevronsUpDown, HandCoins, History, Plus, Sparkles, Split } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { displayReason } from "../lib/categorizeOutcome";
 import { categoryDisplayLabel, rankCategories } from "../lib/categoryTree";
 import { cn } from "../lib/cn";
+import { assignableCategories } from "../lib/tabs";
 import { focusAdjacentTabbable } from "../lib/focus";
 
 const CLEAR = "__clear__";
@@ -61,6 +62,12 @@ const SUGGESTION_TITLE = {
  *   alone instead of returning it to the trigger (or the next field), for
  *   callers that remove the picker and move focus themselves - e.g. a
  *   Review group that disappears once its category is picked.
+ * - Tabs (categories with is_tab) are listed after the other categories,
+ *   in a group per tab group, by their own name and with a HandCoins icon;
+ *   the trigger shows "Group / Tab" with the same icon. Tab groups are only
+ *   headings and aren't offered, unless offerTabGroups is set (the Budgets
+ *   page's parent picker, where a new tab is added under one). See
+ *   specs/repayment-tabs.
  * - onSplit(): when given, a "Split…" action is offered - last, or first
  *   while the search is the start of "split", so "sp" + Enter splits even
  *   when a "Sports" category exists. Focus is left to the split editor.
@@ -85,6 +92,7 @@ export function CategoryCombobox({
   suggestionReason = "",
   restoreFocusOnSelect = true,
   onSplit,
+  offerTabGroups = false,
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -109,7 +117,17 @@ export function CategoryCombobox({
   function optionsFor(q) {
     const trimmed = q.trim();
     const lower = trimmed.toLowerCase();
-    const ranked = rankCategories(categories, categoriesById, trimmed);
+    const offered = offerTabGroups ? categories : assignableCategories(categories);
+    const ranked = rankCategories(
+      offered.filter((c) => !c.is_tab),
+      categoriesById,
+      trimmed,
+    );
+    const tabs = rankCategories(
+      offered.filter((c) => c.is_tab),
+      categoriesById,
+      trimmed,
+    );
     // Accounts have no parent, so the category ranking applies as-is.
     const transfers = onSelectTransfer ? rankCategories(transferAccounts, {}, trimmed) : [];
     const showClear = !lower || clearLabel.toLowerCase().includes(lower);
@@ -117,11 +135,11 @@ export function CategoryCombobox({
     const showCreate = allowCreate && trimmed !== "" && !exactMatch;
     const splitFirst = Boolean(onSplit) && lower !== "" && "split".startsWith(lower);
     const showSplit = Boolean(onSplit) && (!lower || splitFirst);
-    return { trimmed, ranked, transfers, showClear, showCreate, showSplit, splitFirst };
+    return { trimmed, ranked, tabs, transfers, showClear, showCreate, showSplit, splitFirst };
   }
 
   function highlightFor(q) {
-    const { trimmed, ranked, transfers, showClear, showCreate, splitFirst } = optionsFor(q);
+    const { trimmed, ranked, tabs, transfers, showClear, showCreate, splitFirst } = optionsFor(q);
     if (splitFirst) return SPLIT;
     if (!trimmed) {
       if (transferAccountId != null) return `${TRANSFER_PREFIX}${transferAccountId}`;
@@ -129,13 +147,25 @@ export function CategoryCombobox({
     }
     if (ranked.length > 0) return String(ranked[0].id);
     if (showClear) return CLEAR;
+    if (tabs.length > 0) return String(tabs[0].id);
     if (transfers.length > 0) return `${TRANSFER_PREFIX}${transfers[0].id}`;
     if (showCreate) return CREATE;
     return "";
   }
 
-  const { trimmed: trimmedQuery, ranked, transfers, showClear, showCreate, showSplit, splitFirst } =
+  const { trimmed: trimmedQuery, ranked, tabs, transfers, showClear, showCreate, showSplit, splitFirst } =
     optionsFor(query);
+  // One group per tab group, in the order its first match ranks.
+  const tabGroups = [];
+  for (const t of tabs) {
+    const parentId = t.parent_id !== undefined ? t.parent_id : t.parent;
+    let group = tabGroups.find((g) => g.parentId === parentId);
+    if (!group) {
+      group = { parentId, heading: categoriesById[parentId]?.name ?? "Tabs", items: [] };
+      tabGroups.push(group);
+    }
+    group.items.push(t);
+  }
   const selected = value != null ? categoriesById[value] : null;
   const currentTransferName =
     transferAccountId != null
@@ -238,6 +268,9 @@ export function CategoryCombobox({
     if (!focusAdjacentTabbable(triggerRef.current, direction)) triggerRef.current.focus();
   }
 
+  const groupClass =
+    "[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:text-ink-muted";
+
   const itemClass =
     "flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm data-[selected=true]:bg-background";
 
@@ -277,6 +310,9 @@ export function CategoryCombobox({
         >
           <span className="flex min-w-0 items-center gap-1.5">
             {guessed && <SuggestionIcon className="h-3.5 w-3.5 shrink-0 text-accent" aria-hidden="true" />}
+            {!guessed && selected?.is_tab && !currentTransferName && (
+              <HandCoins className="h-3.5 w-3.5 shrink-0 text-ink-muted" aria-hidden="true" data-testid="tab-icon" />
+            )}
             <span
               className={cn(
                 "truncate",
@@ -333,10 +369,29 @@ export function CategoryCombobox({
                 </CommandItem>
               ))}
               {showClear && trimmedQuery !== "" && clearItem}
+              {tabGroups.map((g) => (
+                <CommandGroup key={`tabs:${g.parentId}`} heading={g.heading} className={groupClass}>
+                  {g.items.map((t) => (
+                    <CommandItem
+                      key={t.id}
+                      value={String(t.id)}
+                      onSelect={() => choose(t)}
+                      className={cn(itemClass, "text-ink-primary")}
+                    >
+                      {value === t.id ? (
+                        <Check className="h-3.5 w-3.5" />
+                      ) : (
+                        <HandCoins className="h-3.5 w-3.5 text-ink-muted" aria-hidden="true" />
+                      )}
+                      {t.name}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              ))}
               {transfers.length > 0 && (
                 <CommandGroup
                   heading={direction === "in" ? "Transfer from" : "Transfer to"}
-                  className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:text-ink-muted"
+                  className={groupClass}
                 >
                   {transfers.map((a) => (
                     <CommandItem
@@ -367,7 +422,7 @@ export function CategoryCombobox({
                   {splitItem}
                 </>
               )}
-              {ranked.length === 0 && transfers.length === 0 && !showClear && !showCreate && !showSplit && (
+              {ranked.length === 0 && tabs.length === 0 && transfers.length === 0 && !showClear && !showCreate && !showSplit && (
                 <CommandEmpty className="px-2 py-1.5 text-sm text-ink-muted">
                   No categories found.
                 </CommandEmpty>

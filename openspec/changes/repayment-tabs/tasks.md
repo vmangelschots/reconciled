@@ -34,8 +34,8 @@
 
 ## 4. Frontend: wording and picker
 
-- [ ] 4.1 Add `api/tabs.js` (`listTabs`, `getTab`) and `lib/tabs.js` (`tabSentence`, `isStale`, `assignableCategories`). Verify with `lib/tabs.test.js` for the three sentences and their tones, the 30-day boundary, and tab groups being dropped.
-- [ ] 4.2 Make `CategoryCombobox`:
+- [x] 4.1 Add `api/tabs.js` (`listTabs`, `getTab`) and `lib/tabs.js` (`tabSentence`, `isStale`, `assignableCategories`). Verify with `lib/tabs.test.js` for the three sentences and their tones, the 30-day boundary, and tab groups being dropped.
+- [x] 4.2 Make `CategoryCombobox`:
   - list `is_tab` categories in a group per tab group, after the categories and before the transfers;
   - filter them by the search;
   - highlight the first tab when no category matches;

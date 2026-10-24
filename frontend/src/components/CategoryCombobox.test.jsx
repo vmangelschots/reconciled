@@ -241,6 +241,75 @@ describe("CategoryCombobox Tab / Escape", () => {
   });
 });
 
+describe("CategoryCombobox tabs", () => {
+  const WITH_TABS = [
+    { id: 1, name: "Groceries", parent_id: null },
+    { id: 4, name: "Restaurants", parent_id: null },
+    { id: 10, name: "Tabs", parent_id: null, is_tab_group: true },
+    { id: 11, name: "Jan", parent_id: 10, is_tab: true },
+    { id: 12, name: "Employer", parent_id: 10, is_tab: true },
+  ];
+
+  function renderPicker(props = {}) {
+    const onSelect = vi.fn();
+    render(
+      <CategoryCombobox
+        categories={WITH_TABS}
+        value={null}
+        onSelect={onSelect}
+        aria-label="Category"
+        transferAccounts={[{ id: 20, name: "Savings" }]}
+        onSelectTransfer={vi.fn()}
+        {...props}
+      />,
+    );
+    return { onSelect };
+  }
+
+  it("lists tabs after the categories, under their group, and never the group itself", async () => {
+    renderPicker();
+    await userEvent.click(screen.getByRole("button", { name: "Category" }));
+
+    const labels = screen.getAllByRole("option").map((o) => o.textContent);
+    expect(labels).toEqual(["Uncategorized", "Groceries", "Restaurants", "Jan", "Employer", "→ Savings"]);
+    expect(screen.getByText("Tabs")).toBeInTheDocument(); // the group heading
+  });
+
+  it("finds a tab by typing and highlights it when no category matches", async () => {
+    const { onSelect } = renderPicker();
+    screen.getByRole("button", { name: "Category" }).focus();
+    await userEvent.keyboard("jan");
+
+    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["Jan"]);
+    await userEvent.keyboard("{Enter}");
+    expect(onSelect).toHaveBeenCalledWith(11);
+  });
+
+  it("prefers a matching category over a tab", async () => {
+    const { onSelect } = renderPicker();
+    screen.getByRole("button", { name: "Category" }).focus();
+    await userEvent.keyboard("e{Enter}"); // Employer is a tab; nothing else starts with "e"...
+
+    // ...but "Groceries" and "Restaurants" contain an "e", and categories rank first.
+    expect(onSelect).toHaveBeenCalledWith(1);
+  });
+
+  it("shows a chosen tab with its group and the tab icon", () => {
+    renderPicker({ value: 11 });
+
+    const trigger = screen.getByRole("button", { name: "Category" });
+    expect(trigger).toHaveTextContent("Tabs / Jan");
+    expect(trigger.querySelector("[data-testid='tab-icon']")).not.toBeNull();
+  });
+
+  it("offers tab groups when asked, for picking a parent", async () => {
+    renderPicker({ offerTabGroups: true, transferAccounts: [], onSelectTransfer: undefined });
+    await userEvent.click(screen.getByRole("button", { name: "Category" }));
+
+    expect(screen.getByRole("option", { name: "Tabs" })).toBeInTheDocument();
+  });
+});
+
 describe("CategoryCombobox transfer options", () => {
   const ACCOUNTS = [
     { id: 20, name: "Savings" },
