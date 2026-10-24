@@ -49,8 +49,11 @@ export function InOutTooltip({ active, payload }) {
  *   via ResponsiveContainer; tests pass a width because jsdom has no
  *   layout for ResponsiveContainer to measure.
  */
-export function InOutChart({ months, width }) {
-  const [showTable, setShowTable] = useState(false);
+export function InOutChart({ months, width, showTable: controlledShowTable }) {
+  const [ownShowTable, setShowTable] = useState(false);
+  // A parent (a Panel header) can own the table toggle instead.
+  const controlled = controlledShowTable !== undefined;
+  const showTable = controlled ? controlledShowTable : ownShowTable;
 
   const chart = (
     <BarChart data={months} width={width} height={HEIGHT} barGap={2} barCategoryGap="24%">
@@ -104,27 +107,29 @@ export function InOutChart({ months, width }) {
         )}
       </div>
 
-      <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => setShowTable((v) => !v)}>
-        {showTable ? "Hide table" : "Show as table"}
-      </Button>
+      {!controlled && (
+        <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => setShowTable((v) => !v)}>
+          {showTable ? "Hide table" : "Show as table"}
+        </Button>
+      )}
 
       {showTable && (
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Month</TableHead>
-              <TableHead>Money in</TableHead>
-              <TableHead>Money out</TableHead>
-              <TableHead>Difference</TableHead>
+              <TableHead className="text-right">Money in</TableHead>
+              <TableHead className="text-right">Money out</TableHead>
+              <TableHead className="text-right">Difference</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {months.map((m) => (
               <TableRow key={m.month}>
                 <TableCell>{longLabel(m.month)}</TableCell>
-                <TableCell>{formatMoney(m.in_cents)}</TableCell>
-                <TableCell>{formatMoney(m.out_cents)}</TableCell>
-                <TableCell>{formatMoney(m.in_cents - m.out_cents)}</TableCell>
+                <TableCell className="num text-right">{formatMoney(m.in_cents)}</TableCell>
+                <TableCell className="num text-right">{formatMoney(m.out_cents)}</TableCell>
+                <TableCell className="num text-right">{formatMoney(m.in_cents - m.out_cents)}</TableCell>
               </TableRow>
             ))}
           </TableBody>

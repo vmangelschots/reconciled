@@ -38,10 +38,18 @@ const wholeEuros = new Intl.NumberFormat(undefined, {
   maximumFractionDigits: 0,
 });
 
-// Overview tiles and attention items: 348217 -> "€3,482". See the
-// ui-shell spec, "Amounts and dates are easy to scan".
-export function formatMoneyWhole(cents) {
-  return wholeEuros.format(cents / 100);
+const wholeEurosSigned = new Intl.NumberFormat(undefined, {
+  style: "currency",
+  currency: CURRENCY,
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 0,
+  signDisplay: "exceptZero",
+});
+
+// Overview tiles and attention items: 348217 -> "€3,482" ("+€1,210" when
+// signed). See the ui-shell spec, "Amounts and dates are easy to scan".
+export function formatMoneyWhole(cents, { signed = false } = {}) {
+  return (signed ? wholeEurosSigned : wholeEuros).format(cents / 100);
 }
 
 function signedFormatter(locale) {

@@ -87,9 +87,12 @@ function BarRow({ row, max, total, depth = 0, expanded, onToggle }) {
  * - data: the /api/reports/category-spending/ payload.
  * - monthLabel: e.g. "March 2026", used in the empty state.
  */
-export function CategorySpendingChart({ data, monthLabel }) {
+export function CategorySpendingChart({ data, monthLabel, showTable: controlledShowTable }) {
   const [expanded, setExpanded] = useState(() => new Set());
-  const [showTable, setShowTable] = useState(false);
+  const [ownShowTable, setShowTable] = useState(false);
+  // A parent (a Panel header) can own the table toggle instead.
+  const controlled = controlledShowTable !== undefined;
+  const showTable = controlled ? controlledShowTable : ownShowTable;
   const rows = buildRows(data);
 
   if (rows.length === 0) {
@@ -126,28 +129,30 @@ export function CategorySpendingChart({ data, monthLabel }) {
         ])}
       </ul>
 
-      <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => setShowTable((v) => !v)}>
-        {showTable ? "Hide table" : "Show as table"}
-      </Button>
+      {!controlled && (
+        <Button type="button" variant="outline" size="sm" className="mt-2" onClick={() => setShowTable((v) => !v)}>
+          {showTable ? "Hide table" : "Show as table"}
+        </Button>
+      )}
 
       {showTable && (
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Category</TableHead>
-              <TableHead>Spent</TableHead>
+              <TableHead className="text-right">Spent</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.flatMap((row) => [
               <TableRow key={row.key}>
                 <TableCell>{row.name}</TableCell>
-                <TableCell>{formatMoney(row.cents)}</TableCell>
+                <TableCell className="num text-right">{formatMoney(row.cents)}</TableCell>
               </TableRow>,
               ...row.children.map((child) => (
                 <TableRow key={child.key}>
                   <TableCell className="pl-8 text-ink-secondary">{child.name}</TableCell>
-                  <TableCell>{formatMoney(child.cents)}</TableCell>
+                  <TableCell className="num text-right">{formatMoney(child.cents)}</TableCell>
                 </TableRow>
               )),
             ])}

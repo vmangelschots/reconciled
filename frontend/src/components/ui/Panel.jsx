@@ -1,3 +1,4 @@
+import { useId } from "react";
 import { cn } from "../../lib/cn";
 import { Skeleton } from "./Skeleton";
 
@@ -9,6 +10,7 @@ import { Skeleton } from "./Skeleton";
  * one-line message instead of the children.
  */
 export function Panel({ title, actions, flush = false, loading = false, error, className, children, ...props }) {
+  const titleId = useId();
   let body = children;
   if (error) {
     body = <p className={cn("text-sm text-critical", flush && "px-5 pb-5")}>{error}</p>;
@@ -22,10 +24,18 @@ export function Panel({ title, actions, flush = false, loading = false, error, c
     );
   }
   return (
-    <section className={cn("rounded-xl bg-surface ring-1 ring-border", className)} {...props}>
+    <section
+      aria-labelledby={title ? titleId : undefined}
+      className={cn("rounded-xl bg-surface ring-1 ring-border", className)}
+      {...props}
+    >
       {(title || actions) && (
         <div className="flex min-h-12 items-center justify-between gap-3 px-5 pt-4 pb-3">
-          {title && <h2 className="text-[15px] font-semibold text-ink-primary">{title}</h2>}
+          {title && (
+            <h2 id={titleId} className="text-[15px] font-semibold text-ink-primary">
+              {title}
+            </h2>
+          )}
           {actions && <div className="ml-auto flex items-center gap-2 text-sm">{actions}</div>}
         </div>
       )}

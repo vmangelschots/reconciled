@@ -43,7 +43,7 @@
 
 ## 3. Overview page
 
-- [ ] 3.1 Add `api/overview.js` and `OverviewPage` at `/`, replacing `DashboardPage`:
+- [x] 3.1 Add `api/overview.js` and `OverviewPage` at `/`, replacing `DashboardPage`:
   - a header with `MonthSwitcher`, the account picker (more than one account) and Import;
   - the balance, budget (with pace) and forecast tiles, including the "Today" / "From today" notes for past months;
   - needs attention as `ListRow`s with the links from design.md, including the stale import worked out in local time;
