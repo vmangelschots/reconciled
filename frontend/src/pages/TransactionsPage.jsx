@@ -356,6 +356,7 @@ export function TransactionsPage() {
                       direction={t.amount_cents < 0 ? "out" : "in"}
                       onSelectTransfer={(targetId) => handleInlineTransferSelect(t.id, targetId)}
                       suggestion={t.category_confirmed === false ? t.category_source : null}
+                      suggestionReason={t.category_reason}
                     />
                   </TableCell>
                   <TableCell>{formatMoney(t.amount_cents)}</TableCell>

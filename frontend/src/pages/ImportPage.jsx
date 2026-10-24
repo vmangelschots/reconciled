@@ -1,3 +1,4 @@
+import { Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { listAccounts } from "../api/accounts";
@@ -8,6 +9,8 @@ import { Label } from "../components/ui/Label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/Select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/Table";
 import { useToast } from "../components/ui/Toast";
+import { useAfterDelay } from "../hooks/useAfterDelay";
+import { aiFailed, aiOutcomeLines, sourceSplit } from "../lib/categorizeOutcome";
 import { formatMoney } from "../lib/money";
 import { useReviewCount } from "../review/ReviewCountContext";
 
@@ -17,16 +20,35 @@ const UNMAPPED = "none";
 // date format is exactly the bug this change fixes, so it isn't
 // reintroduced here as a pre-selected "sensible" default).
 const DATE_FORMATS = ["YYYY-MM-DD", "DD/MM/YYYY", "MM/DD/YYYY", "DD-MM-YYYY", "MM-DD-YYYY", "DD.MM.YYYY"];
+// When a running commit starts saying the AI step can take a while.
+const SLOW_HINT_MS = 4000;
 
-// A matched transfer line updates the counterpart the app created instead of
-// adding a transaction, so it is reported separately.
-// Guessed categories are reviewed on the Review page, never here; the
-// summary only says how many there are.
-function importSummary({ created_count, confirmed_transfer_count = 0, categorized_count = 0 }) {
-  const parts = [`Created ${created_count} transaction(s).`];
-  if (confirmed_transfer_count > 0) parts.push(`Confirmed ${confirmed_transfer_count} transfer(s).`);
-  if (categorized_count > 0) parts.push(`${categorized_count} got a category from your history.`);
-  return parts.join(" ");
+function plural(n, one, many) {
+  return `${n} ${n === 1 ? one : many}`;
+}
+
+// The summary's lines: what was created, how many got a category (split by
+// source), then anything to say about the AI step. A matched transfer line
+// updates the counterpart the app created instead of adding a transaction,
+// so it is reported separately. Guessed categories are reviewed on the
+// Review page, never here; the summary only says how many there are.
+function importSummary({
+  created_count,
+  confirmed_transfer_count = 0,
+  categorized_count = 0,
+  categorized_by_source,
+  ai,
+}) {
+  let created = `Created ${plural(created_count, "transaction", "transactions")}.`;
+  if (confirmed_transfer_count > 0) {
+    created += ` Confirmed ${plural(confirmed_transfer_count, "transfer", "transfers")}.`;
+  }
+  const lines = [created];
+  if (categorized_count > 0) {
+    const bySource = categorized_by_source ?? { history: categorized_count, ai: 0 };
+    lines.push(`${categorized_count} got a category (${sourceSplit(bySource)}).`);
+  }
+  return [...lines, ...aiOutcomeLines(ai)];
 }
 
 export function ImportPage() {
@@ -45,6 +67,8 @@ export function ImportPage() {
   const [selected, setSelected] = useState(new Set());
   const [result, setResult] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [committing, setCommitting] = useState(false);
+  const slowCommit = useAfterDelay(committing && Boolean(session?.ai_enabled), SLOW_HINT_MS);
   const toast = useToast();
 
   useEffect(() => {
@@ -103,16 +127,20 @@ export function ImportPage() {
 
   async function handleCommit() {
     setSubmitting(true);
+    setCommitting(true);
     try {
       const data = await commitImport(session.id, [...selected]);
       setResult(data);
-      toast.success(importSummary(data));
+      const summary = importSummary(data).join(" ");
+      if (aiFailed(data.ai)) toast.error(summary);
+      else toast.success(summary);
       // The commit may have added guesses, so the nav's Review count is stale.
       refreshReviewCount();
     } catch (e) {
       toast.error(e.data?.detail ?? e.message);
     } finally {
       setSubmitting(false);
+      setCommitting(false);
     }
   }
 
@@ -129,7 +157,13 @@ export function ImportPage() {
         <h1 className="text-xl font-semibold text-ink-primary">Import</h1>
         <Card>
           <CardContent className="flex flex-col gap-4 pt-6">
-            <p className="text-sm text-ink-primary">{importSummary(result)}</p>
+            <div className="flex flex-col gap-1 text-sm">
+              {importSummary(result).map((line, index) => (
+                <p key={line} className={index === 0 ? "text-ink-primary" : "text-ink-secondary"}>
+                  {line}
+                </p>
+              ))}
+            </div>
             <div className="flex flex-wrap gap-2">
               {result.categorized_count > 0 && (
                 <Link to="/review" className={buttonVariants()}>
@@ -173,6 +207,7 @@ export function ImportPage() {
                         type="checkbox"
                         checked={selected.has(c.index)}
                         onChange={() => toggle(c.index)}
+                        disabled={committing}
                       />
                     </TableCell>
                     <TableCell>{c.date}</TableCell>
@@ -189,13 +224,25 @@ export function ImportPage() {
                 ))}
               </TableBody>
             </Table>
-            <div className="flex gap-2">
-              <Button onClick={handleCommit} disabled={submitting}>
-                Confirm import ({selected.size} selected)
-              </Button>
-              <Button variant="outline" onClick={startOver}>
-                Cancel
-              </Button>
+            <div className="flex flex-col gap-2">
+              <div className="flex gap-2">
+                <Button onClick={handleCommit} disabled={submitting} className="min-w-[11rem]">
+                  {committing ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                      Importing…
+                    </>
+                  ) : (
+                    `Confirm import (${selected.size} selected)`
+                  )}
+                </Button>
+                <Button variant="outline" onClick={startOver} disabled={committing}>
+                  Cancel
+                </Button>
+              </div>
+              {slowCommit && (
+                <p className="text-xs text-ink-secondary">Guessing categories, this can take up to a minute.</p>
+              )}
             </div>
           </CardContent>
         </Card>

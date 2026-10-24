@@ -1,4 +1,4 @@
-import { Check, CheckCircle2, ChevronDown, History, Loader2 } from "lucide-react";
+import { Check, CheckCircle2, ChevronDown, History, Loader2, Sparkles, Tags } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { listCategories } from "../api/categories";
@@ -12,7 +12,9 @@ import { CategoryCombobox } from "../components/CategoryCombobox";
 import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { useToast } from "../components/ui/Toast";
+import { useAfterDelay } from "../hooks/useAfterDelay";
 import { categoryDisplayLabel } from "../lib/categoryTree";
+import { aiOutcomeLines, displayReason, sourceSplit } from "../lib/categorizeOutcome";
 import { cn } from "../lib/cn";
 import { formatDateSpan, formatShortDate } from "../lib/dates";
 import { formatMoney } from "../lib/money";
@@ -22,8 +24,13 @@ import { useReviewCount } from "../review/ReviewCountContext";
 // list once both this and its save are done. Matches duration-200 below.
 const LEAVE_MS = 200;
 const FAILED_HIGHLIGHT_MS = 1500;
+// When a running backfill starts saying it can take a while.
+const SLOW_HINT_MS = 4000;
 
-const SECTION_TITLES = { history: "From your history" };
+const SECTION_TITLES = { history: "From your history", ai: "AI guesses" };
+const SECTION_SUBLINES = {
+  ai: "Guessed by AI for payees you haven't categorized before. Worth a closer look.",
+};
 
 function errorMessage(e) {
   return e.data ? Object.values(e.data).flat().join(" ") : e.message;
@@ -59,6 +66,12 @@ function accountsLabel(accounts) {
   return `${accounts.slice(0, 2).join(", ")} +${accounts.length - 2}`;
 }
 
+// Where focus goes for a group: its Confirm, except for an AI guess, whose
+// category picker gets it so confirming one is always a deliberate step.
+function focusTarget(group) {
+  return group.source === "ai" ? { kind: "picker", key: group.key } : { kind: "confirm", key: group.key };
+}
+
 function evidenceText({ matching, total }, direction) {
   const noun = direction === "in" ? ["deposit", "deposits"] : ["payment", "payments"];
   if (total === 1) return `1 earlier ${noun[0]} was`;
@@ -88,9 +101,11 @@ export function ReviewPage() {
   const [groups, setGroups] = useState(null);
   const [uncategorizedCount, setUncategorizedCount] = useState(0);
   const [categories, setCategories] = useState([]);
-  const [backfill, setBackfill] = useState({ running: false, noMatchOf: null });
+  const [aiEnabled, setAiEnabled] = useState(false);
+  const [backfill, setBackfill] = useState({ running: false, noMatchOf: null, aiLines: [] });
 
   const confirmRefs = useRef({});
+  const pickerRefs = useRef({});
   const rowPickerRefs = useRef({});
   const emptyHeadingRef = useRef(null);
   // Where focus should go once the next render has happened. Moved right
@@ -104,6 +119,7 @@ export function ReviewPage() {
     pendingFocus.current = null;
     setTimeout(() => {
       if (target.kind === "confirm") confirmRefs.current[target.key]?.focus();
+      else if (target.kind === "picker") pickerRefs.current[target.key]?.querySelector("button")?.focus();
       else if (target.kind === "row") rowPickerRefs.current[target.id]?.querySelector("button")?.focus();
       else emptyHeadingRef.current?.focus();
     }, 0);
@@ -115,7 +131,8 @@ export function ReviewPage() {
     const next = data.groups.map(toGroupState);
     setGroups(next);
     setUncategorizedCount(data.uncategorized_count);
-    if (next.length) pendingFocus.current = { kind: "confirm", key: next[0].key };
+    setAiEnabled(Boolean(data.ai_enabled));
+    if (next.length) pendingFocus.current = focusTarget(next[0]);
   }
 
   useEffect(() => {
@@ -158,7 +175,7 @@ export function ReviewPage() {
     const visible = groups.filter((g) => !isLeaving(g));
     const index = visible.findIndex((g) => g.key === key);
     const next = visible[index + 1] ?? visible[index - 1];
-    pendingFocus.current = next ? { kind: "confirm", key: next.key } : { kind: "empty" };
+    pendingFocus.current = next ? focusTarget(next) : { kind: "empty" };
   }
 
   async function resolveGroup(group, categoryId) {
@@ -177,7 +194,7 @@ export function ReviewPage() {
       updateGroup(group.key, (g) => ({ ...g, settled: true }));
       refreshCount();
     } catch (e) {
-      pendingFocus.current = { kind: "confirm", key: group.key };
+      pendingFocus.current = focusTarget(group);
       updateGroup(group.key, (g) => ({ ...g, leaving: false, failed: true }));
       setTimeout(() => updateGroup(group.key, (g) => ({ ...g, failed: false })), FAILED_HIGHLIGHT_MS);
       toast.error(errorMessage(e));
@@ -191,7 +208,7 @@ export function ReviewPage() {
     } else {
       const index = rows.findIndex((t) => t.id === row.id);
       const next = rows[index + 1];
-      pendingFocus.current = next ? { kind: "row", id: next.id } : { kind: "confirm", key: group.key };
+      pendingFocus.current = next ? { kind: "row", id: next.id } : focusTarget(group);
     }
     updateRow(group.key, row.id, { leaving: true, settled: false, animDone: false });
     setTimeout(() => updateRow(group.key, row.id, { animDone: true }), LEAVE_MS);
@@ -211,17 +228,23 @@ export function ReviewPage() {
   }
 
   async function runBackfill() {
-    setBackfill({ running: true, noMatchOf: null });
+    setBackfill((prev) => ({ ...prev, running: true }));
     try {
       const result = await categorizeUncategorized();
       if (result.categorized_count > 0) {
-        toast.success(`Guessed ${result.categorized_count} of ${result.attempted_count}.`);
+        const bySource = result.categorized_by_source;
+        const split = bySource?.ai > 0 ? `: ${sourceSplit(bySource, "from history")}` : "";
+        toast.success(`Guessed ${result.categorized_count} of ${result.attempted_count}${split}.`);
       }
       showGroups(await getReviewGroups());
-      setBackfill({ running: false, noMatchOf: result.categorized_count === 0 ? result.attempted_count : null });
+      setBackfill({
+        running: false,
+        noMatchOf: result.categorized_count === 0 ? result.attempted_count : null,
+        aiLines: aiOutcomeLines(result.ai),
+      });
       refreshCount();
     } catch (e) {
-      setBackfill({ running: false, noMatchOf: null });
+      setBackfill((prev) => ({ ...prev, running: false }));
       toast.error(errorMessage(e));
     }
   }
@@ -236,7 +259,9 @@ export function ReviewPage() {
   }
 
   const visible = groups.filter((g) => !isLeaving(g));
-  const pendingCount = visible.reduce((sum, g) => sum + activeRows(g).length, 0);
+  const pendingBySource = {};
+  for (const g of visible) pendingBySource[g.source] = (pendingBySource[g.source] ?? 0) + activeRows(g).length;
+  const pendingCount = Object.values(pendingBySource).reduce((sum, n) => sum + n, 0);
   const sources = [...new Set(groups.map((g) => g.source))];
 
   return (
@@ -245,16 +270,29 @@ export function ReviewPage() {
         <h1 className="text-xl font-semibold text-ink-primary">Review</h1>
         {pendingCount > 0 && (
           <p className="text-sm text-ink-secondary">
-            {plural(pendingCount, "transaction", "transactions")} got a category from your history. Confirm each
-            group or pick the right category.
+            {pendingBySource.ai > 0
+              ? `${plural(pendingCount, "transaction has", "transactions have")} a guessed category: ${sourceSplit(pendingBySource)}.`
+              : `${plural(pendingCount, "transaction", "transactions")} got a category from your history.`}{" "}
+            Confirm each group or pick the right category.
           </p>
         )}
+        {visible.length > 0 &&
+          backfill.aiLines.map((line) => (
+            <p key={line} className="text-sm text-ink-secondary">
+              {line}
+            </p>
+          ))}
       </div>
 
-      {sources.map((source) => (
-        <div key={source} className="flex flex-col">
+      {sources.map((source, index) => (
+        <div key={source} className={cn("flex flex-col", index > 0 && pendingBySource[sources[0]] > 0 && "mt-6")}>
           {groups.some((g) => g.source === source && !isLeaving(g)) && (
-            <h2 className="mb-2 text-sm font-medium text-ink-secondary">{SECTION_TITLES[source] ?? "Guesses"}</h2>
+            <div className="mb-2">
+              <h2 className="text-sm font-medium text-ink-secondary">{SECTION_TITLES[source] ?? "Guesses"}</h2>
+              {SECTION_SUBLINES[source] && (
+                <p className="text-xs text-ink-secondary">{SECTION_SUBLINES[source]}</p>
+              )}
+            </div>
           )}
           {groups
             .filter((g) => g.source === source)
@@ -266,6 +304,9 @@ export function ReviewPage() {
                 categoriesById={categoriesById}
                 confirmRef={(el) => {
                   confirmRefs.current[group.key] = el;
+                }}
+                pickerRef={(el) => {
+                  pickerRefs.current[group.key] = el;
                 }}
                 rowPickerRef={(id) => (el) => {
                   rowPickerRefs.current[id] = el;
@@ -283,6 +324,7 @@ export function ReviewPage() {
         <EmptyState
           headingRef={emptyHeadingRef}
           uncategorizedCount={uncategorizedCount}
+          aiEnabled={aiEnabled}
           backfill={backfill}
           onBackfill={runBackfill}
         />
@@ -296,6 +338,7 @@ function ReviewGroup({
   categories,
   categoriesById,
   confirmRef,
+  pickerRef,
   rowPickerRef,
   onConfirm,
   onPick,
@@ -310,6 +353,8 @@ function ReviewGroup({
   const dateTo = rows[rows.length - 1]?.date ?? group.date_to;
   const meta = `${accountsLabel(group.accounts)} · ${formatDateSpan(dateFrom, dateTo)}`;
   const countLabel = plural(rows.length, "transaction", "transactions");
+  const isAi = group.source === "ai";
+  const reason = isAi ? displayReason(group.reason) : "";
 
   return (
     <Collapsible leaving={isLeaving(group)}>
@@ -333,6 +378,15 @@ function ReviewGroup({
             <span className="sm:hidden">{countLabel} · </span>
             {meta}
           </p>
+          {isAi && (
+            <p className="mt-2 flex items-center gap-1.5 text-sm text-ink-secondary">
+              <Sparkles className="h-3.5 w-3.5 shrink-0 text-accent" aria-hidden="true" />
+              <span className="truncate" title={reason || undefined}>
+                AI guess: <span className="font-medium text-ink-primary">{categoryName}</span>
+                {reason && ` · ${reason}`}
+              </span>
+            </p>
+          )}
           {group.evidence && (
             <p className="mt-2 flex items-center gap-1.5 text-sm text-ink-secondary">
               <History className="h-3.5 w-3.5 shrink-0 text-accent" aria-hidden="true" />
@@ -343,20 +397,29 @@ function ReviewGroup({
             </p>
           )}
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <Button ref={confirmRef} size="sm" className="flex-1 sm:flex-none" onClick={onConfirm}>
+            <Button
+              ref={confirmRef}
+              size="sm"
+              variant={isAi ? "outline" : "default"}
+              className="flex-1 sm:flex-none"
+              onClick={onConfirm}
+            >
               <Check className="h-3.5 w-3.5" aria-hidden="true" />
               Confirm {rows.length}
             </Button>
-            <CategoryCombobox
-              categories={categories}
-              value={group.category}
-              onSelect={onPick}
-              suggestion={group.source}
-              clearLabel="Leave uncategorized"
-              restoreFocusOnSelect={false}
-              className="flex-1 sm:w-48 sm:flex-none"
-              aria-label={`Category for ${group.payee}`}
-            />
+            <span ref={pickerRef} className="contents">
+              <CategoryCombobox
+                categories={categories}
+                value={group.category}
+                onSelect={onPick}
+                suggestion={group.source}
+                suggestionReason={group.reason}
+                clearLabel="Leave uncategorized"
+                restoreFocusOnSelect={false}
+                className="flex-1 sm:w-48 sm:flex-none"
+                aria-label={`Category for ${group.payee}`}
+              />
+            </span>
             <Button
               variant="ghost"
               size="sm"
@@ -418,21 +481,54 @@ function ReviewGroup({
   );
 }
 
-function EmptyState({ headingRef, uncategorizedCount, backfill, onBackfill }) {
+function EmptyState({ headingRef, uncategorizedCount, aiEnabled, backfill, onBackfill }) {
+  const slow = useAfterDelay(backfill.running && aiEnabled, SLOW_HINT_MS);
+  const runningLabel = (
+    <>
+      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+      Guessing…
+    </>
+  );
+  const slowHint = slow && <p className="text-xs text-ink-secondary">This can take up to a minute.</p>;
+  const aiLines = backfill.aiLines.map((line) => (
+    <p key={line} className="text-sm text-ink-secondary">
+      {line}
+    </p>
+  ));
+  const transactionsLink = (
+    <Link to="/transactions" className="text-sm font-medium text-accent hover:underline">
+      Categorize them in Transactions
+    </Link>
+  );
+
   let body;
-  if (backfill.noMatchOf != null) {
+  if (backfill.noMatchOf != null && aiEnabled) {
+    body = (
+      <>
+        <p className="text-sm text-ink-secondary">
+          Couldn&apos;t guess a category for any of the{" "}
+          {plural(backfill.noMatchOf, "uncategorized transaction", "uncategorized transactions")}.
+        </p>
+        {aiLines}
+        {transactionsLink}
+        <Button variant="ghost" size="sm" onClick={onBackfill} disabled={backfill.running} className="mt-1">
+          {backfill.running ? runningLabel : "Try again"}
+        </Button>
+        {slowHint}
+      </>
+    );
+  } else if (backfill.noMatchOf != null) {
     body = (
       <>
         <p className="text-sm text-ink-secondary">
           None of the {plural(backfill.noMatchOf, "uncategorized transaction", "uncategorized transactions")} match a
           payee you&apos;ve categorized before.
         </p>
-        <Link to="/transactions" className="text-sm font-medium text-accent hover:underline">
-          Categorize them in Transactions
-        </Link>
+        {transactionsLink}
       </>
     );
   } else if (uncategorizedCount > 0) {
+    const Icon = aiEnabled ? Tags : History;
     body = (
       <>
         <p className="text-sm text-ink-secondary">
@@ -442,13 +538,21 @@ function EmptyState({ headingRef, uncategorizedCount, backfill, onBackfill }) {
         </p>
         <Button onClick={onBackfill} disabled={backfill.running} className="mt-2">
           {backfill.running ? (
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            runningLabel
           ) : (
-            <History className="h-4 w-4" aria-hidden="true" />
+            <>
+              <Icon className="h-4 w-4" aria-hidden="true" />
+              {aiEnabled ? "Guess categories" : "Guess categories from history"}
+            </>
           )}
-          {backfill.running ? "Guessing…" : "Guess categories from history"}
         </Button>
-        <p className="text-xs text-ink-secondary">Only payees you&apos;ve categorized before get a guess.</p>
+        {slowHint || (
+          <p className="text-xs text-ink-secondary">
+            {aiEnabled
+              ? "Uses your history first, then AI for new payees."
+              : "Only payees you've categorized before get a guess."}
+          </p>
+        )}
       </>
     );
   } else {

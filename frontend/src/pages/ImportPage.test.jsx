@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -83,7 +83,7 @@ describe("ImportPage transfer matches", () => {
     await userEvent.click(screen.getByRole("button", { name: /confirm import/i }));
 
     expect(importsApi.commitImport).toHaveBeenCalledWith(7, [0]);
-    expect((await screen.findAllByText("Created 0 transaction(s). Confirmed 1 transfer(s).")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Created 0 transactions. Confirmed 1 transfer.")).length).toBeGreaterThan(0);
   });
 });
 
@@ -95,8 +95,9 @@ describe("ImportPage review line", () => {
     await userEvent.click(screen.getByRole("button", { name: /confirm import/i }));
 
     expect(
-      (await screen.findAllByText("Created 20 transaction(s). 14 got a category from your history.")).length,
+      (await screen.findAllByText("Created 20 transactions. 14 got a category (14 from your history).")).length,
     ).toBeGreaterThan(0);
+    expect(screen.getByText("14 got a category (14 from your history).", { selector: "p" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Review 14 guesses" })).toHaveAttribute("href", "/review");
     // The nav's Review count is refreshed after the commit, not just on the
     // next navigation.
@@ -109,8 +110,111 @@ describe("ImportPage review line", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /confirm import/i }));
 
-    expect((await screen.findAllByText("Created 6 transaction(s).")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Created 6 transactions.")).length).toBeGreaterThan(0);
     expect(screen.queryByRole("link", { name: /Review/ })).toBeNull();
     expect(screen.getByRole("button", { name: "Import another file" })).toBeInTheDocument();
+  });
+});
+
+function commitResult(history, ai, aiStatus = "ok", declined = 0) {
+  return {
+    created_count: 20,
+    confirmed_transfer_count: 0,
+    categorized_count: history + ai,
+    categorized_by_source: { history, ai },
+    ai: { status: aiStatus, declined_count: declined },
+  };
+}
+
+async function commitWith(result) {
+  importsApi.commitImport.mockResolvedValue(result);
+  await uploadAndPreview();
+  await userEvent.click(screen.getByRole("button", { name: /confirm import/i }));
+  await screen.findByRole("button", { name: "Import another file" });
+}
+
+function cardLines() {
+  return screen
+    .getByRole("button", { name: "Import another file" })
+    .closest("div.flex-col")
+    .querySelectorAll("p");
+}
+
+describe("ImportPage AI summary", () => {
+  it("splits history and AI guesses on one line", async () => {
+    await commitWith(commitResult(10, 4));
+
+    expect([...cardLines()].map((p) => p.textContent)).toEqual([
+      "Created 20 transactions.",
+      "14 got a category (10 from your history, 4 by AI).",
+    ]);
+    expect(screen.getByRole("link", { name: "Review 14 guesses" })).toBeInTheDocument();
+    expect(document.querySelector("li svg.text-success")).not.toBeNull();
+  });
+
+  it("leaves out a zero part", async () => {
+    await commitWith(commitResult(0, 4));
+
+    expect(screen.getByText("4 got a category (4 by AI).", { selector: "p" })).toBeInTheDocument();
+  });
+
+  it("says when AI didn't respond, with an error toast", async () => {
+    await commitWith(commitResult(10, 0, "failed"));
+
+    expect(screen.getByText("10 got a category (10 from your history).", { selector: "p" })).toBeInTheDocument();
+    expect(screen.getByText("AI guessing didn't respond.", { selector: "p" })).toBeInTheDocument();
+    // The toast uses the error style.
+    const toastIcon = document.querySelector("li svg.text-critical");
+    expect(toastIcon.closest("li")).toHaveTextContent("AI guessing didn't respond.");
+  });
+
+  it("names the key setting when the key was rejected", async () => {
+    await commitWith(commitResult(10, 0, "key_rejected"));
+
+    expect(screen.getByText("AI is not working: check ANTHROPIC_API_KEY.", { selector: "p" })).toBeInTheDocument();
+  });
+
+  it("counts the payees AI couldn't guess", async () => {
+    await commitWith(commitResult(10, 4, "ok", 3));
+
+    expect(screen.getByText("3 new payees couldn't be guessed.", { selector: "p" })).toBeInTheDocument();
+  });
+});
+
+describe("ImportPage while committing", () => {
+  async function startCommit(session) {
+    importsApi.uploadImportFile.mockResolvedValue(session);
+    let resolve;
+    importsApi.commitImport.mockReturnValue(new Promise((res) => (resolve = res)));
+    const tbl = await uploadAndPreview();
+    await userEvent.click(screen.getByRole("button", { name: /confirm import/i }));
+    return { tbl, resolve };
+  }
+
+  it("shows that it's working and locks the preview", async () => {
+    const { tbl, resolve } = await startCommit({ ...SESSION, ai_enabled: false });
+
+    expect(screen.getByRole("button", { name: "Importing…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
+    for (const checkbox of tbl.getAllByRole("checkbox")) expect(checkbox).toBeDisabled();
+    await act(async () => resolve(commitResult(0, 0, "off")));
+  });
+
+  it("says it can take up to a minute only after a delay, and only with AI on", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      for (const aiEnabled of [false, true]) {
+        const { resolve } = await startCommit({ ...SESSION, ai_enabled: aiEnabled });
+        expect(screen.queryByText(/this can take up to a minute/)).toBeNull();
+
+        await act(() => vi.advanceTimersByTimeAsync(4000));
+
+        expect(screen.queryByText("Guessing categories, this can take up to a minute.") !== null).toBe(aiEnabled);
+        await act(async () => resolve(commitResult(0, 0)));
+        cleanup();
+      }
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

@@ -339,6 +339,26 @@ describe("CategoryCombobox guesses", () => {
     expect(trigger.querySelector("svg.lucide-history")).not.toBeNull();
   });
 
+  it("puts an AI guess's reason in its hint", () => {
+    const { rerender } = render(
+      <CategoryCombobox
+        categories={CATEGORIES}
+        value={1}
+        onSelect={vi.fn()}
+        suggestion="ai"
+        suggestionReason="Restaurant name."
+      />,
+    );
+
+    const trigger = screen.getByRole("button");
+    expect(trigger).toHaveAttribute("data-suggestion", "ai");
+    expect(trigger.querySelector("svg.lucide-sparkles")).not.toBeNull();
+    expect(trigger).toHaveAttribute("title", "Guessed by AI (restaurant name). Pick a category to confirm.");
+
+    rerender(<CategoryCombobox categories={CATEGORIES} value={1} onSelect={vi.fn()} suggestion="ai" />);
+    expect(trigger).toHaveAttribute("title", "Guessed by AI. Pick a category to confirm.");
+  });
+
   it("shows no guess style for a confirmed category", () => {
     render(<CategoryCombobox categories={CATEGORIES} value={1} onSelect={vi.fn()} />);
 
