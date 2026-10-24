@@ -43,3 +43,24 @@ export function rankCategories(categories, categoriesById, query) {
   }
   return groups.flat();
 }
+
+// The picker's order: each top-level category followed by its own
+// subcategories, alphabetical at both levels, as [{ category, depth }].
+// A subcategory whose parent isn't in the list stays at depth 0 (it is
+// shown with its "Parent / " label), so nothing disappears - e.g. the
+// Budgets parent-picker passes top-level categories only.
+export function treeOrder(categories) {
+  const getParentId = (c) => (c.parent_id !== undefined ? c.parent_id : c.parent);
+  const ids = new Set(categories.map((c) => c.id));
+  const byName = (a, b) => a.name.localeCompare(b.name);
+  const roots = categories.filter((c) => getParentId(c) == null || !ids.has(getParentId(c))).sort(byName);
+  return roots.flatMap((root) => [
+    { category: root, depth: 0 },
+    ...(getParentId(root) == null
+      ? categories
+          .filter((c) => getParentId(c) === root.id)
+          .sort(byName)
+          .map((category) => ({ category, depth: 1 }))
+      : []),
+  ]);
+}

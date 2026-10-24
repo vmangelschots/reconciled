@@ -19,7 +19,7 @@ describe("CategoryCombobox", () => {
     await open();
     expect(screen.getByText("Groceries")).toBeInTheDocument();
     expect(screen.getByText("Transport")).toBeInTheDocument();
-    expect(screen.getByText("Groceries / Supermarket")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Groceries / Supermarket" })).toHaveTextContent(/^Supermarket$/);
   });
 
   it("narrows to matches as the user types", async () => {
@@ -37,8 +37,8 @@ describe("CategoryCombobox", () => {
     await open();
     await userEvent.type(screen.getByPlaceholderText("Search categories…"), "Grocer");
 
-    expect(screen.getByText("Groceries")).toBeInTheDocument();
-    expect(screen.getByText("Groceries / Supermarket")).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Groceries" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Groceries / Supermarket" })).toBeInTheDocument();
     expect(screen.queryByText("Transport")).not.toBeInTheDocument();
   });
 
@@ -530,5 +530,93 @@ describe("CategoryCombobox restoreFocusOnSelect", () => {
       await open();
       expect(screen.queryByText("Split…")).not.toBeInTheDocument();
     });
+  });
+});
+
+describe("CategoryCombobox tree", () => {
+  const TREE = [
+    { id: 1, name: "Transport", parent_id: null },
+    { id: 2, name: "Lunch", parent_id: 3 },
+    { id: 3, name: "Food", parent_id: null },
+    { id: 4, name: "Supermarket", parent_id: 5 },
+    { id: 5, name: "Groceries", parent_id: null },
+  ];
+
+  function renderPicker(props = {}) {
+    const onSelect = vi.fn();
+    render(<CategoryCombobox categories={TREE} value={null} onSelect={onSelect} aria-label="Category" {...props} />);
+    return { onSelect };
+  }
+
+  it("lists subcategories under their parent on an empty search", async () => {
+    renderPicker();
+    await userEvent.click(screen.getByRole("button", { name: "Category" }));
+
+    const options = screen.getAllByRole("option");
+    expect(options.map((o) => o.textContent)).toEqual([
+      "Uncategorized",
+      "Food",
+      "Lunch",
+      "Groceries",
+      "Supermarket",
+      "Transport",
+    ]);
+    expect(screen.getByRole("option", { name: "Food / Lunch" })).toHaveClass("border-l");
+    expect(screen.getByRole("option", { name: "Food" })).toHaveClass("font-medium");
+    expect(screen.getByRole("option", { name: "Transport" })).not.toHaveClass("font-medium");
+  });
+
+  it("keeps parents selectable", async () => {
+    const { onSelect } = renderPicker();
+    await userEvent.click(screen.getByRole("button", { name: "Category" }));
+
+    await userEvent.click(screen.getByRole("option", { name: "Groceries" }));
+
+    expect(onSelect).toHaveBeenCalledWith(5);
+  });
+
+  it("names a matching subcategory's parent beside it", async () => {
+    const { onSelect } = renderPicker();
+    screen.getByRole("button", { name: "Category" }).focus();
+    await userEvent.keyboard("lun");
+
+    const option = screen.getByRole("option", { name: "Food / Lunch" });
+    expect(option).toHaveTextContent(/^LunchFood$/);
+    await userEvent.keyboard("{Enter}");
+    expect(onSelect).toHaveBeenCalledWith(2);
+  });
+
+  it("finds subcategories by their parent's name, after the parent", async () => {
+    renderPicker();
+    screen.getByRole("button", { name: "Category" }).focus();
+    await userEvent.keyboard("groc");
+
+    expect(screen.getAllByRole("option").map((o) => o.getAttribute("aria-label") ?? o.textContent)).toEqual([
+      "Groceries",
+      "Groceries / Supermarket",
+    ]);
+  });
+
+  it("moves through the tree in the order shown", async () => {
+    const { onSelect } = renderPicker();
+    screen.getByRole("button", { name: "Category" }).focus();
+    await userEvent.keyboard("{Enter}{ArrowDown}{ArrowDown}{Enter}");
+
+    expect(onSelect).toHaveBeenCalledWith(2); // Uncategorized -> Food -> Lunch
+  });
+
+  it("keeps a subcategory whose parent isn't offered, with its full label", async () => {
+    render(
+      <CategoryCombobox
+        categories={[TREE[1]]}
+        value={null}
+        onSelect={vi.fn()}
+        aria-label="Category"
+      />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Category" }));
+
+    // Its parent isn't in the list, so there is nothing to nest under.
+    expect(screen.getByRole("option", { name: "Lunch" })).not.toHaveClass("border-l");
   });
 });
