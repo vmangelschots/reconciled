@@ -16,7 +16,7 @@ export function aiOutcomeLines(ai) {
   if (!ai) return [];
   const lines = [];
   if (ai.status === "failed") lines.push("AI guessing didn't respond.");
-  if (ai.status === "key_rejected") lines.push("AI is not working: check ANTHROPIC_API_KEY.");
+  if (ai.status === "key_rejected") lines.push("AI is not working: check OPENAI_API_KEY.");
   if (ai.declined_count > 0) {
     lines.push(
       ai.declined_count === 1

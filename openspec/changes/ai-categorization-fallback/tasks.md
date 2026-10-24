@@ -3,11 +3,11 @@
 ## 1. Data model and settings
 
 - [x] 1.1 Add the `ai` choice to `Transaction.CategorySource` and the `category_reason` field (max 200 chars, blank default), with a migration. Expose `category_reason` read-only on `TransactionSerializer`, and clear it when the user writes a different category. Verify that `makemigrations --check` is clean, and with `transactions/tests.py` cases that a different category clears the reason while re-picking the same one keeps it.
-- [ ] 1.2 Add `openai` (current release, pinned: 3.37.0) to `backend/requirements.txt` in place of `anthropic`, plus the `OPENAI_API_KEY` (read by the SDK), `AI_CATEGORIZATION_ENABLED`, `AI_CATEGORIZATION_MODEL` (default `gpt-6-luna`) and `AI_CATEGORIZATION_DEADLINE` (default 20s) settings. Document them in `.env.example`, `k8s/examples/secret.example.yaml` (optional key) and `k8s/README.md`. Verify the backend suite passes with the new dependency installed, and that kubeconform still validates `k8s/`.
+- [x] 1.2 Add `openai` (current release, pinned: 3.37.0) to `backend/requirements.txt` in place of `anthropic`, plus the `OPENAI_API_KEY` (read by the SDK), `AI_CATEGORIZATION_ENABLED`, `AI_CATEGORIZATION_MODEL` (default `gpt-6-luna`) and `AI_CATEGORIZATION_DEADLINE` (default 20s) settings. Document them in `.env.example`, `k8s/examples/secret.example.yaml` (optional key) and `k8s/README.md`. Verify the backend suite passes with the new dependency installed, and that kubeconform still validates `k8s/`.
 
 ## 2. AI guesser
 
-- [ ] 2.1 Implement `transactions/ai.py`: the `PayeeQuestion` / `Guess` data classes, the `CategoryGuesser` protocol, `get_guesser()`, and `OpenAIGuesser` (replacing `ClaudeGuesser`), following design decisions 4 and 5 (Responses API, per-request strict enum schema via `text.format`, reasoning effort `low`, `max_retries=0`, timeout set to the remaining deadline, chunks of 100, JSON payload, reason cleanup, typed error chain mapped to `ok` / `failed` / `key_rejected`, never raises). Verify with `transactions/tests_ai.py`, using a mocked SDK client, no network:
+- [x] 2.1 Implement `transactions/ai.py`: the `PayeeQuestion` / `Guess` data classes, the `CategoryGuesser` protocol, `get_guesser()`, and `OpenAIGuesser` (replacing `ClaudeGuesser`), following design decisions 4 and 5 (Responses API, per-request strict enum schema via `text.format`, reasoning effort `low`, `max_retries=0`, timeout set to the remaining deadline, chunks of 100, JSON payload, reason cleanup, typed error chain mapped to `ok` / `failed` / `key_rejected`, never raises). Verify with `transactions/tests_ai.py`, using a mocked SDK client, no network:
   - `get_guesser()` returns `None` without a key or when disabled;
   - the request has the expected model, effort, schema enums and payload, and the payload has no account name, date or balance;
   - answers parse into `Guess`es;
@@ -34,7 +34,7 @@
 - [x] 4.2 Review page empty state and backfill with AI: the "Guess categories" button with the `Tags` icon, the hint and the running state when `ai_enabled`; the toast split by source; the AI outcome lines (didn't respond, key rejected, N payees couldn't be guessed); the no-match copy with **Try again** when AI is on. Verify with page tests for each copy variant, and that Try again reruns the backfill.
 - [x] 4.3 Import page: the commit button's running state (spinner, "Importing…", Cancel and checkboxes disabled, the delayed hint only with `ai_enabled`); the result card's two lines with the one summary template; the AI outcome line; error-style toast on AI failure. Verify with `ImportPage.test.jsx` cases: history only ("14 got a category (14 from your history)."), mixed ("… (10 from your history, 4 by AI)."), AI only, AI failed, key rejected and declined payees; the hint appears after the delay only when `ai_enabled`; inputs are disabled while committing.
 - [x] 4.4 Ledger tooltip: add the reason to the AI marker's tooltip in `CategoryCombobox` (passed from the row's `category_reason`). Verify with a `CategoryCombobox.test.jsx` case for the tooltip with and without a reason.
-- [ ] 4.5 Change the key-rejected outcome line to "AI is not working: check OPENAI_API_KEY." Verify with the existing Review and Import page tests for that line.
+- [x] 4.5 Change the key-rejected outcome line to "AI is not working: check OPENAI_API_KEY." Verify with the existing Review and Import page tests for that line.
 
 ## 5. Integration check
 

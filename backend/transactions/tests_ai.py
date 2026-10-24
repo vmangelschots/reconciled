@@ -3,23 +3,35 @@ import time
 from types import SimpleNamespace
 from unittest import mock
 
-import anthropic
 import httpx2
+import openai
 from django.test import SimpleTestCase, override_settings
 
-from .ai import ClaudeGuesser, Guess, PayeeQuestion, get_guesser
+from .ai import OpenAIGuesser, Guess, PayeeQuestion, get_guesser
 
 CATEGORIES = [(1, "Eating out"), (2, "Groceries"), (3, "Transport / Train")]
-REQUEST = httpx2.Request("POST", "https://api.anthropic.com/v1/messages")
+REQUEST = httpx2.Request("POST", "https://api.openai.com/v1/responses")
 
 
 def question(key="p1", payee="Bistro Lumiere 12", notes="team lunch", amount_cents=-4800):
     return PayeeQuestion(key=key, payee=payee, notes=notes, amount_cents=amount_cents, direction="out")
 
 
-def answer(*guesses, stop_reason="end_turn"):
+def response(text, status="completed", content_type="output_text"):
+    """A Responses API result: one message holding one content item.
+    output_text is the SDK's own join of the message's output_text items."""
+    part = SimpleNamespace(type=content_type, text=text)
+    return SimpleNamespace(
+        status=status,
+        incomplete_details=SimpleNamespace(reason="max_output_tokens") if status == "incomplete" else None,
+        output=[SimpleNamespace(type="message", content=[part])],
+        output_text=text if content_type == "output_text" else "",
+    )
+
+
+def answer(*guesses, **kwargs):
     text = json.dumps({"guesses": [{"key": k, "category_id": c, "reason": r} for k, c, r in guesses]})
-    return SimpleNamespace(stop_reason=stop_reason, content=[SimpleNamespace(type="text", text=text)])
+    return response(text, **kwargs)
 
 
 def status_error(cls, status_code):
@@ -27,25 +39,25 @@ def status_error(cls, status_code):
 
 
 class GetGuesserTests(SimpleTestCase):
-    @override_settings(ANTHROPIC_API_KEY="", AI_CATEGORIZATION_ENABLED=True)
+    @override_settings(OPENAI_API_KEY="", AI_CATEGORIZATION_ENABLED=True)
     def test_none_without_a_key(self):
         self.assertIsNone(get_guesser())
 
-    @override_settings(ANTHROPIC_API_KEY="sk-ant-test", AI_CATEGORIZATION_ENABLED=False)
+    @override_settings(OPENAI_API_KEY="sk-test", AI_CATEGORIZATION_ENABLED=False)
     def test_none_when_disabled(self):
         self.assertIsNone(get_guesser())
 
-    @override_settings(ANTHROPIC_API_KEY="sk-ant-test", AI_CATEGORIZATION_ENABLED=True)
-    def test_claude_with_a_key(self):
-        self.assertIsInstance(get_guesser(), ClaudeGuesser)
+    @override_settings(OPENAI_API_KEY="sk-test", AI_CATEGORIZATION_ENABLED=True)
+    def test_openai_with_a_key(self):
+        self.assertIsInstance(get_guesser(), OpenAIGuesser)
 
 
-@override_settings(AI_CATEGORIZATION_MODEL="claude-haiku-5-5")
-class ClaudeGuesserTests(SimpleTestCase):
+@override_settings(AI_CATEGORIZATION_MODEL="gpt-6-luna")
+class OpenAIGuesserTests(SimpleTestCase):
     def setUp(self):
         self.client = mock.Mock()
-        self.create = self.client.with_options.return_value.messages.create
-        self.guesser = ClaudeGuesser(client=self.client)
+        self.create = self.client.with_options.return_value.responses.create
+        self.guesser = OpenAIGuesser(client=self.client)
 
     def guess(self, questions, deadline_in=20):
         return self.guesser.guess(questions, CATEGORIES, time.monotonic() + deadline_in)
@@ -57,15 +69,18 @@ class ClaudeGuesserTests(SimpleTestCase):
         timeout = self.client.with_options.call_args.kwargs["timeout"]
         self.assertTrue(0 < timeout <= 20)
         kwargs = self.create.call_args.kwargs
-        self.assertEqual(kwargs["model"], "claude-haiku-5-5")
-        self.assertEqual(kwargs["output_config"]["effort"], "low")
+        self.assertEqual(kwargs["model"], "gpt-6-luna")
+        self.assertEqual(kwargs["reasoning"], {"effort": "low"})
         self.assertNotIn("temperature", kwargs)
-        item = kwargs["output_config"]["format"]["schema"]["properties"]["guesses"]["items"]
+        output_format = kwargs["text"]["format"]
+        self.assertEqual(output_format["type"], "json_schema")
+        self.assertTrue(output_format["strict"])
+        item = output_format["schema"]["properties"]["guesses"]["items"]
         self.assertEqual(item["properties"]["key"]["enum"], ["p1", "p2"])
-        self.assertEqual(item["properties"]["category_id"]["anyOf"][0]["enum"], [1, 2, 3])
+        self.assertEqual(item["properties"]["category_id"]["enum"], [1, 2, 3, None])
         self.assertFalse(item["additionalProperties"])
 
-        payload = json.loads(kwargs["messages"][0]["content"])
+        payload = json.loads(kwargs["input"])
         self.assertEqual(payload["categories"][2], {"id": 3, "name": "Transport / Train"})
         self.assertEqual(
             payload["payees"][0],
@@ -74,12 +89,12 @@ class ClaudeGuesserTests(SimpleTestCase):
         self.assertEqual(payload["payees"][1]["amount"], "25.50")
         # The system prompt is fixed text: payee data only ever goes in the
         # JSON payload.
-        self.assertNotIn("Bistro", kwargs["system"])
+        self.assertNotIn("Bistro", kwargs["instructions"])
 
     def test_payload_has_only_the_allowed_fields(self):
         self.create.return_value = answer()
         self.guess([question()])
-        payload = json.loads(self.create.call_args.kwargs["messages"][0]["content"])
+        payload = json.loads(self.create.call_args.kwargs["input"])
         self.assertEqual(set(payload), {"categories", "payees"})
         self.assertEqual(set(payload["payees"][0]), {"key", "payee", "notes", "amount", "direction"})
 
@@ -107,24 +122,24 @@ class ClaudeGuesserTests(SimpleTestCase):
 
     def test_unusable_answers_fail(self):
         unusable = {
-            "refusal": answer(("p1", 1, "x"), stop_reason="refusal"),
-            "max_tokens": answer(("p1", 1, "x"), stop_reason="max_tokens"),
-            "bad JSON": SimpleNamespace(stop_reason="end_turn", content=[SimpleNamespace(type="text", text="{nope")]),
-            "no text": SimpleNamespace(stop_reason="end_turn", content=[]),
-            "wrong shape": SimpleNamespace(stop_reason="end_turn", content=[SimpleNamespace(type="text", text="[]")]),
+            "refusal": response("I can't help with that.", content_type="refusal"),
+            "incomplete": answer(("p1", 1, "x"), status="incomplete"),
+            "bad JSON": response("{nope"),
+            "no text": response(""),
+            "wrong shape": response("[]"),
         }
-        for name, response in unusable.items():
+        for name, result in unusable.items():
             with self.subTest(name):
-                self.create.return_value = response
+                self.create.return_value = result
                 with self.assertLogs("transactions.ai", "WARNING"):
                     self.assertEqual(self.guess([question()]), ({}, "failed"))
 
     def test_api_errors_fail(self):
         errors = {
-            "timeout": anthropic.APITimeoutError(request=REQUEST),
-            "connection": anthropic.APIConnectionError(request=REQUEST),
-            "rate limit": status_error(anthropic.RateLimitError, 429),
-            "overloaded": status_error(anthropic.InternalServerError, 529),
+            "timeout": openai.APITimeoutError(request=REQUEST),
+            "connection": openai.APIConnectionError(request=REQUEST),
+            "rate limit": status_error(openai.RateLimitError, 429),
+            "server error": status_error(openai.InternalServerError, 500),
         }
         for name, error in errors.items():
             with self.subTest(name):
@@ -138,7 +153,7 @@ class ClaudeGuesserTests(SimpleTestCase):
             self.assertEqual(self.guess([question()]), ({}, "failed"))
 
     def test_rejected_key_stops_further_chunks(self):
-        for cls, code in ((anthropic.AuthenticationError, 401), (anthropic.PermissionDeniedError, 403)):
+        for cls, code in ((openai.AuthenticationError, 401), (openai.PermissionDeniedError, 403)):
             with self.subTest(code):
                 self.create.reset_mock()
                 self.create.side_effect = status_error(cls, code)
@@ -146,18 +161,18 @@ class ClaudeGuesserTests(SimpleTestCase):
                     result = self.guess([question(key=f"p{i}") for i in range(150)])
                 self.assertEqual(result, ({}, "key_rejected"))
                 self.assertEqual(self.create.call_count, 1)
-                self.assertIn("ANTHROPIC_API_KEY", logs.output[0])
+                self.assertIn("OPENAI_API_KEY", logs.output[0])
 
     def test_large_runs_are_chunked_and_a_failed_chunk_keeps_the_others(self):
         questions = [question(key=f"p{i}") for i in range(150)]
         self.create.side_effect = [
-            anthropic.APITimeoutError(request=REQUEST),
+            openai.APITimeoutError(request=REQUEST),
             answer(*[(f"p{i}", 2, "Supermarket") for i in range(100, 150)]),
         ]
         with self.assertLogs("transactions.ai", "WARNING"):
             guesses, status = self.guess(questions)
         self.assertEqual(self.create.call_count, 2)
-        first, second = (c.kwargs["output_config"]["format"]["schema"] for c in self.create.call_args_list)
+        first, second = (c.kwargs["text"]["format"]["schema"] for c in self.create.call_args_list)
         self.assertEqual(len(first["properties"]["guesses"]["items"]["properties"]["key"]["enum"]), 100)
         self.assertEqual(len(second["properties"]["guesses"]["items"]["properties"]["key"]["enum"]), 50)
         self.assertEqual(status, "failed")

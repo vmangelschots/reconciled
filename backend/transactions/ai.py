@@ -3,8 +3,8 @@
 The categorizer (transactions/categorize.py) asks a CategoryGuesser about
 the payees its history pass left over. Only the PayeeQuestion fields and
 the category labels ever reach this module, so no account name, date or
-balance can be sent. ClaudeGuesser is the one provider; tests swap in a
-fake through get_guesser(). Nothing else in the app imports anthropic -
+balance can be sent. OpenAIGuesser is the one provider; tests swap in a
+fake through get_guesser(). Nothing else in the app imports openai -
 see openspec/specs/auto-categorization.
 """
 
@@ -14,7 +14,7 @@ import time
 from dataclasses import dataclass
 from typing import Protocol
 
-import anthropic
+import openai
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
@@ -68,9 +68,9 @@ class CategoryGuesser(Protocol):
 
 def get_guesser():
     """The configured guesser, or None when AI categorization is off."""
-    if not settings.AI_CATEGORIZATION_ENABLED or not settings.ANTHROPIC_API_KEY:
+    if not settings.AI_CATEGORIZATION_ENABLED or not settings.OPENAI_API_KEY:
         return None
-    return ClaudeGuesser()
+    return OpenAIGuesser()
 
 
 def clean_reason(reason, label):
@@ -88,13 +88,11 @@ class UnusableAnswer(Exception):
     the JSON the schema asked for."""
 
 
-class ClaudeGuesser:
+class OpenAIGuesser:
     def __init__(self, client=None):
         # No SDK retries: a retry could run past the deadline, and the
         # Review page's backfill is the retry.
-        self.client = client or anthropic.Anthropic(
-            api_key=settings.ANTHROPIC_API_KEY, max_retries=0
-        )
+        self.client = client or openai.OpenAI(api_key=settings.OPENAI_API_KEY, max_retries=0)
 
     def guess(self, questions, categories, deadline):
         guesses = {}
@@ -107,10 +105,10 @@ class ClaudeGuesser:
                 return guesses, "failed"
             try:
                 guesses.update(self._ask(chunk, categories, remaining))
-            except (anthropic.AuthenticationError, anthropic.PermissionDeniedError) as exc:
-                logger.error("AI categorization key rejected - check ANTHROPIC_API_KEY: %s", exc)
+            except (openai.AuthenticationError, openai.PermissionDeniedError) as exc:
+                logger.error("AI categorization key rejected - check OPENAI_API_KEY: %s", exc)
                 return guesses, "key_rejected"
-            except (anthropic.APIStatusError, anthropic.APIConnectionError, UnusableAnswer) as exc:
+            except (openai.APIStatusError, openai.APIConnectionError, UnusableAnswer) as exc:
                 # RateLimitError is an APIStatusError, APITimeoutError an
                 # APIConnectionError: all of them only lose this chunk.
                 logger.warning("AI categorization request failed: %r", exc)
@@ -137,7 +135,8 @@ class ClaudeGuesser:
             ],
         }
         # The enums are built per request, so the model can only answer
-        # with keys and category ids that were sent.
+        # with keys and category ids that were sent. Strict mode needs
+        # every field required and no additional properties.
         schema = {
             "type": "object",
             "properties": {
@@ -147,12 +146,7 @@ class ClaudeGuesser:
                         "type": "object",
                         "properties": {
                             "key": {"type": "string", "enum": keys},
-                            "category_id": {
-                                "anyOf": [
-                                    {"type": "integer", "enum": list(labels)},
-                                    {"type": "null"},
-                                ]
-                            },
+                            "category_id": {"type": ["integer", "null"], "enum": [*labels, None]},
                             "reason": {"type": "string"},
                         },
                         "required": ["key", "category_id", "reason"],
@@ -163,22 +157,26 @@ class ClaudeGuesser:
             "required": ["guesses"],
             "additionalProperties": False,
         }
-        response = self.client.with_options(timeout=timeout).messages.create(
+        response = self.client.with_options(timeout=timeout).responses.create(
             model=settings.AI_CATEGORIZATION_MODEL,
-            # Room for adaptive thinking plus ~30 tokens per payee.
-            max_tokens=8000,
-            output_config={
-                "effort": "low",
-                "format": {"type": "json_schema", "schema": schema},
+            reasoning={"effort": "low"},
+            # Room for reasoning plus ~30 tokens per payee.
+            max_output_tokens=8000,
+            instructions=SYSTEM_PROMPT,
+            input=json.dumps(payload, ensure_ascii=False),
+            text={
+                "format": {"type": "json_schema", "name": "category_guesses", "schema": schema, "strict": True}
             },
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": json.dumps(payload, ensure_ascii=False)}],
         )
-        if response.stop_reason in ("refusal", "max_tokens"):
-            raise UnusableAnswer(f"stop_reason {response.stop_reason}")
-        text = next((block.text for block in response.content if block.type == "text"), None)
-        if text is None:
-            raise UnusableAnswer("no text block")
+        if response.status == "incomplete":
+            raise UnusableAnswer(f"incomplete: {response.incomplete_details}")
+        # A refusal is a content item of its own, on a "completed" response.
+        for item in response.output:
+            if item.type == "message" and any(part.type == "refusal" for part in item.content):
+                raise UnusableAnswer("refusal")
+        text = response.output_text
+        if not text:
+            raise UnusableAnswer("no output text")
         try:
             answers = json.loads(text)["guesses"]
             guesses = {}

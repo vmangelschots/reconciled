@@ -171,7 +171,7 @@ describe("ImportPage AI summary", () => {
   it("names the key setting when the key was rejected", async () => {
     await commitWith(commitResult(10, 0, "key_rejected"));
 
-    expect(screen.getByText("AI is not working: check ANTHROPIC_API_KEY.", { selector: "p" })).toBeInTheDocument();
+    expect(screen.getByText("AI is not working: check OPENAI_API_KEY.", { selector: "p" })).toBeInTheDocument();
   });
 
   it("counts the payees AI couldn't guess", async () => {

@@ -295,7 +295,7 @@ class DateFormatTests(TestCase):
         self.assertEqual(response.status_code, 400)
 
 
-@override_settings(ANTHROPIC_API_KEY="")
+@override_settings(OPENAI_API_KEY="")
 class SemicolonEndToEndTests(TestCase):
     """The full upload -> map -> preview -> commit flow against a
     semicolon-delimited, DD/MM/YYYY-dated file - the exact shape of the
@@ -390,7 +390,7 @@ class DuplicateDetectionTests(TestCase):
         self.assertTrue(candidates[0]["is_duplicate"])
 
 
-@override_settings(ANTHROPIC_API_KEY="")
+@override_settings(OPENAI_API_KEY="")
 class CommitImportTests(TestCase):
     def setUp(self):
         self.client = APIClient()
@@ -520,7 +520,7 @@ class CommitImportTests(TestCase):
         self.assertEqual(Transaction.objects.filter(account=self.account).count(), 1)
 
 
-@override_settings(ANTHROPIC_API_KEY="")
+@override_settings(OPENAI_API_KEY="")
 class TransferCounterpartImportTests(TestCase):
     """A bank line confirms a transfer counterpart the app created."""
 
@@ -649,7 +649,7 @@ class TransferCounterpartImportTests(TestCase):
 
 
 
-@override_settings(ANTHROPIC_API_KEY="")
+@override_settings(OPENAI_API_KEY="")
 class ImportCategorizationTests(TestCase):
     """Committing an import guesses categories from history - see
     openspec/specs/transaction-import and auto-categorization."""

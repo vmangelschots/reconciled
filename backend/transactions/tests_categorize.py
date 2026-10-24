@@ -25,7 +25,7 @@ class NormalizePayeeTests(TestCase):
         self.assertEqual(normalize_payee("0000123 / 45"), "")
 
 
-@override_settings(ANTHROPIC_API_KEY="")
+@override_settings(OPENAI_API_KEY="")
 class CategorizeTests(TestCase):
     """Every guessing scenario in openspec/specs/auto-categorization."""
 

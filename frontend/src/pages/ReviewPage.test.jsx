@@ -412,7 +412,7 @@ describe("ReviewPage empty state", () => {
   it("says when AI didn't respond or the key was rejected", async () => {
     for (const [status, line] of [
       ["failed", "AI guessing didn't respond."],
-      ["key_rejected", "AI is not working: check ANTHROPIC_API_KEY."],
+      ["key_rejected", "AI is not working: check OPENAI_API_KEY."],
     ]) {
       transactionsApi.getReviewGroups
         .mockResolvedValueOnce({ groups: [], uncategorized_count: 40, ai_enabled: true })

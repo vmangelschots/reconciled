@@ -16,7 +16,7 @@ HISTORY = Transaction.CategorySource.HISTORY
 AI = Transaction.CategorySource.AI
 
 
-@override_settings(ANTHROPIC_API_KEY="")
+@override_settings(OPENAI_API_KEY="")
 class ReviewApiTests(TestCase):
     """The Review page's endpoints - see openspec/specs/auto-categorization."""
 
