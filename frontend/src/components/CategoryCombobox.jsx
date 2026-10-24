@@ -3,7 +3,7 @@ import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList, CommandS
 import { Check, ChevronsUpDown, HandCoins, History, Plus, Sparkles, Split } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { displayReason } from "../lib/categorizeOutcome";
-import { categoryDisplayLabel, rankCategories } from "../lib/categoryTree";
+import { categoryDisplayLabel, rankCategories, treeOrder } from "../lib/categoryTree";
 import { cn } from "../lib/cn";
 import { assignableCategories } from "../lib/tabs";
 import { focusAdjacentTabbable } from "../lib/focus";
@@ -118,8 +118,12 @@ export function CategoryCombobox({
     const trimmed = q.trim();
     const lower = trimmed.toLowerCase();
     const offered = offerTabGroups ? categories : assignableCategories(categories);
+    // Tree order: a parent, then its own subcategories. An empty search
+    // shows it as is; a search ranks over it, so ties keep children near
+    // their parent. See the category-picker spec.
+    const tree = treeOrder(offered.filter((c) => !c.is_tab));
     const ranked = rankCategories(
-      offered.filter((c) => !c.is_tab),
+      tree.map((t) => t.category),
       categoriesById,
       trimmed,
     );
@@ -135,7 +139,8 @@ export function CategoryCombobox({
     const showCreate = allowCreate && trimmed !== "" && !exactMatch;
     const splitFirst = Boolean(onSplit) && lower !== "" && "split".startsWith(lower);
     const showSplit = Boolean(onSplit) && (!lower || splitFirst);
-    return { trimmed, ranked, tabs, transfers, showClear, showCreate, showSplit, splitFirst };
+    const depthById = Object.fromEntries(tree.map((t) => [t.category.id, t.depth]));
+    return { trimmed, ranked, depthById, tabs, transfers, showClear, showCreate, showSplit, splitFirst };
   }
 
   function highlightFor(q) {
@@ -153,8 +158,11 @@ export function CategoryCombobox({
     return "";
   }
 
-  const { trimmed: trimmedQuery, ranked, tabs, transfers, showClear, showCreate, showSplit, splitFirst } =
+  const { trimmed: trimmedQuery, ranked, depthById, tabs, transfers, showClear, showCreate, showSplit, splitFirst } =
     optionsFor(query);
+  const hasChildren = new Set(
+    ranked.map((c) => (c.parent_id !== undefined ? c.parent_id : c.parent)).filter((id) => id != null),
+  );
   // One group per tab group, in the order its first match ranks.
   const tabGroups = [];
   for (const t of tabs) {
@@ -354,20 +362,37 @@ export function CategoryCombobox({
               aria-autocomplete="list"
               className="w-full rounded-sm border border-border bg-background px-2 py-1 text-sm text-ink-primary placeholder:text-ink-muted focus:outline-none"
             />
-            <CommandList className="max-h-56 overflow-auto">
+            <CommandList className="max-h-80 overflow-auto">
               {showSplit && splitFirst && splitItem}
               {showClear && trimmedQuery === "" && clearItem}
-              {ranked.map((c) => (
-                <CommandItem
-                  key={c.id}
-                  value={String(c.id)}
-                  onSelect={() => choose(c)}
-                  className={cn(itemClass, "text-ink-primary")}
-                >
-                  {value === c.id && <Check className="h-3.5 w-3.5" />}
-                  {categoryDisplayLabel(c, categoriesById)}
-                </CommandItem>
-              ))}
+              {ranked.map((c) => {
+                const parentId = c.parent_id !== undefined ? c.parent_id : c.parent;
+                const parent = parentId != null ? categoriesById[parentId] : null;
+                const label = categoryDisplayLabel(c, categoriesById);
+                // In the tree a subcategory sits under its parent; in
+                // search results its parent is named beside it.
+                const nested = trimmedQuery === "" && depthById[c.id] === 1;
+                const hinted = trimmedQuery !== "" && parent != null;
+                return (
+                  <CommandItem
+                    key={c.id}
+                    value={String(c.id)}
+                    onSelect={() => choose(c)}
+                    aria-label={parent ? label : undefined}
+                    className={cn(
+                      itemClass,
+                      nested
+                        ? "ml-3 rounded-l-none border-l border-border pl-4 text-ink-secondary data-[selected=true]:text-ink-primary"
+                        : "text-ink-primary",
+                      trimmedQuery === "" && hasChildren.has(c.id) && "font-medium",
+                    )}
+                  >
+                    {value === c.id && <Check className="h-3.5 w-3.5 shrink-0" />}
+                    <span className="min-w-0 flex-1 truncate">{nested || hinted ? c.name : label}</span>
+                    {hinted && <span className="shrink-0 text-xs text-ink-muted">{parent.name}</span>}
+                  </CommandItem>
+                );
+              })}
               {showClear && trimmedQuery !== "" && clearItem}
               {tabGroups.map((g) => (
                 <CommandGroup key={`tabs:${g.parentId}`} heading={g.heading} className={groupClass}>
