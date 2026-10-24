@@ -13,7 +13,10 @@ import { Label } from "../components/ui/Label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/Select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/Table";
 import { useToast } from "../components/ui/Toast";
-import { formatMoney } from "../lib/money";
+import { Amount } from "../components/ui/Amount";
+import { EmptyState } from "../components/ui/EmptyState";
+import { PageHeader } from "../components/ui/PageHeader";
+import { Panel } from "../components/ui/Panel";
 
 function typeLabel(value) {
   return ACCOUNT_TYPES.find((t) => t.value === value)?.label ?? value;
@@ -24,6 +27,7 @@ export function AccountsPage() {
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState(null);
   const [pendingIds, setPendingIds] = useState(new Set());
+  const [adding, setAdding] = useState(false);
   const hasLoadedRef = useRef(false);
   const toast = useToast();
 
@@ -58,6 +62,7 @@ export function AccountsPage() {
   async function handleCreate(values) {
     await createAccount(values);
     toast.success("Account created.");
+    setAdding(false);
     await reload();
   }
 
@@ -81,28 +86,42 @@ export function AccountsPage() {
     }
   }
 
+  // The add form opens from the header, and stays open while there is
+  // nothing else to show.
+  const showAddForm = adding || (hasLoadedRef.current && accounts.length === 0);
+
   return (
     <section className="flex flex-col gap-6">
-      <h1 className="text-xl font-semibold text-ink-primary">Accounts</h1>
+      <PageHeader
+        title="Accounts"
+        actions={!showAddForm && <Button onClick={() => setAdding(true)}>Add account</Button>}
+      />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Add account</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <AccountForm onSubmit={handleCreate} submitLabel="Add account" />
-        </CardContent>
-      </Card>
+      {showAddForm && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Add account</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <AccountForm
+              onSubmit={handleCreate}
+              submitLabel="Add account"
+              onCancel={accounts.length > 0 ? () => setAdding(false) : undefined}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       {!hasLoadedRef.current && loading ? (
-        <p className="text-sm text-ink-secondary">Loading...</p>
+        <Panel loading />
       ) : (
+        <Panel flush className="overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Type</TableHead>
-              <TableHead>Balance</TableHead>
+              <TableHead className="text-right">Balance</TableHead>
               <TableHead />
             </TableRow>
           </TableHeader>
@@ -123,7 +142,9 @@ export function AccountsPage() {
                 <TableRow key={account.id}>
                   <TableCell>{account.name}</TableCell>
                   <TableCell>{typeLabel(account.account_type)}</TableCell>
-                  <TableCell>{formatMoney(account.current_balance_cents)}</TableCell>
+                  <TableCell className="text-right">
+                    <Amount cents={account.current_balance_cents} />
+                  </TableCell>
                   <TableCell className="flex gap-2">
                     <Button
                       variant="outline"
@@ -147,13 +168,14 @@ export function AccountsPage() {
             )}
             {accounts.length === 0 && (
               <TableRow>
-                <TableCell colSpan={4} className="text-ink-secondary">
-                  No accounts yet - add one above.
+                <TableCell colSpan={4}>
+                  <EmptyState>No accounts yet - add one above.</EmptyState>
                 </TableCell>
               </TableRow>
             )}
           </TableBody>
         </Table>
+        </Panel>
       )}
     </section>
   );

@@ -11,7 +11,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from ".
 import { useToast } from "../components/ui/Toast";
 import { useAfterDelay } from "../hooks/useAfterDelay";
 import { aiFailed, aiOutcomeLines, sourceSplit } from "../lib/categorizeOutcome";
-import { formatMoney } from "../lib/money";
+import { formatShortDate } from "../lib/dates";
+import { Amount } from "../components/ui/Amount";
+import { PageHeader } from "../components/ui/PageHeader";
 import { useReviewCount } from "../review/ReviewCountContext";
 
 const CSV_FIELDS = ["date", "amount", "description", "payee"];
@@ -154,7 +156,7 @@ export function ImportPage() {
   if (result) {
     return (
       <section className="flex flex-col gap-4">
-        <h1 className="text-xl font-semibold text-ink-primary">Import</h1>
+        <PageHeader title="Import" />
         <Card>
           <CardContent className="flex flex-col gap-4 pt-6">
             <div className="flex flex-col gap-1 text-sm">
@@ -183,7 +185,7 @@ export function ImportPage() {
   if (session?.candidates?.length) {
     return (
       <section className="flex flex-col gap-4">
-        <h1 className="text-xl font-semibold text-ink-primary">Import</h1>
+        <PageHeader title="Import" />
         <Card>
           <CardHeader>
             <CardTitle>Preview</CardTitle>
@@ -195,7 +197,7 @@ export function ImportPage() {
                   <TableHead />
                   <TableHead>Date</TableHead>
                   <TableHead>Description</TableHead>
-                  <TableHead>Amount</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
                   <TableHead>Match</TableHead>
                 </TableRow>
               </TableHeader>
@@ -210,9 +212,11 @@ export function ImportPage() {
                         disabled={committing}
                       />
                     </TableCell>
-                    <TableCell>{c.date}</TableCell>
+                    <TableCell className="whitespace-nowrap">{formatShortDate(c.date)}</TableCell>
                     <TableCell>{c.description}</TableCell>
-                    <TableCell>{formatMoney(c.amount_cents)}</TableCell>
+                    <TableCell className="text-right">
+                      <Amount cents={c.amount_cents} signed />
+                    </TableCell>
                     <TableCell className={c.is_duplicate ? "text-ink-muted" : undefined}>
                       {c.transfer_match
                         ? `Matches transfer from ${c.transfer_match.counterpart_account_name}`
@@ -253,7 +257,7 @@ export function ImportPage() {
   if (session?.file_format === "csv") {
     return (
       <section className="flex flex-col gap-4">
-        <h1 className="text-xl font-semibold text-ink-primary">Import</h1>
+        <PageHeader title="Import" />
         <Card>
           <CardHeader>
             <CardTitle>Map columns</CardTitle>
@@ -315,7 +319,7 @@ export function ImportPage() {
 
   return (
     <section className="flex flex-col gap-4">
-      <h1 className="text-xl font-semibold text-ink-primary">Import</h1>
+      <PageHeader title="Import" />
       {accounts.length === 0 ? (
         <p className="text-sm text-ink-secondary">Add an account first.</p>
       ) : (
@@ -345,7 +349,7 @@ export function ImportPage() {
                   accept=".csv,.ofx"
                   onChange={(e) => setFile(e.target.files[0])}
                   required
-                  className="text-sm text-ink-secondary file:mr-3 file:rounded-md file:border-0 file:bg-accent file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-white hover:file:opacity-90"
+                  className="text-sm text-ink-secondary file:mr-3 file:rounded-md file:border-0 file:bg-accent file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-on-accent hover:file:opacity-90"
                 />
               </div>
               <Button type="submit" disabled={submitting || !file}>

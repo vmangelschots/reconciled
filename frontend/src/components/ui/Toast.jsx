@@ -66,7 +66,7 @@ export function ToastProvider({ children }) {
             </ToastPrimitive.Root>
           )
         })}
-        <ToastPrimitive.Viewport className="fixed bottom-0 right-0 z-100 flex w-full max-w-sm flex-col gap-2 p-4" />
+        <ToastPrimitive.Viewport className="fixed right-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-100 flex w-full max-w-sm flex-col gap-2 p-4 lg:bottom-0" />
       </ToastPrimitive.Provider>
     </ToastContext.Provider>
   )

@@ -49,7 +49,7 @@ function TabRow({ row, categories, onSettle }) {
   ].filter(Boolean);
   return (
     <li className="flex items-start gap-3 py-2.5">
-      <span className="w-14 shrink-0 pt-0.5 text-xs tabular-nums text-ink-muted">{formatShortDate(row.date)}</span>
+      <span className="w-14 shrink-0 pt-0.5 text-xs num text-ink-muted">{formatShortDate(row.date)}</span>
       <div className="flex min-w-0 flex-1 flex-col items-start gap-1">
         <span className="w-full truncate text-sm text-ink-primary">{row.payee}</span>
         {meta.length > 0 && <span className="w-full truncate text-xs text-ink-muted">{meta.join(" · ")}</span>}
@@ -66,11 +66,11 @@ function TabRow({ row, categories, onSettle }) {
         )}
       </div>
       <div className="flex shrink-0 flex-col items-end gap-0.5 text-right">
-        <span className="text-sm tabular-nums text-ink-primary">
+        <span className="text-sm num text-ink-primary">
           <span className="mr-1.5 text-xs text-ink-muted">{lent ? "lent" : "repaid"}</span>
           {formatMoney(Math.abs(row.amount_cents))}
         </span>
-        <span className="text-xs tabular-nums text-ink-muted">{runningLabel(row.running_balance_cents)}</span>
+        <span className="text-xs num text-ink-muted">{runningLabel(row.running_balance_cents)}</span>
       </div>
     </li>
   );

@@ -10,14 +10,17 @@ function plural(n, word) {
   return `${n} ${word}${n === 1 ? "" : "s"}`;
 }
 
-function TabRow({ tab }) {
+function TabRow({ tab, compact }) {
   const sentence = tabSentence(tab.name, tab.balance_cents);
   const stale = isStale(tab.open_since);
   return (
     <li>
       <Link
         to={`/tabs/${tab.id}`}
-        className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className={cn(
+          "flex items-center gap-3 py-2 hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
+          compact ? "min-h-11 px-5" : "rounded-md px-2",
+        )}
       >
         <span className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
           <span className={cn("flex items-center gap-1.5 text-sm", TONE_CLASS[sentence.tone])}>
@@ -39,14 +42,54 @@ function TabRow({ tab }) {
 /**
  * The dashboard's "Open tabs" card: what each person owes, open tabs
  * first (the API sorts by balance), settled ones behind a toggle. Renders
- * nothing when no tab exists. See specs/repayment-tabs.
+ * nothing when no tab exists. `compact` drops the card and its title, for
+ * use inside a Panel. See specs/repayment-tabs.
  */
-export function OpenTabsCard({ tabs }) {
+export function OpenTabsCard({ tabs, compact = false }) {
   const [showSettled, setShowSettled] = useState(false);
   if (tabs.length === 0) return null;
 
   const open = tabs.filter((t) => t.balance_cents !== 0);
   const settled = tabs.filter((t) => t.balance_cents === 0);
+
+  const ulClass = compact ? "flex flex-col" : "-mx-2 flex flex-col";
+  const content = (
+    <div className={cn("flex flex-col gap-1", compact && "pb-3")}>
+      {open.length === 0 && (
+        <p className={cn("text-sm text-ink-secondary", compact ? "px-5" : "px-2")}>All tabs are settled.</p>
+      )}
+      {open.length > 0 && (
+        <ul className={ulClass}>
+          {open.map((t) => (
+            <TabRow key={t.id} tab={t} compact={compact} />
+          ))}
+        </ul>
+      )}
+      {settled.length > 0 && (
+        <>
+          <button
+            type="button"
+            aria-expanded={showSettled}
+            onClick={() => setShowSettled(!showSettled)}
+            className={cn(
+              "self-start rounded-sm px-2 py-1 text-xs text-ink-muted hover:text-ink-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
+              compact && "mx-3",
+            )}
+          >
+            {showSettled ? "Hide settled tabs" : `${plural(settled.length, "settled tab")} ▸`}
+          </button>
+          {showSettled && (
+            <ul className={ulClass}>
+              {settled.map((t) => (
+                <TabRow key={t.id} tab={t} compact={compact} />
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+    </div>
+  );
+  if (compact) return content;
 
   return (
     <Card>
@@ -56,35 +99,7 @@ export function OpenTabsCard({ tabs }) {
           Open tabs
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex flex-col gap-1">
-        {open.length === 0 && <p className="px-2 text-sm text-ink-secondary">All tabs are settled.</p>}
-        {open.length > 0 && (
-          <ul className="-mx-2 flex flex-col">
-            {open.map((t) => (
-              <TabRow key={t.id} tab={t} />
-            ))}
-          </ul>
-        )}
-        {settled.length > 0 && (
-          <>
-            <button
-              type="button"
-              aria-expanded={showSettled}
-              onClick={() => setShowSettled(!showSettled)}
-              className="self-start rounded-sm px-2 py-1 text-xs text-ink-muted hover:text-ink-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            >
-              {showSettled ? "Hide settled tabs" : `${plural(settled.length, "settled tab")} ▸`}
-            </button>
-            {showSettled && (
-              <ul className="-mx-2 flex flex-col">
-                {settled.map((t) => (
-                  <TabRow key={t.id} tab={t} />
-                ))}
-              </ul>
-            )}
-          </>
-        )}
-      </CardContent>
+      <CardContent>{content}</CardContent>
     </Card>
   );
 }

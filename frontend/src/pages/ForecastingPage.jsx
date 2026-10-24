@@ -18,7 +18,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/Table";
 import { useToast } from "../components/ui/Toast";
 import { cn } from "../lib/cn";
-import { formatMoney } from "../lib/money";
+import { formatShortDate } from "../lib/dates";
+import { Amount } from "../components/ui/Amount";
+import { PageHeader } from "../components/ui/PageHeader";
 
 const FREQUENCIES = [
   { value: "weekly", label: "Weekly" },
@@ -118,7 +120,7 @@ export function ForecastingPage() {
   if (accounts.length === 0) {
     return (
       <section>
-        <h1 className="text-xl font-semibold text-ink-primary">Forecast</h1>
+        <PageHeader title="Forecast" />
         <p className="mt-2 text-sm text-ink-secondary">Add an account first.</p>
       </section>
     );
@@ -126,7 +128,7 @@ export function ForecastingPage() {
 
   return (
     <section className="flex flex-col gap-6">
-      <h1 className="text-xl font-semibold text-ink-primary">Forecast</h1>
+      <PageHeader title="Forecast" />
 
       <div className="flex flex-col gap-1.5">
         <Label>Account</Label>
@@ -154,7 +156,7 @@ export function ForecastingPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Payee</TableHead>
-                <TableHead>Amount</TableHead>
+                <TableHead className="text-right">Amount</TableHead>
                 <TableHead>Frequency</TableHead>
                 <TableHead>Start</TableHead>
                 <TableHead>End</TableHead>
@@ -179,9 +181,11 @@ export function ForecastingPage() {
                 ) : (
                   <TableRow key={r.id}>
                     <TableCell>{r.payee}</TableCell>
-                    <TableCell>{formatMoney(r.amount_cents)}</TableCell>
+                    <TableCell className="text-right">
+                      <Amount cents={r.amount_cents} signed />
+                    </TableCell>
                     <TableCell>{FREQUENCIES.find((f) => f.value === r.frequency)?.label}</TableCell>
-                    <TableCell>{r.start_date}</TableCell>
+                    <TableCell className="whitespace-nowrap">{formatShortDate(r.start_date)}</TableCell>
                     <TableCell>{r.end_date ?? "—"}</TableCell>
                     <TableCell>{categoryName(r.category)}</TableCell>
                     <TableCell className="flex gap-2">
@@ -219,7 +223,7 @@ export function ForecastingPage() {
 
       <div className="flex flex-col gap-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-ink-primary">Projected balance</h2>
+          <h2 className="text-[15px] font-semibold text-ink-primary">Projected balance</h2>
           <div className="flex gap-2">
             {HORIZON_PRESETS.map((preset) => (
               <Button
@@ -244,15 +248,17 @@ export function ForecastingPage() {
                 <TableRow>
                   <TableHead>Date</TableHead>
                   <TableHead>Payee</TableHead>
-                  <TableHead>Amount</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {forecast.occurrences.map((o, i) => (
                   <TableRow key={`${o.recurring_transaction_id}-${o.date}-${i}`}>
-                    <TableCell>{o.date}</TableCell>
+                    <TableCell className="whitespace-nowrap">{formatShortDate(o.date)}</TableCell>
                     <TableCell>{o.payee}</TableCell>
-                    <TableCell>{formatMoney(o.amount_cents)}</TableCell>
+                    <TableCell className="text-right">
+                      <Amount cents={o.amount_cents} signed />
+                    </TableCell>
                   </TableRow>
                 ))}
                 {forecast.occurrences.length === 0 && (
