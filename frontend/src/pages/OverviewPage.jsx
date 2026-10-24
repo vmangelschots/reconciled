@@ -15,7 +15,6 @@ import { MonthSwitcher } from "../components/ui/MonthSwitcher";
 import { PageHeader } from "../components/ui/PageHeader";
 import { Panel } from "../components/ui/Panel";
 import { ProgressBar } from "../components/ui/ProgressBar";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/Select";
 import { Stat } from "../components/ui/Stat";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { useReport } from "../hooks/useReport";
@@ -43,7 +42,7 @@ function BalanceTile({ data, month, isCurrent }) {
   const change = data.in_out.in_cents - data.in_out.out_cents;
   const when = isCurrent ? "this month" : `in ${monthName(month)}`;
   return (
-    <Stat label="Balance" note={isCurrent ? null : "Today"} value={whole(data.account.balance_cents)}>
+    <Stat label="Balance" note={isCurrent ? null : "Today"} value={whole(data.balance_cents)}>
       <span className={cn("text-sm", change > 0 ? "text-positive" : "text-ink-secondary")}>
         {formatMoneyWhole(change, { signed: true })} {when}
       </span>
@@ -51,8 +50,7 @@ function BalanceTile({ data, month, isCurrent }) {
   );
 }
 
-function BudgetTile({ budget, allAccounts }) {
-  const note = allAccounts ? "All accounts" : null;
+function BudgetTile({ budget }) {
   const extras = [
     budget.outside_cents > 0 && `+${whole(budget.outside_cents)} outside budgets`,
     budget.uncategorized_cents > 0 && `${whole(budget.uncategorized_cents)} uncategorized`,
@@ -61,7 +59,7 @@ function BudgetTile({ budget, allAccounts }) {
   if (!budget.has_limits) {
     const spent = budget.spent_cents + budget.outside_cents + budget.uncategorized_cents;
     return (
-      <Stat label="Spent" note={note} value={whole(spent)}>
+      <Stat label="Spent" value={whole(spent)}>
         <Link to="/budgets" className="text-sm text-accent hover:underline">
           Set budgets →
         </Link>
@@ -75,7 +73,7 @@ function BudgetTile({ budget, allAccounts }) {
   return (
     <Stat
       label="Budget"
-      note={note}
+     
       value={
         <>
           {whole(budget.spent_cents)}
@@ -99,37 +97,54 @@ function BudgetTile({ budget, allAccounts }) {
   );
 }
 
-function ForecastTile({ forecast, isCurrent }) {
-  if (!forecast.has_recurring) {
-    return (
-      <Stat label="Forecast" note={isCurrent ? null : "From today"} value={whole(forecast.low_cents)}>
-        <span className="text-sm text-ink-secondary">No recurring transactions yet.</span>
-        <Link to="/forecast" className="text-sm text-accent hover:underline">
-          Add them →
-        </Link>
-      </Stat>
-    );
-  }
+// How fresh an account's data is: stale after STALE_IMPORT_DAYS, or when
+// it was never imported.
+function freshness(lastImportDate) {
+  if (!lastImportDate) return { text: "No imports yet", stale: true, days: Infinity };
+  const days = daysSince(lastImportDate);
+  const text = days <= 0 ? "imported today" : `imported ${plural(days, "day", "days")} ago`;
+  return { text, stale: days > STALE_IMPORT_DAYS, days };
+}
+
+function AccountsTile({ accounts }) {
   return (
-    <Stat
-      label="Low point, next 90 days"
-      note={isCurrent ? null : "From today"}
-      value={whole(forecast.low_cents)}
-      tone={forecast.low_cents < 0 ? "critical" : "default"}
-    >
-      <span className="text-sm text-ink-secondary">on {formatShortDate(forecast.low_date)}</span>
-      {forecast.next && (
-        <span className="text-xs text-ink-muted">
-          Next: {forecast.next.payee} {formatMoneyWhole(forecast.next.amount_cents, { signed: true })} ·{" "}
-          {formatShortDate(forecast.next.date)}
-        </span>
-      )}
-    </Stat>
+    <ul className="-mx-5 -mb-2 flex flex-col">
+      {accounts.map((a) => {
+        const fresh = freshness(a.last_import_date);
+        return (
+          <ListRow
+            key={a.id}
+            to={`/transactions/${a.id}`}
+            primary={<span title={a.name}>{a.name}</span>}
+            secondary={<span className={cn(fresh.stale && "text-warning")}>{fresh.text}</span>}
+            end={<span className="num font-medium text-ink-primary">{whole(a.balance_cents)}</span>}
+          />
+        );
+      })}
+    </ul>
   );
 }
 
+// One line for every stale account: named when there is one, counted when
+// there are several, opening Import on the stalest. See the overview spec.
+function staleImportItem(accounts) {
+  const stale = accounts
+    .map((a) => ({ ...a, fresh: freshness(a.last_import_date) }))
+    .filter((a) => a.fresh.stale)
+    .sort((a, b) => b.fresh.days - a.fresh.days);
+  if (stale.length === 0) return null;
+  const [stalest] = stale;
+  let primary = `${stale.length} accounts not imported this week`;
+  if (stale.length === 1) {
+    primary = stalest.last_import_date
+      ? `${stalest.name}: last import ${plural(stalest.fresh.days, "day", "days")} ago`
+      : `${stalest.name}: no imports yet`;
+  }
+  return { key: "import", to: `/import?account=${stalest.id}`, icon: <Upload className="h-4 w-4" />, primary };
+}
+
 function attentionItems(data, month, isCurrent) {
-  const { attention, budget, account } = data;
+  const { attention, budget } = data;
   const items = [];
   if (attention.review_count > 0) {
     items.push({
@@ -160,15 +175,8 @@ function attentionItems(data, month, isCurrent) {
       tone: c.over ? "text-critical" : undefined,
     });
   }
-  const daysAgo = account.last_import_date ? daysSince(account.last_import_date) : null;
-  if (daysAgo == null || daysAgo > STALE_IMPORT_DAYS) {
-    items.push({
-      key: "import",
-      to: "/import",
-      icon: <Upload className="h-4 w-4" />,
-      primary: daysAgo == null ? "No imports yet" : `Last import ${daysAgo} days ago`,
-    });
-  }
+  const stale = staleImportItem(data.accounts);
+  if (stale) items.push(stale);
   return items;
 }
 
@@ -191,12 +199,15 @@ function NeedsAttention({ data, month, isCurrent }) {
 }
 
 function recentLabel(row) {
-  if (row.transfer_account_name) return `${row.amount_cents < 0 ? "→" : "←"} ${row.transfer_account_name}`;
+  if (row.transfer_account_name) return "Transfer";
   if (row.part_count > 0) return `Split · ${row.part_count}`;
   return row.category_label ?? "Uncategorized";
 }
 
-function RecentTransactions({ rows }) {
+// A transfer between the user's accounts reads "<from> → <to>" with the
+// amount moved; otherwise the payee and its signed amount. With several
+// accounts, the account name sits under the amount.
+function RecentTransactions({ rows, showAccounts }) {
   if (rows.length === 0) {
     return <EmptyState className="pb-4">No transactions yet.</EmptyState>;
   }
@@ -206,9 +217,26 @@ function RecentTransactions({ rows }) {
         <ListRow
           key={row.id}
           icon={row.is_tab ? <HandCoins className="h-4 w-4" /> : null}
-          primary={row.payee}
+          primary={
+            row.transfer_account_name
+              ? row.amount_cents < 0
+                ? `${row.account_name} → ${row.transfer_account_name}`
+                : `${row.transfer_account_name} → ${row.account_name}`
+              : row.payee
+          }
           secondary={`${formatShortDate(row.date)} · ${recentLabel(row)}`}
-          end={<Amount cents={row.amount_cents} signed />}
+          end={
+            <span className="flex flex-col items-end">
+              {row.transfer_account_name ? (
+                <Amount cents={Math.abs(row.amount_cents)} />
+              ) : (
+                <Amount cents={row.amount_cents} signed />
+              )}
+              {showAccounts && !row.transfer_account_name && (
+                <span className="max-w-28 truncate text-xs text-ink-muted">{row.account_name}</span>
+              )}
+            </span>
+          }
         />
       ))}
     </ul>
@@ -224,23 +252,19 @@ function TableToggle({ shown, onToggle }) {
 }
 
 /**
- * The home page: how one account is doing in one month, and what needs
- * attention. Each panel loads and fails on its own. See specs/overview.
+ * The home page: how all accounts together are doing in one month, and
+ * what needs attention. Each panel loads and fails on its own. See specs/overview.
  */
 export function OverviewPage() {
   const thisMonth = currentMonth();
   const [month, setMonth] = useState(thisMonth);
   const isCurrent = month === thisMonth;
   const isWide = useMediaQuery("(min-width: 640px)");
-  const { accounts, defaultAccount: account, loaded, setLastOpened: setAccountId } = useAccounts();
+  const { accounts, loaded } = useAccounts();
   const [categoryTable, setCategoryTable] = useState(false);
   const [inOutTable, setInOutTable] = useState(false);
 
-  const accountId = account?.id ?? null;
-  const overview = useReport(
-    () => getOverview(month, accountId),
-    accountId == null ? null : `${month}:${accountId}`,
-  );
+  const overview = useReport(() => getOverview(month), loaded && accounts.length > 0 ? month : null);
   const spending = useReport(() => getCategorySpending(month), month);
   const cashFlow = useReport(() => getCashFlow(month), month);
   const tabs = useReport(listTabs, "tabs");
@@ -256,20 +280,6 @@ export function OverviewPage() {
       }
     >
       <MonthSwitcher month={month} onChange={setMonth} short={!isWide} />
-      {accounts.length > 1 && (
-        <Select value={accountId != null ? String(accountId) : ""} onValueChange={(v) => setAccountId(Number(v))}>
-          <SelectTrigger className="min-w-0 flex-1 sm:w-48 sm:flex-none" aria-label="Account">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {accounts.map((a) => (
-              <SelectItem key={a.id} value={String(a.id)}>
-                {a.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      )}
     </PageHeader>
   );
 
@@ -307,10 +317,15 @@ export function OverviewPage() {
           {data && <BalanceTile data={data} month={month} isCurrent={isCurrent} />}
         </Panel>
         <Panel aria-label="Budget" loading={tileLoading} error={overviewError}>
-          {data && <BudgetTile budget={data.budget} allAccounts={accounts.length > 1} />}
+          {data && <BudgetTile budget={data.budget} />}
         </Panel>
-        <Panel aria-label="Forecast" loading={tileLoading} error={overviewError}>
-          {data && <ForecastTile forecast={data.forecast} isCurrent={isCurrent} />}
+        <Panel aria-label="Accounts" loading={tileLoading} error={overviewError}>
+          {data && (
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-medium tracking-wide text-ink-muted uppercase">Accounts</span>
+              <AccountsTile accounts={data.accounts} />
+            </div>
+          )}
         </Panel>
       </div>
 
@@ -354,7 +369,7 @@ export function OverviewPage() {
               </Link>
             }
           >
-            {data && <RecentTransactions rows={data.recent} />}
+            {data && <RecentTransactions rows={data.recent} showAccounts={data.accounts.length > 1} />}
           </Panel>
         </div>
       </div>

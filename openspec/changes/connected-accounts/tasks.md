@@ -58,7 +58,7 @@
 
 ## 4. Overview across accounts
 
-- [ ] 4.1 Update `OverviewPage`:
+- [x] 4.1 Update `OverviewPage`:
   - remove the account picker and the forecast tile, and drop the account argument from `api/overview.js`;
   - Balance shows the total;
   - add the Accounts tile, with freshness in the warning colour after 7 days or never, and rows linking to `/transactions/:id`;
