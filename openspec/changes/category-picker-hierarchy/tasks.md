@@ -7,7 +7,7 @@
 
 ## 2. Check
 
-- [ ] 2.1 In the local stack with a few parents and subcategories, open the picker in the ledger cell, the add form, the filter and the split editor: check the tree on an empty search, the parent hint while typing, the arrow-key order, and light and dark mode. Verify that frontend `npm test`, `npm run lint` and `npm run build` pass.
+- [x] 2.1 In the local stack with a few parents and subcategories, open the picker in the ledger cell, the add form, the filter and the split editor: check the tree on an empty search, the parent hint while typing, the arrow-key order, and light and dark mode. Verify that frontend `npm test`, `npm run lint` and `npm run build` pass.
 
 ## Workflow follow-up
 
