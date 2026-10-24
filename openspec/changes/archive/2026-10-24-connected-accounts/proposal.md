@@ -1,5 +1,7 @@
 # Proposal
 
+Issue: #11
+
 ## Why
 
 The household tracks two joint accounts (Revolut and Crelan), but the
