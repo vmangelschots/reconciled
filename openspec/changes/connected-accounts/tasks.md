@@ -2,7 +2,7 @@
 
 ## 1. Overview endpoint across accounts
 
-- [ ] 1.1 Change `OverviewView` to take only `month`:
+- [x] 1.1 Change `OverviewView` to take only `month`:
   - return `accounts` (active, in name order, with balance and `last_import_date` from one grouped query) and `balance_cents`;
   - compute `in_out` across active accounts;
   - return `recent` across active accounts, with internal transfers listed once by their outgoing leg and `account_name` on each row;
