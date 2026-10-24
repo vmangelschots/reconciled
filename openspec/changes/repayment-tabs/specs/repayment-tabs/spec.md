@@ -149,8 +149,9 @@ SHALL show until the user expands the earlier ones.
 - **THEN** the page says the tab was not found
 
 ### Requirement: Settle a row outside the account
-On a tab page, each lent row SHALL offer "Settled outside the
-account…", which opens the category picker for that row. Choosing a
+On a tab page, each lent row after the last "Settled" divider SHALL
+offer "Settled outside the account…", which opens the category picker
+for that row; rows already settled SHALL NOT offer it. Choosing a
 category SHALL move the row to it, so the tab's balance drops by the
 row's amount.
 

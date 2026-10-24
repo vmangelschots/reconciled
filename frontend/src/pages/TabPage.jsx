@@ -39,6 +39,8 @@ function runningLabel(cents) {
   return "settled";
 }
 
+// onSettle is only given for rows still open: a repaid row moved to
+// another category would leave the tab owing the other way.
 function TabRow({ row, categories, onSettle }) {
   const lent = row.amount_cents < 0;
   const meta = [
@@ -51,7 +53,7 @@ function TabRow({ row, categories, onSettle }) {
       <div className="flex min-w-0 flex-1 flex-col items-start gap-1">
         <span className="w-full truncate text-sm text-ink-primary">{row.payee}</span>
         {meta.length > 0 && <span className="w-full truncate text-xs text-ink-muted">{meta.join(" · ")}</span>}
-        {lent && (
+        {lent && onSettle && (
           <CategoryCombobox
             categories={categories}
             value={null}
@@ -59,7 +61,7 @@ function TabRow({ row, categories, onSettle }) {
             placeholder="Settled outside the account…"
             clearLabel="Uncategorized"
             aria-label={`Settle ${row.payee} outside the account`}
-            className="h-7 min-w-0 border-dashed text-xs text-ink-secondary"
+            className="h-7 min-w-0 max-w-full border-dashed text-xs text-ink-secondary"
           />
         )}
       </div>
@@ -140,7 +142,7 @@ export function TabPage() {
 
   if (notFound) {
     return (
-      <section className="flex flex-col gap-4">
+      <section className="mx-auto flex w-full max-w-3xl flex-col gap-4">
         {back}
         <p className="text-sm text-ink-secondary">Tab not found.</p>
       </section>
@@ -148,7 +150,7 @@ export function TabPage() {
   }
   if (!tab) {
     return (
-      <section className="flex flex-col gap-4">
+      <section className="mx-auto flex w-full max-w-3xl flex-col gap-4">
         {back}
         <p className="text-sm text-ink-secondary">Loading...</p>
       </section>
@@ -164,7 +166,7 @@ export function TabPage() {
   const settleCategories = categories.filter((c) => !c.is_tab);
 
   return (
-    <section className="flex flex-col gap-4">
+    <section className="mx-auto flex w-full max-w-3xl flex-col gap-4">
       {back}
       <header className="flex flex-col gap-1">
         <h1 className="flex items-center gap-2 text-sm text-ink-secondary">
@@ -197,7 +199,12 @@ export function TabPage() {
           <ul className="flex flex-col divide-y divide-border">
             {shown.map((stretch, i) => [
               ...stretch.rows.map((row) => (
-                <TabRow key={row.id} row={row} categories={settleCategories} onSettle={handleSettle} />
+                <TabRow
+                  key={row.id}
+                  row={row}
+                  categories={settleCategories}
+                  onSettle={stretch.settled ? undefined : handleSettle}
+                />
               )),
               stretch.settled && <SettledDivider key={`settled-${i}`} />,
             ])}

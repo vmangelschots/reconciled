@@ -67,9 +67,8 @@ describe("TabPage", () => {
     expect(items[1]).toHaveTextContent(`repaid${formatMoney(3000)}`);
     expect(items[1]).toHaveTextContent("settled");
     expect(screen.getByRole("separator")).toHaveTextContent("Settled");
-    // Only a lent row can be settled outside the account.
-    expect(within(items[0]).getByRole("button", { name: /Settle Pizzeria/ })).toBeInTheDocument();
-    expect(within(items[1]).queryByRole("button")).toBeNull();
+    // A repaid stretch has nothing left to settle.
+    expect(screen.queryByRole("button", { name: /Settle/ })).toBeNull();
   });
 
   it("collapses older settled stretches", async () => {
@@ -92,6 +91,10 @@ describe("TabPage", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /Show earlier \(2 settled rows\)/ }));
     expect(screen.getByText("Concert")).toBeInTheDocument();
+    // Only a lent row that is still open can be settled outside the account.
+    expect(screen.getAllByRole("button", { name: /Settle/ }).map((b) => b.getAttribute("aria-label"))).toEqual([
+      "Settle Pizzeria outside the account",
+    ]);
   });
 
   it("says when the tab doesn't exist", async () => {

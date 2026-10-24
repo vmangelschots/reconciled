@@ -60,7 +60,7 @@
   - in the category tree, show `HandCoins` and the balance sentence on tabs.
 
   Verify with `BudgetsPage.test.jsx` cases for "Make a tab group" (PATCH body), "Switching a group with rows asks first" (cancel sends nothing, confirm sends the change) and "Settings show tab balances".
-- [ ] 5.4 Check phone width (390px) for the open tabs card and the tab page: rows stack and nothing scrolls sideways. Also run the whole flow in the local stack: make a "Tabs" group with "Jan", split a dinner half to Jan, categorize a repayment, then check the dashboard totals, the card and the tab page, and settle a row outside the account. Verify that the frontend `npm test`, `npm run lint` and `npm run build` pass, and that backend `python manage.py test` passes.
+- [x] 5.4 Check phone width (390px) for the open tabs card and the tab page: rows stack and nothing scrolls sideways. Also run the whole flow in the local stack: make a "Tabs" group with "Jan", split a dinner half to Jan, categorize a repayment, then check the dashboard totals, the card and the tab page, and settle a row outside the account. Verify that the frontend `npm test`, `npm run lint` and `npm run build` pass, and that backend `python manage.py test` passes.
 
 ## Workflow follow-up
 
