@@ -86,6 +86,8 @@ export function ImportPage() {
       const start = accts.find((a) => a.id === wanted) ?? accts.find((a) => a.id === lastOpenedId) ?? accts[0];
       if (start) setAccountId(start.id);
     });
+    // The starting account is chosen once, when the page opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function selectNonDuplicates(candidates) {
