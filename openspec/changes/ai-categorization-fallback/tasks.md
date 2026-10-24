@@ -38,7 +38,7 @@
 
 ## 5. Integration check
 
-- [ ] 5.1 Run the backend and frontend suites, lint, build and kubeconform. Then, on the local docker stack with a real `OPENAI_API_KEY` in `.env` (ask the user to add it; never paste it in chat), import a throwaway CSV with known and unknown payees and check:
+- [x] 5.1 Run the backend and frontend suites, lint, build and kubeconform. Then, on the local docker stack with a real `OPENAI_API_KEY` in `.env` (ask the user to add it; never paste it in chat), import a throwaway CSV with known and unknown payees and check:
   - the commit button's running state;
   - the result card's split line;
   - the AI section with sensible reasons;
