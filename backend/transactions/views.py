@@ -108,6 +108,7 @@ class TransactionViewSet(viewsets.ModelViewSet):
                 category=category,
                 category_confirmed=True,
                 category_source=Transaction.CategorySource.MANUAL,
+                category_reason="",
                 updated_at=now,
             )
         return Response({"confirmed_count": kept + changed})

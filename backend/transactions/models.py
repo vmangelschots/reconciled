@@ -5,6 +5,7 @@ class Transaction(models.Model):
     class CategorySource(models.TextChoices):
         MANUAL = "manual", "Manual"
         HISTORY = "history", "History"
+        AI = "ai", "AI"
 
     account = models.ForeignKey(
         "accounts.Account", on_delete=models.CASCADE, related_name="transactions"
@@ -21,12 +22,14 @@ class Transaction(models.Model):
     )
     # A category the categorizer guessed is unconfirmed until the user
     # accepts or replaces it; everything else (and "no category") is
-    # confirmed. Source records what produced the current category. All
-    # guessing lives in transactions/categorize.py.
+    # confirmed. Source records what produced the current category, and an
+    # AI guess keeps the model's short reason until the category changes.
+    # All guessing lives in transactions/categorize.py.
     category_confirmed = models.BooleanField(default=True)
     category_source = models.CharField(
         max_length=10, choices=CategorySource.choices, default=CategorySource.MANUAL
     )
+    category_reason = models.CharField(max_length=200, blank=True, default="")
     notes =models.TextField(blank=True, default="")
     # A transfer between two of the user's accounts is two ordinary
     # transactions pointing at each other. SET_NULL: deleting one side

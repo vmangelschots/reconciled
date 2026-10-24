@@ -38,6 +38,23 @@ cp k8s/examples/secret.example.yaml k8s/15-secret.yaml
 python -c "import secrets; print(secrets.token_urlsafe(50))"
 ```
 
+### Optional: AI categorization
+
+Add `ANTHROPIC_API_KEY` to `15-secret.yaml` to have Claude guess
+categories for payees your history doesn't cover yet. Payee names, notes
+and amounts are sent to Anthropic; account names, dates and balances never
+are. Without the key, only your history is used. Three plain settings can
+go in `10-config.yaml` if the defaults don't suit you:
+
+| Setting | Default | What it does |
+|---|---|---|
+| `AI_CATEGORIZATION_ENABLED` | `true` | Set to `false` to stop AI calls while keeping the key |
+| `AI_CATEGORIZATION_MODEL` | `claude-haiku-5-5` | The Claude model used for guessing |
+| `AI_CATEGORIZATION_DEADLINE` | `20` | Seconds the AI step may take per import or backfill (keep it below gunicorn's 30s timeout) |
+
+Restart the backend after changing any of them:
+`kubectl -n reconciled rollout restart deploy/backend`.
+
 `BUDGET_APP_USERNAME` / `BUDGET_APP_PASSWORD` is the account you log in
 with. It's created on the backend's first start and never changed
 afterwards. To change the password later, run

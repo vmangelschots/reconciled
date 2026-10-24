@@ -2,8 +2,8 @@
 
 ## 1. Data model and settings
 
-- [ ] 1.1 Add the `ai` choice to `Transaction.CategorySource` and the `category_reason` field (max 200 chars, blank default), with a migration. Expose `category_reason` read-only on `TransactionSerializer`, and clear it when the user writes a different category. Verify that `makemigrations --check` is clean, and with `transactions/tests.py` cases that a different category clears the reason while re-picking the same one keeps it.
-- [ ] 1.2 Add `anthropic` (current 1.x, pinned) to `backend/requirements.txt`, plus the `ANTHROPIC_API_KEY` (read by the SDK), `AI_CATEGORIZATION_ENABLED`, `AI_CATEGORIZATION_MODEL` (default `claude-haiku-5-5`) and `AI_CATEGORIZATION_DEADLINE` (default 20s) settings. Document them in `.env.example`, `k8s/examples/secret.example.yaml` (optional key) and `k8s/README.md`. Verify the backend suite passes with the new dependency installed, and that kubeconform still validates `k8s/`.
+- [x] 1.1 Add the `ai` choice to `Transaction.CategorySource` and the `category_reason` field (max 200 chars, blank default), with a migration. Expose `category_reason` read-only on `TransactionSerializer`, and clear it when the user writes a different category. Verify that `makemigrations --check` is clean, and with `transactions/tests.py` cases that a different category clears the reason while re-picking the same one keeps it.
+- [x] 1.2 Add `anthropic` (current release, pinned: 2.3.0) to `backend/requirements.txt`, plus the `ANTHROPIC_API_KEY` (read by the SDK), `AI_CATEGORIZATION_ENABLED`, `AI_CATEGORIZATION_MODEL` (default `claude-haiku-5-5`) and `AI_CATEGORIZATION_DEADLINE` (default 20s) settings. Document them in `.env.example`, `k8s/examples/secret.example.yaml` (optional key) and `k8s/README.md`. Verify the backend suite passes with the new dependency installed, and that kubeconform still validates `k8s/`.
 
 ## 2. AI guesser
 

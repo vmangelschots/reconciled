@@ -287,7 +287,7 @@ reviews.
   when a key is set. `AI_CATEGORIZATION_MODEL` defaults to
   `claude-haiku-5-5`, and `AI_CATEGORIZATION_DEADLINE` to 20 seconds. All
   three are plain settings, documented in the same places.
-- `anthropic` is pinned in `backend/requirements.txt`, at the current 1.x
+- `anthropic` is pinned in `backend/requirements.txt`, at the current
   release when this is implemented.
 
 ## Risks / Trade-offs

@@ -16,12 +16,19 @@ class TransactionSerializer(serializers.ModelSerializer):
             "category",
             "category_confirmed",
             "category_source",
+            "category_reason",
             "notes",
             "transfer",
             "created_at",
             "updated_at",
         ]
-        read_only_fields = ["category_confirmed", "category_source", "created_at", "updated_at"]
+        read_only_fields = [
+            "category_confirmed",
+            "category_source",
+            "category_reason",
+            "created_at",
+            "updated_at",
+        ]
 
     transfer = serializers.SerializerMethodField()
 
@@ -70,12 +77,13 @@ class TransactionSerializer(serializers.ModelSerializer):
             unlink_transfer(instance)
             instance.refresh_from_db()
         # Any write of the category - even re-sending the current one -
-        # confirms it; only a different category changes its source. See
-        # openspec/specs/auto-categorization.
+        # confirms it; only a different category changes its source and
+        # drops the AI's reason. See openspec/specs/auto-categorization.
         if "category" in validated_data:
             validated_data["category_confirmed"] = True
             if validated_data["category"] != instance.category:
                 validated_data["category_source"] = Transaction.CategorySource.MANUAL
+                validated_data["category_reason"] = ""
         instance = super().update(instance, validated_data)
         if instance.transfer_counterpart_id is not None and (
             "amount_cents" in validated_data or "date" in validated_data
