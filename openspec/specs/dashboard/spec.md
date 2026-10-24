@@ -8,13 +8,13 @@ cash flow and spending across the user's active accounts.
 ## Requirements
 
 ### Requirement: Monthly money in and money out
-For each of the 12 calendar months ending with a chosen month (the
-current one when none is chosen), the system SHALL report money in (the sum of positive transaction amounts) and
-money out (the sum of negative amounts, as a positive figure). Only
-non-archived accounts count, and transfers between the user's accounts
-SHALL count toward neither. A month with no transactions SHALL report
-zero for both. A split transaction SHALL be counted through its parts, so
-a part that is a transfer counts toward neither.
+For each of the 12 calendar months ending with a chosen month (by
+default the current one), the system SHALL report money in (the sum of
+positive amounts) and money out (the sum of negative amounts, as a
+positive figure). Only non-archived accounts count; transfers between
+the user's accounts count toward neither. An empty month reports zero
+for both. A split transaction counts through its parts, so a part that
+is a transfer counts toward neither.
 
 #### Scenario: Income and spending are totalled separately
 - **WHEN** an active account has +2,000.00 and -1,500.00 in March, and

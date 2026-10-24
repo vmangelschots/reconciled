@@ -32,15 +32,12 @@ preference.
 
 ### Requirement: Responsive navigation
 The system SHALL show the primary navigation as a sidebar on wide
-viewports and as a bottom tab bar on narrow viewports, rather than
-letting it overflow. The sidebar SHALL list Overview, Transactions,
-Review, Budgets and Forecast, then Import and Accounts as a second
-group, with the overview account's balance, the theme toggle and sign
-out in its footer. The tab bar SHALL show Overview, Transactions,
-Review, Budgets and More, where More opens the remaining links, the
-theme toggle and sign out, and its items SHALL stay centred at a phone's
-width on wider screens. Review SHALL show its waiting count in both.
-Notifications SHALL appear above the tab bar, not over it.
+viewports and as a bottom tab bar on narrow viewports. The sidebar SHALL
+list Overview, Transactions, Review, Budgets and Forecast, then Import
+and Accounts, with the overview account's balance, the theme toggle and
+sign out in its footer. The tab bar SHALL show Overview, Transactions,
+Review, Budgets and More, where More opens the rest, the theme toggle
+and sign out. Review SHALL show its waiting count in both.
 
 #### Scenario: Wide viewport shows navigation inline
 - **WHEN** the viewport is at least 1024px wide
@@ -53,14 +50,22 @@ Notifications SHALL appear above the tab bar, not over it.
   and More, and opening More reveals Forecast, Import, Accounts, the
   theme toggle and sign out
 
+#### Scenario: The current page is marked
+- **WHEN** the user is on Budgets
+- **THEN** Budgets is marked as current in the sidebar or tab bar
+
+### Requirement: Tab bar placement
+The tab bar's items SHALL stay centred at a phone's width on wider
+screens, and notifications SHALL appear above the tab bar, not over it.
+
 #### Scenario: Tablet width keeps the tab bar compact
 - **WHEN** the viewport is 800px wide
 - **THEN** the tab bar's items are centred in a phone-width row rather
   than spread across the screen
 
-#### Scenario: The current page is marked
-- **WHEN** the user is on Budgets
-- **THEN** Budgets is marked as current in the sidebar or tab bar
+#### Scenario: Notifications clear the tab bar
+- **WHEN** a notification appears on a phone
+- **THEN** it is shown above the tab bar
 
 ### Requirement: Consistent operation feedback
 The system SHALL report the outcome of a user-initiated action (create,
