@@ -30,6 +30,19 @@ export function unlinkTransfer(id) {
   return apiFetch(`/api/transactions/${id}/transfer/`, { method: "DELETE" });
 }
 
+// Splits a transaction into parts, or changes its split. Each part is
+// { id?, amount_cents, category?, transfer_account?, notes }. Returns the
+// transaction with its parts; a 400's error.data is { detail, line }.
+export function saveSplit(id, parts) {
+  return apiFetch(`/api/transactions/${id}/split/`, { method: "PUT", body: { parts } });
+}
+
+// Removes a split's parts, keeping `keep` ({ category } or
+// { transfer_account }) or nothing. Returns the transaction.
+export function unsplit(id, keep = {}) {
+  return apiFetch(`/api/transactions/${id}/split/`, { method: "DELETE", body: keep });
+}
+
 // The Review page: unconfirmed guesses grouped by payee and guessed
 // category. Returns { groups, uncategorized_count }.
 export function getReviewGroups() {

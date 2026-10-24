@@ -6,6 +6,7 @@ from accounts.models import Account
 from budgets.models import Category
 
 from .models import Transaction
+from .splits import SplitLine, save_split
 from .transfers import TransferError, delete_transaction, link_transfer, mirror_edit, unlink_transfer
 
 
@@ -198,3 +199,32 @@ class TransferServiceTests(TestCase):
         mirror_edit(out)
 
         self.assertEqual(self.refreshed(incoming)[0].date, date(2026, 3, 4))
+
+    # --- splits ---
+
+    def test_splits_are_never_matched(self):
+        split = self.txn(self.savings, 50000, 4)
+        save_split(split, [SplitLine(30000), SplitLine(20000)])
+        out = self.txn(self.checking, -50000, 3)
+
+        _, counterpart = link_transfer(out, self.savings)
+
+        self.assertNotEqual(counterpart, split)
+        self.assertTrue(counterpart.created_by_transfer)
+        self.assertIsNone(counterpart.split_parent)
+
+    def test_a_part_is_never_matched(self):
+        split = self.txn(self.savings, 80000, 4)
+        save_split(split, [SplitLine(50000), SplitLine(30000)])
+        out = self.txn(self.checking, -50000, 3)
+
+        _, counterpart = link_transfer(out, self.savings)
+
+        self.assertTrue(counterpart.created_by_transfer)
+
+    def test_a_split_transaction_cant_be_a_transfer(self):
+        out = self.txn(self.checking, -50000, 3)
+        save_split(out, [SplitLine(-30000), SplitLine(-20000)])
+
+        with self.assertRaises(TransferError):
+            link_transfer(out, self.savings)

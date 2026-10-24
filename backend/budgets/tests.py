@@ -5,6 +5,7 @@ from rest_framework.test import APIClient
 
 from accounts.models import Account
 from transactions.models import Transaction
+from transactions.splits import SplitLine, save_split
 from transactions.transfers import link_transfer
 
 from .models import Category, CategoryLimit
@@ -257,3 +258,12 @@ class BudgetSummaryTests(TestCase):
         summary = self.client.get(reverse("budget-summary"), {"month": "2026-01"}).json()
 
         self.assertEqual(summary["uncategorized_spent_cents"], 5000)
+
+    def test_split_parts_count_toward_their_categories(self):
+        dinner = Transaction.objects.create(account=self.account, date="2026-01-10", amount_cents=-6000, payee="Shop")
+        save_split(dinner, [SplitLine(-4000, category=self.groceries), SplitLine(-2000)])
+
+        summary = self.client.get(reverse("budget-summary"), {"month": "2026-01"}).json()
+
+        self.assertEqual(summary["categories"][0]["spent_cents"], 4000)
+        self.assertEqual(summary["uncategorized_spent_cents"], 2000)

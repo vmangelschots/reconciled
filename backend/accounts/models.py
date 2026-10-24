@@ -31,5 +31,6 @@ class Account(models.Model):
     @property
     def current_balance_cents(self):
         """starting balance + sum of transactions, per the accounts spec."""
-        total = self.transactions.aggregate(total=Sum("amount_cents"))["total"] or 0
+        # Parts of a split are inside their transaction's amount already.
+        total = self.transactions.ledger_rows().aggregate(total=Sum("amount_cents"))["total"] or 0
         return self.starting_balance_cents + total

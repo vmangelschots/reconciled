@@ -48,10 +48,12 @@ def confirmed_history():
     categorized, non-transfer transaction. last_seen is the position in
     (date, id) order, so a higher value means more recent."""
     rows = (
+        # A part of a split says little about the payee's usual category.
         Transaction.objects.filter(
             category__isnull=False,
             category_confirmed=True,
             transfer_counterpart__isnull=True,
+            split_parent__isnull=True,
         )
         .order_by("date", "id")
         .values_list("payee", "amount_cents", "category_id")
@@ -136,9 +138,18 @@ def categorize(transactions):
     the AI step: a failure only leaves its rows uncategorized."""
     guesser = get_guesser()
     result = CategorizeResult(ai_status="off" if guesser is None else "skipped")
+    # A split transaction and its parts are never guessed.
     candidates = [
-        t for t in transactions if t.category_id is None and t.transfer_counterpart_id is None
+        t
+        for t in transactions
+        if t.category_id is None and t.transfer_counterpart_id is None and t.split_parent_id is None
     ]
+    split = set(
+        Transaction.objects.filter(split_parent__in=[t.pk for t in candidates]).values_list(
+            "split_parent_id", flat=True
+        )
+    )
+    candidates = [t for t in candidates if t.pk not in split]
     if not candidates:
         return result
 
@@ -202,8 +213,13 @@ def needs_review():
 
 
 def uncategorized():
-    """What the backfill can try: no category and not a transfer."""
-    return Transaction.objects.filter(category__isnull=True, transfer_counterpart__isnull=True)
+    """What the backfill can try: no category, not a transfer, and not a
+    split transaction or one of its parts."""
+    return (
+        Transaction.objects.ledger_rows()
+        .counted_rows()
+        .filter(category__isnull=True, transfer_counterpart__isnull=True)
+    )
 
 
 def review_groups():

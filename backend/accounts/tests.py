@@ -6,6 +6,7 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from transactions.models import Transaction
+from transactions.splits import SplitLine, save_split
 
 from .models import Account
 
@@ -133,3 +134,12 @@ class AccountTests(TestCase):
         detail_response = self.client.get(reverse("account-detail", args=[account.id]))
         self.assertEqual(detail_response.status_code, 200)
         self.assertTrue(detail_response.json()["archived"])
+
+    def test_splitting_does_not_change_the_balance(self):
+        account = Account.objects.create(name="Checking", account_type="checking", starting_balance_cents=100000)
+        dinner = Transaction.objects.create(account=account, date="2026-03-03", amount_cents=-6000, payee="Pizzeria")
+        save_split(dinner, [SplitLine(-3000), SplitLine(-3000)])
+
+        rows = self.client.get(reverse("account-list")).json()
+
+        self.assertEqual(rows[0]["current_balance_cents"], 94000)

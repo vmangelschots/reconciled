@@ -39,7 +39,12 @@ class TransferApiTests(TestCase):
         counterpart = body["counterpart"]
         self.assertEqual(
             body["transaction"]["transfer"],
-            {"counterpart_id": counterpart["id"], "account_id": self.savings.pk, "account_name": "Savings"},
+            {
+                "counterpart_id": counterpart["id"],
+                "account_id": self.savings.pk,
+                "account_name": "Savings",
+                "created_by_transfer": True,
+            },
         )
         self.assertEqual(counterpart["transfer"]["account_name"], "Checking")
         self.assertEqual(counterpart["amount_cents"], 50000)

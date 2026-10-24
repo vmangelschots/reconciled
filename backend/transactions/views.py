@@ -1,5 +1,5 @@
 from django.db import transaction as db_transaction
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from django.utils import timezone
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -11,8 +11,9 @@ from budgets.models import Category
 from .ai import get_guesser
 from .categorize import categorize, needs_review, review_groups, uncategorized
 from .models import Transaction
-from .serializers import TransactionSerializer
-from .transfers import TransferError, delete_transaction, link_transfer, unlink_transfer
+from .serializers import SplitLineSerializer, TransactionSerializer
+from .splits import SplitError, delete_transaction, save_split, unsplit
+from .transfers import TransferError, link_transfer, unlink_transfer
 
 
 class TransactionViewSet(viewsets.ModelViewSet):
@@ -21,7 +22,16 @@ class TransactionViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = Transaction.objects.select_related(
             "account", "category", "transfer_counterpart__account"
-        ).all()
+        ).prefetch_related(
+            Prefetch(
+                "parts",
+                queryset=Transaction.objects.select_related("category", "transfer_counterpart__account"),
+            )
+        )
+        if self.action == "list":
+            # Parts are listed inside their split transaction, never as
+            # rows of their own; detail routes still reach them.
+            queryset = queryset.ledger_rows()
         params = self.request.query_params
 
         account_id = params.get("account")
@@ -38,16 +48,69 @@ class TransactionViewSet(viewsets.ModelViewSet):
 
         category_id = params.get("category")
         if category_id:
-            queryset = queryset.filter(category_id=category_id)
+            # A split transaction matches through any of its parts.
+            queryset = queryset.filter(Q(category_id=category_id) | Q(parts__category_id=category_id)).distinct()
 
         search = params.get("search")
         if search:
-            queryset = queryset.filter(Q(payee__icontains=search) | Q(notes__icontains=search))
+            queryset = queryset.filter(
+                Q(payee__icontains=search) | Q(notes__icontains=search) | Q(parts__notes__icontains=search)
+            ).distinct()
 
         return queryset
 
-    def perform_destroy(self, instance):
-        delete_transaction(instance)
+    def destroy(self, request, *args, **kwargs):
+        try:
+            delete_transaction(self.get_object())
+        except SplitError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=["put", "delete"])
+    def split(self, request, pk=None):
+        """PUT {"parts": [{id?, amount_cents, category?, transfer_account?,
+        notes?}]} splits this transaction or changes its split; DELETE
+        unsplits it, keeping an optional {"category": id} or
+        {"transfer_account": id}. Both return this transaction with its
+        parts. A 400 is {"detail", "line"}: line is the index of the part
+        it concerns, or null."""
+        txn = self.get_object()
+        if request.method == "DELETE":
+            return self._unsplit(txn, request.data or {})
+
+        lines = request.data.get("parts")
+        if not isinstance(lines, list):
+            return self._split_error("A list of parts is required.")
+        parsed = []
+        for index, line in enumerate(lines):
+            serializer = SplitLineSerializer(data=line)
+            if not serializer.is_valid():
+                field, messages = next(iter(serializer.errors.items()))
+                return self._split_error(f"{field}: {messages[0]}", index)
+            parsed.append(serializer.to_line())
+        try:
+            txn = save_split(txn, parsed)
+        except SplitError as e:
+            return self._split_error(str(e), e.line)
+        return Response(self._serialized(txn.pk))
+
+    def _unsplit(self, txn, data):
+        keep = SplitLineSerializer(data={"amount_cents": 0, **data})
+        if not keep.is_valid():
+            field, messages = next(iter(keep.errors.items()))
+            return self._split_error(f"{field}: {messages[0]}")
+        try:
+            txn = unsplit(
+                txn,
+                category=keep.validated_data.get("category"),
+                transfer_account=keep.validated_data.get("transfer_account"),
+            )
+        except (SplitError, TransferError) as e:
+            return self._split_error(str(e))
+        return Response(self._serialized(txn.pk))
+
+    def _split_error(self, message, line=None):
+        return Response({"detail": message, "line": line}, status=status.HTTP_400_BAD_REQUEST)
 
     @action(detail=True, methods=["post", "delete"])
     def transfer(self, request, pk=None):

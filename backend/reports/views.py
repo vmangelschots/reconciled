@@ -33,8 +33,9 @@ def _shift_months(month, delta):
 
 def _active_transactions():
     # Transfers between the user's own accounts are neither income nor
-    # spending, so no report counts them (they never have a category).
-    return Transaction.objects.filter(account__archived=False, transfer_counterpart__isnull=True)
+    # spending, so no report counts them (they never have a category). A
+    # split transaction counts through its parts.
+    return Transaction.objects.counted_rows().filter(account__archived=False, transfer_counterpart__isnull=True)
 
 
 class CashFlowView(APIView):

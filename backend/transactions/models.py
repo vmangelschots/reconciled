@@ -1,4 +1,18 @@
 from django.db import models
+from django.db.models import Exists, OuterRef
+
+
+class TransactionQuerySet(models.QuerySet):
+    def ledger_rows(self):
+        """The bank's lines: everything except the parts of a split. What
+        balances, duplicate detection and the ledger list work from."""
+        return self.filter(split_parent__isnull=True)
+
+    def counted_rows(self):
+        """Each amount once, at its finest grain: unsplit transactions and
+        parts, never a split transaction itself. What reports and budgets
+        sum over."""
+        return self.exclude(Exists(Transaction.objects.filter(split_parent=OuterRef("pk"))))
 
 
 class Transaction(models.Model):
@@ -44,8 +58,21 @@ class Transaction(models.Model):
     # True for a counterpart the app generated because nothing matched;
     # cleared once a bank import confirms it.
     created_by_transfer = models.BooleanField(default=False)
+    # A part of a split transaction: same account, date and payee as its
+    # split_parent, with its own amount and category. CASCADE is only a
+    # safety net - deletes go through transactions/splits.py so transfer
+    # parts are unlinked first.
+    split_parent = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="parts",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    objects = TransactionQuerySet.as_manager()
 
     class Meta:
         ordering = ["-date", "-id"]

@@ -1,6 +1,6 @@
 import * as PopoverPrimitive from "@radix-ui/react-popover";
-import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "cmdk";
-import { Check, ChevronsUpDown, History, Plus, Sparkles } from "lucide-react";
+import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList, CommandSeparator } from "cmdk";
+import { Check, ChevronsUpDown, History, Plus, Sparkles, Split } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { displayReason } from "../lib/categorizeOutcome";
 import { categoryDisplayLabel, rankCategories } from "../lib/categoryTree";
@@ -9,6 +9,7 @@ import { focusAdjacentTabbable } from "../lib/focus";
 
 const CLEAR = "__clear__";
 const CREATE = "__create__";
+const SPLIT = "__split__";
 // Transfer options use their own value space so they never collide with
 // category ids in cmdk's highlight.
 const TRANSFER_PREFIX = "account:";
@@ -32,7 +33,7 @@ const SUGGESTION_TITLE = {
  *
  * Keyboard: typing on the closed trigger opens it with that character;
  * Enter picks the highlighted row and returns focus to the trigger; Tab /
- * Shift+Tab pick the highlighted category (never "Create") and move on
+ * Shift+Tab pick the highlighted category (never "Create" or "Split…") and move on
  * to the neighboring field; Escape closes without changing anything.
  *
  * - categories: the candidate list (already restricted by the caller -
@@ -60,6 +61,10 @@ const SUGGESTION_TITLE = {
  *   alone instead of returning it to the trigger (or the next field), for
  *   callers that remove the picker and move focus themselves - e.g. a
  *   Review group that disappears once its category is picked.
+ * - onSplit(): when given, a "Split…" action is offered - last, or first
+ *   while the search is the start of "split", so "sp" + Enter splits even
+ *   when a "Sports" category exists. Focus is left to the split editor.
+ *   See specs/transaction-splits.
  */
 export function CategoryCombobox({
   categories,
@@ -79,6 +84,7 @@ export function CategoryCombobox({
   suggestion = null,
   suggestionReason = "",
   restoreFocusOnSelect = true,
+  onSplit,
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -90,6 +96,7 @@ export function CategoryCombobox({
   // Set when a category (or "no category") was picked, for
   // restoreFocusOnSelect.
   const picked = useRef(false);
+  const splitChosen = useRef(false);
 
   const categoriesById = useMemo(
     () => Object.fromEntries(categories.map((c) => [c.id, c])),
@@ -108,11 +115,14 @@ export function CategoryCombobox({
     const showClear = !lower || clearLabel.toLowerCase().includes(lower);
     const exactMatch = categories.some((c) => c.name.toLowerCase() === lower);
     const showCreate = allowCreate && trimmed !== "" && !exactMatch;
-    return { trimmed, ranked, transfers, showClear, showCreate };
+    const splitFirst = Boolean(onSplit) && lower !== "" && "split".startsWith(lower);
+    const showSplit = Boolean(onSplit) && (!lower || splitFirst);
+    return { trimmed, ranked, transfers, showClear, showCreate, showSplit, splitFirst };
   }
 
   function highlightFor(q) {
-    const { trimmed, ranked, transfers, showClear, showCreate } = optionsFor(q);
+    const { trimmed, ranked, transfers, showClear, showCreate, splitFirst } = optionsFor(q);
+    if (splitFirst) return SPLIT;
     if (!trimmed) {
       if (transferAccountId != null) return `${TRANSFER_PREFIX}${transferAccountId}`;
       return value != null && categoriesById[value] ? String(value) : CLEAR;
@@ -124,7 +134,8 @@ export function CategoryCombobox({
     return "";
   }
 
-  const { trimmed: trimmedQuery, ranked, transfers, showClear, showCreate } = optionsFor(query);
+  const { trimmed: trimmedQuery, ranked, transfers, showClear, showCreate, showSplit, splitFirst } =
+    optionsFor(query);
   const selected = value != null ? categoriesById[value] : null;
   const currentTransferName =
     transferAccountId != null
@@ -167,6 +178,13 @@ export function CategoryCombobox({
     handleOpenChange(false);
   }
 
+  function chooseSplit() {
+    // The editor that opens takes focus; the trigger must not take it back.
+    splitChosen.current = true;
+    onSplit();
+    handleOpenChange(false);
+  }
+
   // Closes at once; the caller shows the new category optimistically
   // while it is saved.
   function createAndSelect() {
@@ -195,7 +213,7 @@ export function CategoryCombobox({
       onSelect(null);
     } else if (highlighted.startsWith(TRANSFER_PREFIX)) {
       onSelectTransfer(Number(highlighted.slice(TRANSFER_PREFIX.length)));
-    } else if (highlighted && highlighted !== CREATE) {
+    } else if (highlighted && highlighted !== CREATE && highlighted !== SPLIT) {
       picked.current = true;
       onSelect(Number(highlighted));
     }
@@ -205,8 +223,10 @@ export function CategoryCombobox({
 
   function handleCloseAutoFocus(e) {
     const wasPicked = picked.current;
+    const wasSplit = splitChosen.current;
     picked.current = false;
-    if (wasPicked && !restoreFocusOnSelect) {
+    splitChosen.current = false;
+    if (wasSplit || (wasPicked && !restoreFocusOnSelect)) {
       tabDirection.current = null;
       e.preventDefault();
       return;
@@ -222,6 +242,13 @@ export function CategoryCombobox({
     "flex cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm data-[selected=true]:bg-background";
 
   // Listed first on an empty search, after every match otherwise.
+  const splitItem = (
+    <CommandItem value={SPLIT} onSelect={chooseSplit} className={cn(itemClass, "text-accent")}>
+      <Split className="h-3.5 w-3.5" />
+      Split…
+    </CommandItem>
+  );
+
   const clearItem = (
     <CommandItem value={CLEAR} onSelect={() => choose(null)} className={cn(itemClass, "text-ink-secondary")}>
       {value == null && transferAccountId == null && <Check className="h-3.5 w-3.5" />}
@@ -292,6 +319,7 @@ export function CategoryCombobox({
               className="w-full rounded-sm border border-border bg-background px-2 py-1 text-sm text-ink-primary placeholder:text-ink-muted focus:outline-none"
             />
             <CommandList className="max-h-56 overflow-auto">
+              {showSplit && splitFirst && splitItem}
               {showClear && trimmedQuery === "" && clearItem}
               {ranked.map((c) => (
                 <CommandItem
@@ -333,7 +361,13 @@ export function CategoryCombobox({
                   Create &quot;{trimmedQuery}&quot;
                 </CommandItem>
               )}
-              {ranked.length === 0 && transfers.length === 0 && !showClear && !showCreate && (
+              {showSplit && !splitFirst && (
+                <>
+                  <CommandSeparator className="my-1 h-px bg-border" />
+                  {splitItem}
+                </>
+              )}
+              {ranked.length === 0 && transfers.length === 0 && !showClear && !showCreate && !showSplit && (
                 <CommandEmpty className="px-2 py-1.5 text-sm text-ink-muted">
                   No categories found.
                 </CommandEmpty>

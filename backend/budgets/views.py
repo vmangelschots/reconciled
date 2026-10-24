@@ -110,7 +110,8 @@ class BudgetSummaryView(APIView):
             )
 
         uncategorized_spent = (
-            Transaction.objects.filter(
+            Transaction.objects.counted_rows()  # a split counts through its parts
+            .filter(
                 category__isnull=True,
                 transfer_counterpart__isnull=True,  # transfers aren't spending
                 date__gte=period_start,

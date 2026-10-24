@@ -2,7 +2,9 @@ import { cn } from '../../lib/cn'
 
 export function Table({ className, ...props }) {
   return (
-    <div className="w-full overflow-auto">
+    // A size container, so content (the split editor) can fit the visible
+    // scroll area rather than the viewport.
+    <div className="@container w-full overflow-auto">
       <table className={cn('w-full caption-bottom text-sm', className)} {...props} />
     </div>
   )
