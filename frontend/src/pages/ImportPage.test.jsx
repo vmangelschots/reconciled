@@ -49,9 +49,10 @@ async function uploadAndPreview() {
       </ToastProvider>
     </MemoryRouter>,
   );
-  await waitFor(() => expect(accountsApi.listAccounts).toHaveBeenCalled());
+  // Wait for the form itself: listAccounts may already have been called by
+  // an earlier render in the same test.
   await userEvent.upload(
-    screen.getByLabelText("File (.csv or .ofx)"),
+    await screen.findByLabelText("File (.csv or .ofx)"),
     new File(["<OFX>"], "savings.ofx", { type: "application/x-ofx" }),
   );
   // jsdom's constraint validation doesn't see files attached by
