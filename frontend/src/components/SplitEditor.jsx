@@ -203,7 +203,9 @@ export function SplitEditor({ transaction, categories, transferAccounts, onSave,
       }}
       onKeyDown={handleKeyDown}
       aria-label="Split transaction"
-      className="sticky left-0 flex max-w-[calc(100vw-2rem)] flex-col gap-3 rounded-md border border-border bg-surface p-3"
+      // Sticky and no wider than the table's visible area (less the cell's
+      // padding), so it stays in view while a narrow table scrolls sideways.
+      className="sticky left-0 flex max-w-[calc(100cqw-1.5rem)] flex-col gap-3 rounded-md border border-border bg-surface p-3"
     >
       <fieldset disabled={saving} className="flex flex-col gap-2">
         {lines.map((l, index) => {
@@ -241,14 +243,15 @@ export function SplitEditor({ transaction, categories, transferAccounts, onSave,
                   onSelectTransfer={(id) => update(l.key, { transferAccountId: id, category: null })}
                   placeholder="Uncategorized"
                   aria-label={`Part ${index + 1} category`}
-                  className="w-48"
+                  className="w-auto min-w-0 flex-1 sm:w-48 sm:flex-none"
                 />
                 <Input
                   aria-label={`Part ${index + 1} notes`}
                   value={l.notes}
                   onChange={(e) => update(l.key, { notes: e.target.value })}
                   placeholder="Notes"
-                  className="w-full sm:w-auto sm:flex-1"
+                  // Below sm, notes take their own row under the rest.
+                  className="order-last w-full sm:order-none sm:w-auto sm:flex-1"
                 />
                 <Button
                   type="button"
@@ -257,7 +260,7 @@ export function SplitEditor({ transaction, categories, transferAccounts, onSave,
                   aria-label={`Remove part ${index + 1}`}
                   disabled={lines.length <= minLines}
                   onClick={() => removeLine(l.key)}
-                  className="px-2"
+                  className="ml-auto px-2 sm:ml-0"
                 >
                   <X className="h-3.5 w-3.5" />
                 </Button>

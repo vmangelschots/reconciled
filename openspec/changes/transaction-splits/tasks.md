@@ -70,7 +70,7 @@
 
 ## 5. Integration check
 
-- [ ] 5.1 Run the backend and frontend suites, lint and build. Then rebuild the local stack and use the browser:
+- [x] 5.1 Run the backend and frontend suites, lint and build. Then rebuild the local stack and use the browser:
   - split a throwaway transaction into a category part and a transfer part, using only the keyboard;
   - check the other account's created counterpart, the account balance, the budgets page and both dashboard charts;
   - edit the split, unsplit it, and check the layout at phone width;
