@@ -54,7 +54,7 @@
   - "An unknown account";
   - "Switch account on a phone" (pills);
   - "A new account" (the Import link).
-- [ ] 3.2 Make `ImportPage` preselect `?account=` when it is active, else the context's `defaultAccount`. Verify with `ImportPage.test.jsx` cases for "From a stale-import reminder" and "From the navigation".
+- [x] 3.2 Make `ImportPage` preselect `?account=` when it is active, else the context's `defaultAccount`. Verify with `ImportPage.test.jsx` cases for "From a stale-import reminder" and "From the navigation".
 
 ## 4. Overview across accounts
 
