@@ -1,12 +1,19 @@
 from datetime import date
 
-from django.db.models import BigIntegerField, Case, Sum, When
+from django.db.models import BigIntegerField, Case, Count, Sum, When
 from django.db.models.functions import TruncMonth
+from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounts.models import Account
 from budgets.models import Category
+from budgets.summary import budget_rows
 from budgets.utils import month_range, parse_month
+from forecasting.utils import generate_forecast
+from imports.models import ImportSession
+from transactions.categorize import needs_review, uncategorized
+from transactions.models import Transaction
 
 from .spending import active_transactions, month_spending
 
@@ -114,4 +121,158 @@ class CategorySpendingView(APIView):
 
         return Response(
             {"month": month.strftime("%Y-%m"), "categories": result, "uncategorized_cents": uncategorized}
+        )
+
+
+def _today():
+    """Today's date; a function so tests can freeze it."""
+    return timezone.localdate()
+
+
+# A category this close to its limit is a warning once it is also ahead
+# of the month's pace - see openspec/specs/overview.
+WARNING_SHARE = 85
+RECENT_COUNT = 8
+FORECAST_DAYS = 90
+
+
+def _attention_categories(rows, pace):
+    """Over-limit categories (most euros over first), then - for the
+    current month, when `pace` is set - those at 85% or more and ahead of
+    the month's pace (highest share first). Shares are rounded down."""
+    names = {row["category_id"]: row["category_name"] for row in rows}
+    over, warn = [], []
+    for row in rows:
+        limit = row["limit_cents"]
+        if not limit or limit <= 0:
+            continue
+        spent = row["spent_cents"]
+        share = spent * 100 // limit
+        item = {
+            "id": row["category_id"],
+            "name": row["category_name"],
+            "parent_name": names.get(row["parent_id"]),
+            "spent_cents": spent,
+            "limit_cents": limit,
+            "share": share,
+            "over": spent > limit,
+        }
+        if spent > limit:
+            over.append(item)
+        elif pace is not None and share >= WARNING_SHARE and share > pace * 100:
+            warn.append(item)
+    over.sort(key=lambda c: -(c["spent_cents"] - c["limit_cents"]))
+    warn.sort(key=lambda c: -c["share"])
+    return over + warn
+
+
+def _category_label(category):
+    if category is None:
+        return None
+    return f"{category.parent.name} / {category.name}" if category.parent_id else category.name
+
+
+def _recent_row(txn):
+    category = txn.category
+    counterpart = txn.transfer_counterpart
+    return {
+        "id": txn.id,
+        "date": txn.date,
+        "payee": txn.payee,
+        "amount_cents": txn.amount_cents,
+        "category_label": _category_label(category),
+        "is_tab": bool(category and category.parent_id and category.parent.is_tab_group),
+        "transfer_account_name": counterpart.account.name if counterpart else None,
+        "part_count": txn.part_count,
+    }
+
+
+class OverviewView(APIView):
+    """Every figure the overview shows for one account and one month, in
+    one request - see openspec/specs/overview. Budget and attention
+    figures are household-wide, like the Budgets page; balance, in/out,
+    forecast and recent belong to the account."""
+
+    def get(self, request):
+        month, error = _month_param(request, "month")
+        if error:
+            return error
+        try:
+            account = Account.objects.get(pk=request.query_params.get("account"))
+        except (Account.DoesNotExist, ValueError, TypeError):
+            return Response({"detail": "Account not found."}, status=404)
+
+        today = _today()
+        current = month == today.replace(day=1)
+        month_end = month_range(month)
+
+        in_month = active_transactions().filter(account=account, date__gte=month, date__lt=month_end)
+        totals = in_month.aggregate(
+            money_in=Sum(Case(When(amount_cents__gt=0, then="amount_cents"), default=0, output_field=BigIntegerField())),
+            money_out=Sum(Case(When(amount_cents__lt=0, then="amount_cents"), default=0, output_field=BigIntegerField())),
+        )
+
+        rows = budget_rows(month)
+        limited = [r for r in rows if r["limit_cents"] is not None]
+        _, uncategorized_cents = month_spending(month)
+        days_in_month = (month_end - month).days
+        pace = today.day / days_in_month if current else None
+
+        last_import = (
+            account.import_sessions.filter(status=ImportSession.Status.COMMITTED).order_by("-updated_at").first()
+        )
+
+        forecast = generate_forecast(account, FORECAST_DAYS, today=today)
+        low = min(forecast["points"], key=lambda p: p["balance_cents"])
+        upcoming = forecast["occurrences"][0] if forecast["occurrences"] else None
+
+        recent = (
+            Transaction.objects.ledger_rows()
+            .filter(account=account)
+            .select_related("category__parent", "transfer_counterpart__account")
+            .annotate(part_count=Count("parts"))
+            .order_by("-date", "-id")[:RECENT_COUNT]
+        )
+
+        return Response(
+            {
+                "month": month.strftime("%Y-%m"),
+                "account": {
+                    "id": account.id,
+                    "name": account.name,
+                    "balance_cents": account.current_balance_cents,
+                    "last_import_date": timezone.localdate(last_import.updated_at) if last_import else None,
+                },
+                "in_out": {
+                    "in_cents": totals["money_in"] or 0,
+                    "out_cents": -(totals["money_out"] or 0),
+                },
+                "budget": {
+                    "has_limits": bool(limited),
+                    "limit_cents": sum(r["limit_cents"] for r in limited),
+                    "spent_cents": sum(r["spent_cents"] for r in limited),
+                    "outside_cents": sum(
+                        r["spent_cents"] for r in rows if r["limit_cents"] is None and r["spent_cents"] > 0
+                    ),
+                    "uncategorized_cents": uncategorized_cents,
+                    "pace": pace,
+                    "days_left": days_in_month - today.day + 1 if current else None,
+                },
+                "attention": {
+                    "review_count": needs_review().count(),
+                    "uncategorized_count": uncategorized().count(),
+                    "categories": _attention_categories(rows, pace),
+                },
+                "forecast": {
+                    "low_cents": low["balance_cents"],
+                    "low_date": low["date"],
+                    "next": (
+                        {"payee": upcoming["payee"], "amount_cents": upcoming["amount_cents"], "date": upcoming["date"]}
+                        if upcoming
+                        else None
+                    ),
+                    "has_recurring": account.recurring_transactions.exists(),
+                },
+                "recent": [_recent_row(t) for t in recent],
+            }
         )

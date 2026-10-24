@@ -3,7 +3,7 @@
 ## 1. Overview endpoint
 
 - [x] 1.1 Extract `budgets.summary.budget_rows(month)` (no tabs, with limits and spending in grouped queries rather than N+1) and `reports.spending.month_spending(month)` out of `BudgetSummaryView` and `CategorySpendingView`, and make both views use them. Verify that the existing budgets and reports tests pass unchanged, and add an `assertNumQueries` bound on the budget summary.
-- [ ] 1.2 Add `GET /api/reports/overview/?month=&account=` (`OverviewView`) with the account (including `last_import_date`), month, budget (spent in budgeted categories, outside, uncategorized, pace, days left), attention, forecast and recent fields as in design.md. Verify with `reports/tests_overview.py` (today frozen at 24 October 2026):
+- [x] 1.2 Add `GET /api/reports/overview/?month=&account=` (`OverviewView`) with the account (including `last_import_date`), month, budget (spent in budgeted categories, outside, uncategorized, pace, days left), attention, forecast and recent fields as in design.md. Verify with `reports/tests_overview.py` (today frozen at 24 October 2026):
   - **Balance:** the balance and the month's change, without transfers or tabs.
   - **Budget:**
     - "Under budget mid-month" figures, including outside and uncategorized spending and a pace of 24/31 with 8 days left;
