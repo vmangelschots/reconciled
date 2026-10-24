@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -72,6 +72,19 @@ const NMBS = group(
   { matching: 11, total: 11 },
 );
 const IKEA = group("ikea", "IKEA", 3, [row(31, "2026-10-12", "IKEA GENT", -5999)], { matching: 1, total: 1 });
+
+function aiGroup(key, payee, category, transactions, reason) {
+  return { ...group(key, payee, category, transactions, null), source: "ai", reason };
+}
+
+const BISTRO = aiGroup(
+  "bistro",
+  "Bistro Lumiere",
+  3,
+  [row(41, "2026-10-05", "BISTRO LUMIERE 12", -4800), row(42, "2026-10-12", "Bistro Lumiere", -3600)],
+  "Restaurant name.",
+);
+const KINEPOLIS = aiGroup("kinepolis", "Kinepolis", 2, [row(51, "2026-10-06", "KINEPOLIS GENT", -1450)], "");
 
 function renderPage() {
   return render(
@@ -227,6 +240,68 @@ describe("ReviewPage groups", () => {
   });
 });
 
+describe("ReviewPage AI guesses", () => {
+  it("lists AI groups below the history groups, with their evidence", async () => {
+    transactionsApi.getReviewGroups.mockResolvedValue({ groups: [IKEA, BISTRO, KINEPOLIS], uncategorized_count: 0 });
+    renderPage();
+
+    await screen.findByText("Bistro Lumiere", { selector: "span" });
+    const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
+    expect(headings).toEqual(["From your history", "AI guesses"]);
+    expect(screen.getByText(/Worth a closer look\./)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "4 transactions have a guessed category: 1 from your history, 3 by AI. Confirm each group or pick the right category.",
+      ),
+    ).toBeInTheDocument();
+
+    const bistro = within(card("Bistro Lumiere"));
+    // The reason loses its period and its capital, and is in the title.
+    const evidence = bistro.getByText(/^AI guess:/);
+    expect(evidence).toHaveTextContent("AI guess: Household · Restaurant name");
+    expect(evidence).toHaveAttribute("title", "Restaurant name");
+    expect(within(card("Kinepolis")).getByText(/^AI guess:/)).toHaveTextContent(/^AI guess: Transport$/);
+    expect(bistro.getByRole("button", { name: "Confirm 2" }).className).toMatch(/border/);
+    expect(within(card("IKEA")).getByRole("button", { name: "Confirm 1" }).className).toMatch(/bg-accent/);
+  });
+
+  it("an AI-only page starts with focus on the first group's picker", async () => {
+    transactionsApi.getReviewGroups.mockResolvedValue({ groups: [BISTRO, KINEPOLIS], uncategorized_count: 0 });
+    renderPage();
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Category for Bistro Lumiere" })).toHaveFocus());
+    expect(screen.getByText(/3 transactions have a guessed category: 3 by AI\./)).toBeInTheDocument();
+  });
+
+  it("focus stops on the AI group's picker, and Enter opens it instead of confirming", async () => {
+    transactionsApi.getReviewGroups.mockResolvedValue({ groups: [IKEA, BISTRO], uncategorized_count: 0 });
+    renderPage();
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Confirm 1" })).toHaveFocus());
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Category for Bistro Lumiere" })).toHaveFocus());
+
+    await userEvent.keyboard("{Enter}");
+
+    expect(await screen.findByPlaceholderText("Search categories…")).toBeInTheDocument();
+    expect(transactionsApi.confirmCategories).toHaveBeenCalledTimes(1);
+    expect(transactionsApi.confirmCategories).toHaveBeenCalledWith([31]);
+  });
+
+  it("an AI group is confirmed with Tab and Enter, or corrected from its picker", async () => {
+    transactionsApi.getReviewGroups.mockResolvedValue({ groups: [BISTRO, KINEPOLIS], uncategorized_count: 0 });
+    renderPage();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Category for Bistro Lumiere" })).toHaveFocus());
+
+    await userEvent.keyboard("{Shift>}{Tab}{/Shift}{Enter}");
+    expect(transactionsApi.confirmCategories).toHaveBeenCalledWith([41, 42]);
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Category for Kinepolis" })).toHaveFocus());
+    await userEvent.keyboard("groc{Enter}");
+    expect(transactionsApi.confirmCategories).toHaveBeenLastCalledWith([51], 1);
+  });
+});
+
 describe("ReviewPage rows", () => {
   it("fixes one row of a mixed payee and keeps the rest of the group", async () => {
     transactionsApi.getReviewGroups.mockResolvedValue({ groups: [CARREFOUR], uncategorized_count: 0 });
@@ -311,6 +386,96 @@ describe("ReviewPage empty state", () => {
       "/transactions",
     );
     expect(screen.queryByRole("button", { name: "Guess categories from history" })).toBeNull();
+  });
+
+  it("with AI on, guesses from history and AI and splits the result by source", async () => {
+    transactionsApi.getReviewGroups
+      .mockResolvedValueOnce({ groups: [], uncategorized_count: 40, ai_enabled: true })
+      .mockResolvedValueOnce({ groups: [CARREFOUR, BISTRO], uncategorized_count: 5, ai_enabled: true });
+    transactionsApi.categorizeUncategorized.mockResolvedValue({
+      categorized_count: 35,
+      attempted_count: 40,
+      categorized_by_source: { history: 25, ai: 10 },
+      ai: { status: "ok", declined_count: 3 },
+    });
+    renderPage();
+
+    expect(await screen.findByText("Uses your history first, then AI for new payees.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Guess categories" }));
+
+    await screen.findByText("Guessed 35 of 40: 25 from history, 10 by AI.");
+    expect(screen.getByText("3 new payees couldn't be guessed.")).toBeInTheDocument();
+    expect(card("Carrefour Market")).toBeDefined();
+    expect(card("Bistro Lumiere")).toBeDefined();
+  });
+
+  it("says when AI didn't respond or the key was rejected", async () => {
+    for (const [status, line] of [
+      ["failed", "AI guessing didn't respond."],
+      ["key_rejected", "AI is not working: check OPENAI_API_KEY."],
+    ]) {
+      transactionsApi.getReviewGroups
+        .mockResolvedValueOnce({ groups: [], uncategorized_count: 40, ai_enabled: true })
+        .mockResolvedValueOnce({ groups: [CARREFOUR], uncategorized_count: 15, ai_enabled: true });
+      transactionsApi.categorizeUncategorized.mockResolvedValue({
+        categorized_count: 25,
+        attempted_count: 40,
+        categorized_by_source: { history: 25, ai: 0 },
+        ai: { status, declined_count: 0 },
+      });
+      const { unmount } = renderPage();
+
+      await userEvent.click(await screen.findByRole("button", { name: "Guess categories" }));
+
+      await screen.findByText("Guessed 25 of 40.");
+      expect(screen.getByText(line)).toBeInTheDocument();
+      expect(card("Carrefour Market")).toBeDefined();
+      unmount();
+    }
+  });
+
+  it("shows that it's working, and that it can take a while", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      transactionsApi.getReviewGroups.mockResolvedValue({ groups: [], uncategorized_count: 40, ai_enabled: true });
+      const run = pending();
+      transactionsApi.categorizeUncategorized.mockReturnValue(run.promise);
+      renderPage();
+
+      await userEvent.click(await screen.findByRole("button", { name: "Guess categories" }));
+
+      const button = screen.getByRole("button", { name: "Guessing…" });
+      expect(button).toBeDisabled();
+      expect(screen.queryByText("This can take up to a minute.")).toBeNull();
+      await act(() => vi.advanceTimersByTimeAsync(4000));
+      expect(screen.getByText("This can take up to a minute.")).toBeInTheDocument();
+      run.resolve({ categorized_count: 0, attempted_count: 40, categorized_by_source: { history: 0, ai: 0 } });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("with AI on and nothing guessed, offers to try again", async () => {
+    transactionsApi.getReviewGroups.mockResolvedValue({ groups: [], uncategorized_count: 40, ai_enabled: true });
+    transactionsApi.categorizeUncategorized.mockResolvedValue({
+      categorized_count: 0,
+      attempted_count: 40,
+      categorized_by_source: { history: 0, ai: 0 },
+      ai: { status: "failed", declined_count: 0 },
+    });
+    renderPage();
+
+    await userEvent.click(await screen.findByRole("button", { name: "Guess categories" }));
+
+    expect(
+      await screen.findByText("Couldn't guess a category for any of the 40 uncategorized transactions."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("AI guessing didn't respond.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Categorize them in Transactions" })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    await waitFor(() => expect(transactionsApi.categorizeUncategorized).toHaveBeenCalledTimes(2));
   });
 
   it("has nothing to offer when every transaction has a category", async () => {

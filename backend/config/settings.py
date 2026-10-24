@@ -209,6 +209,16 @@ CSRF_COOKIE_HTTPONLY = False
 SESSION_COOKIE_HTTPONLY = True
 
 
+# AI categorization - guesses categories for payees history can't, see
+# transactions/ai.py. Off unless OPENAI_API_KEY is set (the SDK reads
+# the key from the environment itself). The deadline bounds the whole AI
+# step, and stays below gunicorn's 30s worker timeout.
+OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
+AI_CATEGORIZATION_ENABLED = env_bool("AI_CATEGORIZATION_ENABLED", default=True)
+AI_CATEGORIZATION_MODEL = os.environ.get("AI_CATEGORIZATION_MODEL", "gpt-6-luna")
+AI_CATEGORIZATION_DEADLINE = float(os.environ.get("AI_CATEGORIZATION_DEADLINE", "20"))
+
+
 # Logging - Django's own default config only sends 500 tracebacks to
 # `mail_admins` (a no-op with no email backend configured), so with
 # DEBUG=False they vanish silently instead of reaching `docker compose

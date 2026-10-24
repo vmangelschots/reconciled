@@ -230,3 +230,27 @@ class CategoryConfirmationTests(TestCase):
         self.assertEqual(response.status_code, 201)
         self.assertTrue(response.data["category_confirmed"])
         self.assertEqual(response.data["category_source"], "manual")
+
+    def test_reason_is_exposed_read_only(self):
+        self.txn.category_source = Transaction.CategorySource.AI
+        self.txn.category_reason = "Supermarket chain"
+        self.txn.save()
+        response = self.patch({"category_reason": "something else"})
+        self.assertEqual(response.data["category_reason"], "Supermarket chain")
+
+    def test_picking_a_different_category_clears_the_reason(self):
+        self.txn.category_source = Transaction.CategorySource.AI
+        self.txn.category_reason = "Supermarket chain"
+        self.txn.save()
+        self.patch({"category": self.household.id})
+        self.assertEqual(self.txn.category_reason, "")
+        self.assertEqual(self.txn.category_source, "manual")
+
+    def test_re_picking_the_same_category_keeps_the_reason(self):
+        self.txn.category_source = Transaction.CategorySource.AI
+        self.txn.category_reason = "Supermarket chain"
+        self.txn.save()
+        self.patch({"category": self.groceries.id})
+        self.assertTrue(self.txn.category_confirmed)
+        self.assertEqual(self.txn.category_source, "ai")
+        self.assertEqual(self.txn.category_reason, "Supermarket chain")

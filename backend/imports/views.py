@@ -5,6 +5,7 @@ from rest_framework.parsers import JSONParser, MultiPartParser
 from rest_framework.response import Response
 
 from accounts.models import Account
+from transactions.ai import get_guesser
 from transactions.categorize import categorize
 from transactions.models import Transaction
 
@@ -132,17 +133,20 @@ class ImportSessionViewSet(
                     )
                 )
             created = Transaction.objects.bulk_create(new_rows)
-            # Only freshly created rows are guessed: a line that confirmed a
-            # transfer counterpart stays a transfer.
-            categorized = categorize(created)
             session.status = ImportSession.Status.COMMITTED
             session.save(update_fields=["status"])
 
+        # Guessing runs after the import has committed, as a second save: a
+        # slow or failing AI step can never roll the import back, and the
+        # Review page's backfill can redo it. Only freshly created rows are
+        # guessed: a line that confirmed a transfer counterpart stays a
+        # transfer.
+        categorized = categorize(created)
         return Response(
             {
                 "created_count": len(created),
                 "confirmed_transfer_count": confirmed,
-                "categorized_count": categorized,
+                **categorized.summary(),
             },
             status=201,
         )
@@ -185,4 +189,5 @@ class ImportSessionViewSet(
         session.save(update_fields=["candidates"])
 
     def _representation(self, session):
-        return ImportSessionSerializer(session).data
+        # ai_enabled lets the commit button say the AI step can take a while.
+        return {**ImportSessionSerializer(session).data, "ai_enabled": get_guesser() is not None}

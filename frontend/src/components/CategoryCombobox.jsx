@@ -2,6 +2,7 @@ import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "cmdk";
 import { Check, ChevronsUpDown, History, Plus, Sparkles } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
+import { displayReason } from "../lib/categorizeOutcome";
 import { categoryDisplayLabel, rankCategories } from "../lib/categoryTree";
 import { cn } from "../lib/cn";
 import { focusAdjacentTabbable } from "../lib/focus";
@@ -14,8 +15,8 @@ const TRANSFER_PREFIX = "account:";
 
 const SUGGESTION_ICONS = { history: History, ai: Sparkles };
 const SUGGESTION_TITLE = {
-  history: "Guessed from history. Pick a category to confirm.",
-  ai: "Guessed by AI. Pick a category to confirm.",
+  history: () => "Guessed from history. Pick a category to confirm.",
+  ai: (reason) => `Guessed by AI${reason ? ` (${reason})` : ""}. Pick a category to confirm.`,
 };
 
 /**
@@ -50,10 +51,11 @@ const SUGGESTION_TITLE = {
  *   ("→ Savings" for an outflow, "← Savings" for an inflow, per
  *   `direction`). transferAccountId / transferAccountName describe the
  *   current transfer, if the row is one. See specs/account-transfers.
- * - suggestion: null, or the source of an unconfirmed guess ("history",
- *   later "ai"). The trigger then shows the guess style - dashed border,
- *   italic label, a source icon - until the category is confirmed. See
+ * - suggestion: null, or the source of an unconfirmed guess ("history" or
+ *   "ai"). The trigger then shows the guess style - dashed border, italic
+ *   label, a source icon - until the category is confirmed. See
  *   specs/auto-categorization.
+ * - suggestionReason: an AI guess's short reason, shown in its tooltip.
  * - restoreFocusOnSelect: when false, picking a category leaves focus
  *   alone instead of returning it to the trigger (or the next field), for
  *   callers that remove the picker and move focus themselves - e.g. a
@@ -75,6 +77,7 @@ export function CategoryCombobox({
   direction = "out",
   onSelectTransfer,
   suggestion = null,
+  suggestionReason = "",
   restoreFocusOnSelect = true,
 }) {
   const [open, setOpen] = useState(false);
@@ -234,7 +237,7 @@ export function CategoryCombobox({
           type="button"
           aria-label={ariaLabel}
           onKeyDown={handleTriggerKeyDown}
-          title={guessed ? SUGGESTION_TITLE[suggestion] : undefined}
+          title={guessed ? SUGGESTION_TITLE[suggestion]?.(displayReason(suggestionReason)) : undefined}
           data-suggestion={guessed ? suggestion : undefined}
           className={cn(
             "flex h-8 min-w-32 items-center justify-between gap-2 rounded-md border border-border bg-surface px-2 text-left text-sm text-ink-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
