@@ -109,10 +109,11 @@ the new look.
 
 ### Primitives in `components/ui`
 
-**`PageHeader`** `{title, children}`:
-- The children are controls, laid out on the right.
-- On a phone the title and the month switcher share one row, and any
-  picker or actions go full width below.
+**`PageHeader`** `{title, actions, children}`:
+- `actions` (the primary action, such as Import or "Add account") stays
+  beside the title.
+- `children` (month switcher, account picker) sit between them on wide
+  screens and take their own row on a phone.
 
 **`Panel`** `{title, actions?, flush?, loading?, error?, children}`:
 - Styling: `rounded-xl bg-surface ring-1 ring-border`, `p-5`.
