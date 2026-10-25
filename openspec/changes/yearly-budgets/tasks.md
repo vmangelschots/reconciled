@@ -31,7 +31,7 @@
 
 ## 4. Budgets page
 
-- [ ] 4.1 Lay the shared pieces down:
+- [x] 4.1 Lay the shared pieces down:
   - move `KindSwitch`'s look into `ui/SegmentedControl` and use it for the Budget/Tab switch;
   - add `tone="warning"` to `ProgressBar`;
   - add the client functions to `api/categories.js` and `api/budgets.js`.

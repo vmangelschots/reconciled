@@ -18,6 +18,7 @@ import { Label } from "../components/ui/Label";
 import { MonthSwitcher } from "../components/ui/MonthSwitcher";
 import { PageHeader } from "../components/ui/PageHeader";
 import { Panel } from "../components/ui/Panel";
+import { SegmentedControl } from "../components/ui/SegmentedControl";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/Table";
 import { useToast } from "../components/ui/Toast";
 import { buildCategoryTree } from "../lib/categoryTree";
@@ -272,25 +273,16 @@ function TabBalance({ name, cents }) {
 }
 
 function KindSwitch({ isTabGroup, onChange }) {
-  const option = (value, label) => (
-    <button
-      type="button"
-      aria-pressed={isTabGroup === value}
-      onClick={() => onChange(value)}
-      className={cn(
-        "flex h-8 items-center gap-1.5 px-3 text-sm",
-        isTabGroup === value ? "bg-accent text-on-accent" : "bg-surface text-ink-secondary hover:text-ink-primary",
-      )}
-    >
-      {value && <HandCoins className="h-3.5 w-3.5" aria-hidden="true" />}
-      {label}
-    </button>
-  );
   return (
-    <div role="group" aria-label="Kind" className="flex overflow-hidden rounded-md border border-border">
-      {option(false, "Budget")}
-      {option(true, "Tab")}
-    </div>
+    <SegmentedControl
+      label="Kind"
+      value={isTabGroup}
+      onChange={onChange}
+      options={[
+        { value: false, label: "Budget" },
+        { value: true, label: "Tab", icon: HandCoins },
+      ]}
+    />
   );
 }
 
