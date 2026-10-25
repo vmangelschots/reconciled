@@ -67,7 +67,7 @@
   - "Archived accounts don't count"
   - "Only everyday accounts"
   - "Value adjustments are left out"
-- [ ] 3.2 Render the Everyday layout in `BalanceTile`:
+- [x] 3.2 Render the Everyday layout in `BalanceTile`:
   - tier lines and Net worth under a divider
   - debt in normal ink with a minus sign
 
@@ -109,7 +109,7 @@
 
 ## 5. End-to-end check
 
-- [ ] 5.1 In the running app:
+- [x] 5.1 In the running app:
   - create a property and a loan account, and set and back-date their
     values
   - check that the Overview shows Everyday with the tiers and Net worth,
