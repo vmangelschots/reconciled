@@ -38,6 +38,16 @@
   --chart-baseline: #c3c2b7;
   --chart-series-1: var(--accent);
   --chart-series-2: #b5b3ab;
+  /* Spending donut, by rank: muted and earthy next to the warm page,
+     clear of --positive and --critical. See the category-spending-pie
+     design. */
+  --chart-cat-1: var(--accent);
+  --chart-cat-2: #3b6fb6;
+  --chart-cat-3: #c08a1e;
+  --chart-cat-4: #8a5cb8;
+  --chart-cat-5: #c4623d;
+  --chart-cat-6: #b5577f;
+  --chart-other: var(--chart-series-2);
 }
 
 .dark {
@@ -60,6 +70,13 @@
   --chart-baseline: #383835;
   --chart-series-1: var(--accent);
   --chart-series-2: #55534e;
+  --chart-cat-1: var(--accent);
+  --chart-cat-2: #6b9be0;
+  --chart-cat-3: #e0aa45;
+  --chart-cat-4: #a985d6;
+  --chart-cat-5: #e07f58;
+  --chart-cat-6: #d47aa0;
+  --chart-other: var(--chart-series-2);
 }
 
 @theme {

@@ -116,30 +116,35 @@ export function CategorySpendingChart({ data, monthLabel, showTable: controlledS
         </Button>
       )}
 
-      {showTable && (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Category</TableHead>
-              <TableHead className="text-right">Spent</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.flatMap((row) => [
-              <TableRow key={row.key}>
-                <TableCell>{row.name}</TableCell>
-                <TableCell className="num text-right">{formatMoney(row.cents)}</TableCell>
-              </TableRow>,
-              ...row.children.map((child) => (
-                <TableRow key={child.key}>
-                  <TableCell className="pl-8 text-ink-secondary">{child.name}</TableCell>
-                  <TableCell className="num text-right">{formatMoney(child.cents)}</TableCell>
-                </TableRow>
-              )),
-            ])}
-          </TableBody>
-        </Table>
-      )}
+      {showTable && <CategorySpendingTable rows={rows} />}
     </div>
+  );
+}
+
+// The same table under the bars and the pie views.
+export function CategorySpendingTable({ rows }) {
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>Category</TableHead>
+          <TableHead className="text-right">Spent</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {rows.flatMap((row) => [
+          <TableRow key={row.key}>
+            <TableCell>{row.name}</TableCell>
+            <TableCell className="num text-right">{formatMoney(row.cents)}</TableCell>
+          </TableRow>,
+          ...row.children.map((child) => (
+            <TableRow key={child.key}>
+              <TableCell className="pl-8 text-ink-secondary">{child.name}</TableCell>
+              <TableCell className="num text-right">{formatMoney(child.cents)}</TableCell>
+            </TableRow>
+          )),
+        ])}
+      </TableBody>
+    </Table>
   );
 }
