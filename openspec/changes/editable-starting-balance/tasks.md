@@ -6,7 +6,7 @@
 
 ## 2. Check
 
-- [ ] 2.1 In the local stack, edit the starting balance of an account that has transactions. Check that the save succeeds with no error toast, and that the accounts list, the overview total and the forecast's starting point all move by the difference. Verify that frontend `npm test`, `npm run lint` and `npm run build` still pass.
+- [x] 2.1 In the local stack, edit the starting balance of an account that has transactions. Check that the save succeeds with no error toast, and that the accounts list, the overview total and the forecast's starting point all move by the difference. Verify that frontend `npm test`, `npm run lint` and `npm run build` still pass.
 
 ## Workflow follow-up
 
