@@ -1,16 +1,26 @@
 import { useEffect, useRef, useState } from "react";
 import {
   ACCOUNT_TYPES,
+  TIERS,
   archiveAccount,
   createAccount,
   listAccounts,
+  tierLabel,
   updateAccount,
 } from "../api/accounts";
 import { Button } from "../components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import { Input } from "../components/ui/Input";
 import { Label } from "../components/ui/Label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/Select";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/Select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/Table";
 import { useToast } from "../components/ui/Toast";
 import { Amount } from "../components/ui/Amount";
@@ -121,6 +131,7 @@ export function AccountsPage() {
             <TableRow>
               <TableHead>Name</TableHead>
               <TableHead>Type</TableHead>
+              <TableHead>Tier</TableHead>
               <TableHead className="text-right">Balance</TableHead>
               <TableHead />
             </TableRow>
@@ -129,7 +140,7 @@ export function AccountsPage() {
             {accounts.map((account) =>
               editingId === account.id ? (
                 <TableRow key={account.id}>
-                  <TableCell colSpan={4}>
+                  <TableCell colSpan={5}>
                     <AccountForm
                       initialValues={account}
                       submitLabel="Save"
@@ -142,6 +153,7 @@ export function AccountsPage() {
                 <TableRow key={account.id}>
                   <TableCell>{account.name}</TableCell>
                   <TableCell>{typeLabel(account.account_type)}</TableCell>
+                  <TableCell className="text-ink-secondary">{tierLabel(account.tier)}</TableCell>
                   <TableCell className="text-right">
                     <Amount cents={account.current_balance_cents} />
                   </TableCell>
@@ -168,7 +180,7 @@ export function AccountsPage() {
             )}
             {accounts.length === 0 && (
               <TableRow>
-                <TableCell colSpan={4}>
+                <TableCell colSpan={5}>
                   <EmptyState>No accounts yet - add one above.</EmptyState>
                 </TableCell>
               </TableRow>
@@ -184,20 +196,39 @@ export function AccountsPage() {
 function AccountForm({ initialValues, onSubmit, onCancel, submitLabel }) {
   const [name, setName] = useState(initialValues?.name ?? "");
   const [accountType, setAccountType] = useState(initialValues?.account_type ?? "checking");
+  // A loan's starting balance is entered as what is still owed, a
+  // positive amount stored as negative - see the accounts spec.
   const [startingBalance, setStartingBalance] = useState(
-    initialValues ? (initialValues.starting_balance_cents / 100).toString() : "0",
+    initialValues
+      ? ((initialValues.account_type === "loan" ? -1 : 1) * initialValues.starting_balance_cents / 100).toString()
+      : "0",
   );
   const [submitting, setSubmitting] = useState(false);
   const toast = useToast();
 
+  // Switching to or from a loan flips the field between a balance and
+  // what is owed, so the same amount keeps its meaning.
+  function changeType(next) {
+    if ((next === "loan") !== (accountType === "loan") && startingBalance && parseFloat(startingBalance) !== 0) {
+      setStartingBalance((-parseFloat(startingBalance)).toString());
+    }
+    setAccountType(next);
+  }
+
   async function handleSubmit(event) {
     event.preventDefault();
+    const isLoan = accountType === "loan";
+    const cents = Math.round(parseFloat(startingBalance || "0") * 100);
+    if (isLoan && cents < 0) {
+      toast.error("Enter what you still owe as a positive amount.");
+      return;
+    }
     setSubmitting(true);
     try {
       await onSubmit({
         name,
         account_type: accountType,
-        starting_balance_cents: Math.round(parseFloat(startingBalance || "0") * 100),
+        starting_balance_cents: isLoan ? -cents : cents,
       });
       if (!initialValues) {
         setName("");
@@ -218,21 +249,26 @@ function AccountForm({ initialValues, onSubmit, onCancel, submitLabel }) {
       </div>
       <div className="flex flex-col gap-1.5">
         <Label>Type</Label>
-        <Select value={accountType} onValueChange={setAccountType}>
+        <Select value={accountType} onValueChange={changeType}>
           <SelectTrigger className="w-40" aria-label="Account type">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {ACCOUNT_TYPES.map((t) => (
-              <SelectItem key={t.value} value={t.value}>
-                {t.label}
-              </SelectItem>
+            {TIERS.map((tier) => (
+              <SelectGroup key={tier.value}>
+                <SelectLabel>{tier.label}</SelectLabel>
+                {ACCOUNT_TYPES.filter((t) => t.tier === tier.value).map((t) => (
+                  <SelectItem key={t.value} value={t.value}>
+                    {t.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
             ))}
           </SelectContent>
         </Select>
       </div>
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="starting-balance">Starting balance</Label>
+        <Label htmlFor="starting-balance">{accountType === "loan" ? "Still owed" : "Starting balance"}</Label>
         <Input
           id="starting-balance"
           type="number"

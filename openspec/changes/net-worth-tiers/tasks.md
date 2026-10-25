@@ -2,14 +2,14 @@
 
 ## 1. Account types, tiers and ordering
 
-- [ ] 1.1 Add `investment`, `property` and `loan` to `Account.AccountType`,
+- [x] 1.1 Add `investment`, `property` and `loan` to `Account.AccountType`,
   with a migration. Add `TYPE_TIERS`, `TIER_ORDER`, an `Account.tier`
   property and `tier` in the serializer, and order the account list by
   tier and then name, as in design.md. Verify with `accounts` tests for
   "Tier follows the type", "Changing the type moves the tier" and "A
   house after everyday accounts", and that
   `python manage.py makemigrations --check` is clean.
-- [ ] 1.2 In `frontend/src/api/accounts.js`:
+- [x] 1.2 In `frontend/src/api/accounts.js`:
   - add the types with their tier, and one tier-label map
   - group the Accounts page type select by tier, with "Other
     (everyday)"

@@ -1,12 +1,32 @@
 import { apiFetch } from "./client";
 
+// Each type belongs to a tier, from most to least liquid - see the
+// accounts spec's "Account tiers". Listed in tier order.
 export const ACCOUNT_TYPES = [
-  { value: "checking", label: "Checking" },
-  { value: "savings", label: "Savings" },
-  { value: "credit_card", label: "Credit Card" },
-  { value: "cash", label: "Cash" },
-  { value: "other", label: "Other" },
+  { value: "checking", label: "Checking", tier: "everyday" },
+  { value: "cash", label: "Cash", tier: "everyday" },
+  { value: "credit_card", label: "Credit Card", tier: "everyday" },
+  { value: "other", label: "Other (everyday)", tier: "everyday" },
+  { value: "savings", label: "Savings", tier: "savings" },
+  { value: "investment", label: "Investment", tier: "investments" },
+  { value: "property", label: "Property", tier: "property" },
+  { value: "loan", label: "Loan", tier: "loans" },
 ];
+
+export const TIERS = [
+  { value: "everyday", label: "Everyday" },
+  { value: "savings", label: "Savings" },
+  { value: "investments", label: "Investments" },
+  { value: "property", label: "Property" },
+  { value: "loans", label: "Loans" },
+];
+
+export function tierLabel(tier) {
+  return TIERS.find((t) => t.value === tier)?.label ?? tier;
+}
+
+// Types whose value is set by hand - see the value-adjustments spec.
+export const VALUED_TYPES = new Set(["investment", "property", "loan"]);
 
 export function listAccounts() {
   return apiFetch("/api/accounts/");

@@ -5,6 +5,7 @@ from .models import Account
 
 class AccountSerializer(serializers.ModelSerializer):
     current_balance_cents = serializers.ReadOnlyField()
+    tier = serializers.ReadOnlyField()
 
     class Meta:
         model = Account
@@ -12,6 +13,7 @@ class AccountSerializer(serializers.ModelSerializer):
             "id",
             "name",
             "account_type",
+            "tier",
             "starting_balance_cents",
             "current_balance_cents",
             "archived",

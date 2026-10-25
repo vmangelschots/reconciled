@@ -2,7 +2,7 @@ from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from .models import Account
+from .models import Account, tier_position
 from .serializers import AccountSerializer
 
 
@@ -19,7 +19,9 @@ class AccountViewSet(
     serializer_class = AccountSerializer
 
     def get_queryset(self):
-        queryset = Account.objects.all()
+        # By tier, then name - see the accounts spec's "Accounts are
+        # listed by tier".
+        queryset = Account.objects.order_by(tier_position(), "name", "id")
         if self.action == "list":
             # Archived accounts are excluded from the default list but
             # remain reachable by id (retrieve/update/archive), so their

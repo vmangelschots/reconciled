@@ -58,3 +58,16 @@ export function SelectItem({ className, children, ...props }) {
     </SelectPrimitive.Item>
   )
 }
+
+export function SelectGroup({ children, ...props }) {
+  return <SelectPrimitive.Group {...props}>{children}</SelectPrimitive.Group>
+}
+
+export function SelectLabel({ className, ...props }) {
+  return (
+    <SelectPrimitive.Label
+      className={cn('px-2 pt-2 pb-1 text-xs font-medium tracking-wide text-ink-muted uppercase', className)}
+      {...props}
+    />
+  )
+}
