@@ -110,10 +110,13 @@
 
 ## 5. Deployment and end-to-end check
 
-- [ ] 5.1 Add `nginx.ingress.kubernetes.io/proxy-body-size: "50m"` to
+- [x] 5.1 Add `nginx.ingress.kubernetes.io/proxy-body-size: "50m"` to
   `k8s/50-ingress.yaml` (D8).
 
   Verify that kubeconform validates the manifests as CI does.
+  Result: the kubeconform image couldn't be pulled locally (ghcr.io denied
+  the pull), so locally the annotation was only checked to parse as a
+  string. The CI `manifests` job runs kubeconform on the PR.
 - [ ] 5.2 Run the end-to-end check against a throwaway Postgres (not the
   local stack's database):
   1. import a Crelan CSV and categorize a few lines;

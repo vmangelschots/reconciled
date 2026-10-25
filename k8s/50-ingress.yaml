@@ -9,6 +9,9 @@ metadata:
   namespace: reconciled
   annotations:
     cert-manager.io/cluster-issuer: letsencrypt
+    # Restoring a backup uploads all the data at once; the default 1m is
+    # too small for a few thousand transactions.
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
 spec:
   ingressClassName: nginx
   tls:
