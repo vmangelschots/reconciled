@@ -192,6 +192,101 @@ describe("Balance tile", () => {
   });
 });
 
+describe("Everyday money and net worth", () => {
+  const HOUSE = { id: 3, name: "House", account_type: "property", balance_cents: 29500000, last_import_date: null };
+  const tiered = (tiers, rest = {}) =>
+    overview({
+      tiers,
+      everyday_cents: tiers.find((t) => t.tier === "everyday")?.balance_cents ?? 0,
+      balance_cents: tiers.reduce((sum, t) => sum + t.balance_cents, 0),
+      ...rest,
+    });
+
+  it("leads with everyday money and lists the other tiers and net worth", async () => {
+    overviewApi.getOverview.mockResolvedValue(
+      tiered([
+        { tier: "everyday", balance_cents: 120000 },
+        { tier: "savings", balance_cents: 228200 },
+        { tier: "property", balance_cents: 29500000 },
+      ]),
+    );
+    renderPage();
+    const tile = await screen.findByRole("region", { name: "Balance" });
+
+    await waitFor(() => expect(within(tile).getByText("Everyday")).toBeInTheDocument());
+    expect(within(tile).getByText(eur(120000))).toHaveClass("text-2xl");
+    expect(within(tile).getByText(/this month/)).toHaveTextContent(`+${eur(121000)} this month`);
+    const lines = within(tile)
+      .getAllByRole("term")
+      .map((dt) => `${dt.textContent} ${dt.nextElementSibling.textContent}`);
+    expect(lines).toEqual([`Savings ${eur(228200)}`, `Property ${eur(29500000)}`, `Net worth ${eur(29848200)}`]);
+  });
+
+  it("adds loans last, in the normal colour, and lowers net worth", async () => {
+    overviewApi.getOverview.mockResolvedValue(
+      tiered([
+        { tier: "everyday", balance_cents: 120000 },
+        { tier: "savings", balance_cents: 228200 },
+        { tier: "property", balance_cents: 29500000 },
+        { tier: "loans", balance_cents: -18734000 },
+      ]),
+    );
+    renderPage();
+    const tile = await screen.findByRole("region", { name: "Balance" });
+
+    const loans = await within(tile).findByText("Loans");
+    expect(loans.nextElementSibling).toHaveTextContent(eur(-18734000));
+    expect(loans.nextElementSibling).toHaveClass("text-ink-primary");
+    expect(loans.nextElementSibling).not.toHaveClass("text-critical");
+    const terms = within(tile).getAllByRole("term").map((dt) => dt.textContent);
+    expect(terms.slice(-2)).toEqual(["Loans", "Net worth"]);
+    expect(within(tile).getByText("Net worth").nextElementSibling).toHaveTextContent(eur(11114200));
+  });
+
+  it("stays a plain balance with only everyday accounts", async () => {
+    overviewApi.getOverview.mockResolvedValue(tiered([{ tier: "everyday", balance_cents: 348200 }]));
+    renderPage();
+    const tile = await screen.findByRole("region", { name: "Balance" });
+
+    await waitFor(() => expect(tile).toHaveTextContent(eur(348200)));
+    expect(within(tile).getByText("Balance")).toBeInTheDocument();
+    expect(within(tile).queryByText("Net worth")).toBeNull();
+  });
+
+  it("says when a valued account's value was set, never as a warning", async () => {
+    overviewApi.getOverview.mockResolvedValue(
+      overview({
+        accounts: [
+          { id: 1, name: "Revolut", account_type: "checking", balance_cents: 0, last_import_date: "2026-10-22" },
+          { ...HOUSE, last_value_date: "2026-10-01" },
+          { id: 4, name: "Mortgage", account_type: "loan", balance_cents: 0, last_import_date: null },
+        ],
+      }),
+    );
+    renderPage();
+    const tile = await screen.findByRole("region", { name: "Accounts" });
+
+    const valueSet = await within(tile).findByText(`value set ${formatDayMonth("2026-10-01")}`);
+    expect(valueSet).not.toHaveClass("text-warning");
+    expect(within(tile).getByText("No value set")).not.toHaveClass("text-warning");
+  });
+
+  it("never reminds about importing into a house", async () => {
+    overviewApi.getOverview.mockResolvedValue(
+      overview({
+        accounts: [
+          { id: 1, name: "Revolut", account_type: "checking", balance_cents: 0, last_import_date: "2026-10-22" },
+          HOUSE,
+        ],
+      }),
+    );
+    renderPage();
+
+    expect(await screen.findByText("Everything is in order.")).toBeInTheDocument();
+    expect(screen.queryByText(/last import|not imported|no imports yet/)).toBeNull();
+  });
+});
+
 describe("Budget tile", () => {
   it("shows budgeted spending, pace, what's left and spending outside budgets", async () => {
     renderPage();

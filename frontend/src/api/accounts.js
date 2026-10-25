@@ -13,21 +13,6 @@ export const ACCOUNT_TYPES = [
   { value: "loan", label: "Loan", tier: "loans" },
 ];
 
-export const TIERS = [
-  { value: "everyday", label: "Everyday" },
-  { value: "savings", label: "Savings" },
-  { value: "investments", label: "Investments" },
-  { value: "property", label: "Property" },
-  { value: "loans", label: "Loans" },
-];
-
-export function tierLabel(tier) {
-  return TIERS.find((t) => t.value === tier)?.label ?? tier;
-}
-
-// Types whose value is set by hand - see the value-adjustments spec.
-export const VALUED_TYPES = new Set(["investment", "property", "loan"]);
-
 export function listAccounts() {
   return apiFetch("/api/accounts/");
 }

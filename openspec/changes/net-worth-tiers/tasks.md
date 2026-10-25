@@ -58,7 +58,7 @@
 
 ## 3. Overview and sidebar
 
-- [ ] 3.1 Add `tiers`, `everyday_cents`, and per-account `tier` and
+- [x] 3.1 Add `tiers`, `everyday_cents`, and per-account `tier` and
   `last_value_date` to the overview response. Order its accounts by tier,
   and leave adjustments out of its recent list. Verify with `reports`
   tests for:
@@ -75,11 +75,11 @@
   scenarios and "The Loans line". Check it at 390px wide with no
   sideways scrolling, and that it sits level with the Budget tile on a
   wide screen.
-- [ ] 3.3 Make `freshness()` and `staleImportItem()` skip investment,
+- [x] 3.3 Make `freshness()` and `staleImportItem()` skip investment,
   property and loan accounts, and show "value set <d Mon>" or "No value
   set" for them in the Accounts tile. Verify with `OverviewPage` tests
   for "A valued account" and "A house is never stale".
-- [ ] 3.4 Add the everyday total and count to `AccountsContext`, and show
+- [x] 3.4 Add the everyday total and count to `AccountsContext`, and show
   "Everyday · N accounts" in `TotalReadout` when the accounts span more
   than one tier. Verify with a `Layout` test for "Everyday total next to
   a house", and that the existing two-account footer test still passes.

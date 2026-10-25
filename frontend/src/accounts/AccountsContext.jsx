@@ -28,6 +28,7 @@ const AccountsContext = createContext({
   accounts: [],
   loaded: false,
   total: 0,
+  everyday: null,
   lastOpenedId: null,
   defaultAccount: null,
   setLastOpened: () => {},
@@ -56,11 +57,22 @@ export function AccountsProvider({ refreshKey, children }) {
   }, []);
 
   const total = accounts.reduce((sum, a) => sum + a.current_balance_cents, 0);
+  // With accounts in more than one tier, the sidebar shows the everyday
+  // money instead of the total - see the ui-shell spec.
+  const tierOf = (a) => a.tier ?? "everyday";
+  const everydayAccounts = accounts.filter((a) => tierOf(a) === "everyday");
+  const everyday =
+    new Set(accounts.map(tierOf)).size > 1
+      ? {
+          count: everydayAccounts.length,
+          total: everydayAccounts.reduce((sum, a) => sum + a.current_balance_cents, 0),
+        }
+      : null;
   // A remembered account that is gone or archived falls back to the first.
   const defaultAccount = accounts.find((a) => a.id === lastOpenedId) ?? accounts[0] ?? null;
 
   return (
-    <AccountsContext.Provider value={{ accounts, loaded, total, lastOpenedId, defaultAccount, setLastOpened, refresh }}>
+    <AccountsContext.Provider value={{ accounts, loaded, total, everyday, lastOpenedId, defaultAccount, setLastOpened, refresh }}>
       {children}
     </AccountsContext.Provider>
   );

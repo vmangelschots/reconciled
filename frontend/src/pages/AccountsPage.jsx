@@ -1,13 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  ACCOUNT_TYPES,
-  TIERS,
-  archiveAccount,
-  createAccount,
-  listAccounts,
-  tierLabel,
-  updateAccount,
-} from "../api/accounts";
+import { ACCOUNT_TYPES, archiveAccount, createAccount, listAccounts, updateAccount } from "../api/accounts";
+import { TIERS, tierLabel } from "../lib/tiers";
 import { Button } from "../components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import { Input } from "../components/ui/Input";

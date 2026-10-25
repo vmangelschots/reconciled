@@ -381,3 +381,84 @@ class YearlyOverviewTests(TestCase):
             # October, seen from late November: the target was due soon at
             # the end of October and Clothing was at 90%, but under budget.
             self.assertEqual(self.attention("2026-10"), [])
+
+
+@patch("reports.views._today", lambda: TODAY)
+class OverviewTierTests(TestCase):
+    """The overview spec's "Everyday money and net worth", at the API."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(get_user_model().objects.create_user(username="u", password="x"))
+
+    def account(self, name, account_type, cents):
+        return Account.objects.create(name=name, account_type=account_type, starting_balance_cents=cents)
+
+    def body(self):
+        response = self.client.get(reverse("report-overview"), {"month": "2026-10"})
+        self.assertEqual(response.status_code, 200, response.content)
+        return response.json()
+
+    def test_everyday_savings_and_a_house(self):
+        self.account("House", "property", 29500000)
+        self.account("Revolut", "checking", 120000)
+        self.account("Spaarrekening", "savings", 228200)
+        body = self.body()
+        self.assertEqual(body["everyday_cents"], 120000)
+        self.assertEqual(body["balance_cents"], 29848200)
+        self.assertEqual(
+            body["tiers"],
+            [
+                {"tier": "everyday", "balance_cents": 120000},
+                {"tier": "savings", "balance_cents": 228200},
+                {"tier": "property", "balance_cents": 29500000},
+            ],
+        )
+        self.assertEqual([a["name"] for a in body["accounts"]], ["Revolut", "Spaarrekening", "House"])
+        self.assertEqual(body["accounts"][2]["tier"], "property")
+
+    def test_a_mortgage_lowers_net_worth(self):
+        self.account("House", "property", 29500000)
+        self.account("Revolut", "checking", 120000)
+        self.account("Spaarrekening", "savings", 228200)
+        self.account("Mortgage", "loan", -18734000)
+        body = self.body()
+        self.assertEqual(body["tiers"][-1], {"tier": "loans", "balance_cents": -18734000})
+        self.assertEqual(body["balance_cents"], 11114200)
+
+    def test_only_everyday_accounts(self):
+        self.account("Revolut", "checking", 120000)
+        self.account("Wallet", "cash", 5000)
+        body = self.body()
+        self.assertEqual(body["tiers"], [{"tier": "everyday", "balance_cents": 125000}])
+        self.assertEqual(body["everyday_cents"], body["balance_cents"])
+
+    def test_archived_accounts_dont_count(self):
+        self.account("Revolut", "checking", 120000)
+        house = self.account("House", "property", 29500000)
+        house.archived = True
+        house.save()
+        body = self.body()
+        self.assertEqual([t["tier"] for t in body["tiers"]], ["everyday"])
+        self.assertEqual(body["balance_cents"], 120000)
+
+    def test_last_value_date(self):
+        from transactions.adjustments import set_value
+
+        revolut = self.account("Revolut", "checking", 120000)
+        house = self.account("House", "property", 29500000)
+        set_value(house, date(2026, 9, 1), 30000000)
+        set_value(house, date(2026, 10, 1), 31000000)
+        accounts = {a["id"]: a for a in self.body()["accounts"]}
+        self.assertEqual(accounts[house.id]["last_value_date"], "2026-10-01")
+        self.assertIsNone(accounts[revolut.id]["last_value_date"])
+
+    def test_value_adjustments_are_left_out_of_recent(self):
+        from transactions.adjustments import set_value
+
+        revolut = self.account("Revolut", "checking", 120000)
+        house = self.account("House", "property", 29500000)
+        Transaction.objects.create(account=revolut, date=date(2026, 10, 2), amount_cents=-500, payee="Bakery")
+        set_value(house, date(2026, 10, 20), 31000000)
+        recent = self.body()["recent"]
+        self.assertEqual([r["payee"] for r in recent], ["Bakery"])

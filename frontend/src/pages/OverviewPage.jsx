@@ -35,6 +35,7 @@ import { formatShortDate } from "../lib/dates";
 import { formatMoneyWhole } from "../lib/money";
 import { currentMonth, daysSince, monthLabel, monthName } from "../lib/months";
 import { formatDayMonth } from "../lib/yearlyBudgets";
+import { VALUED_TYPES, tierLabel } from "../lib/tiers";
 import { useAccounts } from "../accounts/AccountsContext";
 
 // The last import counts as stale after this many days - see the
@@ -70,15 +71,40 @@ function loadError(what) {
   return `Couldn't load ${what}.`;
 }
 
+// With accounts in more than one tier, the headline is the everyday money
+// and the other tiers and net worth sit under it - see the overview spec's
+// "Everyday money and net worth". Debt keeps the normal ink.
 function BalanceTile({ data, month, isCurrent }) {
   const change = data.in_out.in_cents - data.in_out.out_cents;
   const when = isCurrent ? "this month" : `in ${monthName(month)}`;
+  const others = (data.tiers ?? []).filter((t) => t.tier !== "everyday");
+  const split = others.length > 0 && data.tiers.length > 1;
   return (
-    <Stat label="Balance" note={isCurrent ? null : "Today"} value={whole(data.balance_cents)}>
-      <span className={cn("text-sm", change > 0 ? "text-positive" : "text-ink-secondary")}>
-        {formatMoneyWhole(change, { signed: true })} {when}
-      </span>
-    </Stat>
+    <div className="flex flex-col gap-3">
+      <Stat
+        label={split ? "Everyday" : "Balance"}
+        note={isCurrent ? null : "Today"}
+        value={whole(split ? data.everyday_cents : data.balance_cents)}
+      >
+        <span className={cn("text-sm", change > 0 ? "text-positive" : "text-ink-secondary")}>
+          {formatMoneyWhole(change, { signed: true })} {when}
+        </span>
+      </Stat>
+      {split && (
+        <dl className="flex flex-col gap-1 border-t border-border pt-3 text-sm">
+          {others.map((t) => (
+            <div key={t.tier} className="flex items-baseline justify-between gap-4">
+              <dt className="text-ink-secondary">{tierLabel(t.tier)}</dt>
+              <dd className="num text-ink-primary">{whole(t.balance_cents)}</dd>
+            </div>
+          ))}
+          <div className="flex items-baseline justify-between gap-4">
+            <dt className="font-medium text-ink-primary">Net worth</dt>
+            <dd className="num font-medium text-ink-primary">{whole(data.balance_cents)}</dd>
+          </div>
+        </dl>
+      )}
+    </div>
   );
 }
 
@@ -142,7 +168,16 @@ function BudgetTile({ budget }) {
 }
 
 // How fresh an account's data is: stale after STALE_IMPORT_DAYS, or when
-// it was never imported.
+// it was never imported. An account whose value is set by hand is never
+// stale; it says when its value was last set instead.
+function accountFreshness(account) {
+  if (VALUED_TYPES.has(account.account_type)) {
+    const text = account.last_value_date ? `value set ${formatDayMonth(account.last_value_date)}` : "No value set";
+    return { text, stale: false, days: 0 };
+  }
+  return freshness(account.last_import_date);
+}
+
 function freshness(lastImportDate) {
   if (!lastImportDate) return { text: "No imports yet", stale: true, days: Infinity };
   const days = daysSince(lastImportDate);
@@ -154,7 +189,7 @@ function AccountsTile({ accounts }) {
   return (
     <ul className="-mx-5 -mb-2 flex flex-col">
       {accounts.map((a) => {
-        const fresh = freshness(a.last_import_date);
+        const fresh = accountFreshness(a);
         return (
           <ListRow
             key={a.id}
@@ -173,6 +208,7 @@ function AccountsTile({ accounts }) {
 // there are several, opening Import on the stalest. See the overview spec.
 function staleImportItem(accounts) {
   const stale = accounts
+    .filter((a) => !VALUED_TYPES.has(a.account_type))
     .map((a) => ({ ...a, fresh: freshness(a.last_import_date) }))
     .filter((a) => a.fresh.stale)
     .sort((a, b) => b.fresh.days - a.fresh.days);

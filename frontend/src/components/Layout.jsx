@@ -136,15 +136,19 @@ function TransactionsGroup({ item }) {
   )
 }
 
+// The total of the active accounts, or only the everyday ones when the
+// accounts span more than one tier. See the ui-shell spec.
 function TotalReadout() {
-  const { accounts, total } = useAccounts()
+  const { accounts, total, everyday } = useAccounts()
   if (accounts.length === 0) return null
+  const label = everyday ? 'Everyday' : 'Total'
+  const count = everyday ? everyday.count : accounts.length
   return (
     <div className="flex flex-col gap-0.5 px-3">
       <span className="text-xs font-medium tracking-wide text-ink-muted uppercase">
-        Total · {accounts.length} {accounts.length === 1 ? 'account' : 'accounts'}
+        {label} · {count} {count === 1 ? 'account' : 'accounts'}
       </span>
-      <Amount cents={total} className="text-base font-semibold text-ink-primary" />
+      <Amount cents={everyday ? everyday.total : total} className="text-base font-semibold text-ink-primary" />
     </div>
   )
 }
