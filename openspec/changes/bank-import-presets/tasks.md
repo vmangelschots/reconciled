@@ -2,7 +2,7 @@
 
 ## 1. Data model
 
-- [ ] 1.1 Change `imports/models.py` as in design.md:
+- [x] 1.1 Change `imports/models.py` as in design.md:
   - add `ImportSession.preset` (blank allowed), `mapping` (JSON, null),
     `product_accounts` (JSON, default `{}`) and `imported_accounts`
     (many-to-many to `Account`);
