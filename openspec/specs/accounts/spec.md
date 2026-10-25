@@ -24,18 +24,14 @@ starting balance.
 - **THEN** the system rejects the request and does not create an account
 
 ### Requirement: Edit account
-The system SHALL allow the user to rename an account or change its account
-type at any time.
+The system SHALL allow the user to rename an account, change its account
+type, or change its starting balance at any time, whether or not the
+account has transactions.
 
 #### Scenario: Rename an account
 - **WHEN** the user renames "Main Checking" to "Everyday Checking"
 - **THEN** the account's name is updated and all its transactions remain
   linked to the same account
-
-### Requirement: Starting balance is immutable once transactions exist
-The system SHALL allow editing an account's starting balance only while
-the account has zero transactions. Once a transaction exists on the
-account, the starting balance becomes read-only.
 
 #### Scenario: Edit starting balance before any transactions
 - **WHEN** the user changes the starting balance of an account with no
@@ -43,11 +39,11 @@ account, the starting balance becomes read-only.
 - **THEN** the system updates the starting balance and the account's
   current balance becomes 1200.00
 
-#### Scenario: Attempt to edit starting balance after transactions exist
-- **WHEN** the user attempts to change the starting balance of an account
-  that already has one or more transactions
-- **THEN** the system rejects the change and explains that the starting
-  balance can no longer be edited
+#### Scenario: Edit starting balance after transactions exist
+- **WHEN** the user changes the starting balance of an account from
+  1000.00 to 1200.00, and the account has transactions totalling -300.00
+- **THEN** the system updates the starting balance, the account's current
+  balance becomes 900.00, and its transactions are unchanged
 
 ### Requirement: Archive account
 The system SHALL allow the user to archive an account instead of deleting
