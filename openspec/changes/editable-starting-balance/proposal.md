@@ -1,5 +1,7 @@
 # Proposal
 
+Issue: #15
+
 ## Why
 
 Once an account has a transaction, its starting balance can no longer be
