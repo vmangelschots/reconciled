@@ -1,5 +1,7 @@
 # Proposal
 
+Issue: #27
+
 ## Why
 
 All of the user's budget history lives in one self-hosted Postgres database,
