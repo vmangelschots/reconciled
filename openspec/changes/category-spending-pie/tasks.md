@@ -2,7 +2,7 @@
 
 ## 1. Shared rows and pie slices
 
-- [ ] 1.1 Move `buildRows` out of `CategorySpendingChart.jsx` into `lib/categorySpending.js` and add `buildPieSlices(rows)`. It keeps the top six categorised rows, folds the rest into "Other" (with the members as children) only when two or more remain, and appends "Uncategorized" last. Verify with `categorySpending.test.js` cases for "Tail grouped into Other", "Exactly seven categories", a single leftover keeping its own slice, and Uncategorized never folding, with the existing `CategorySpendingChart.test.jsx` still passing.
+- [x] 1.1 Move `buildRows` out of `CategorySpendingChart.jsx` into `lib/categorySpending.js` and add `buildPieSlices(rows)`. It keeps the top six categorised rows, folds the rest into "Other" (with the members as children) only when two or more remain, and appends "Uncategorized" last. Verify with `categorySpending.test.js` cases for "Tail grouped into Other", "Exactly seven categories", a single leftover keeping its own slice, and Uncategorized never folding, with the existing `CategorySpendingChart.test.jsx` still passing.
 
 ## 2. Donut component
 

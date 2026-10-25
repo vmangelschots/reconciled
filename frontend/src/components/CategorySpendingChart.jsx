@@ -3,27 +3,8 @@ import { useState } from "react";
 import { cn } from "../lib/cn";
 import { Button } from "./ui/Button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/Table";
+import { buildRows } from "../lib/categorySpending";
 import { formatMoney } from "../lib/money";
-
-const UNCATEGORIZED_KEY = "uncategorized";
-
-// Flattens the API payload into top-level rows (Uncategorized included),
-// largest first. Each expandable row carries its child rows: subcategories
-// plus "<Parent> (direct)" for spending booked on the parent itself.
-function buildRows(data) {
-  const rows = data.categories.map((c) => {
-    const children = c.subcategories.map((s) => ({ key: `c${s.category_id}`, name: s.name, cents: s.spent_cents }));
-    if (children.length > 0 && c.direct_cents > 0) {
-      children.push({ key: `d${c.category_id}`, name: `${c.name} (direct)`, cents: c.direct_cents });
-    }
-    children.sort((a, b) => b.cents - a.cents);
-    return { key: `c${c.category_id}`, name: c.name, cents: c.spent_cents, children };
-  });
-  if (data.uncategorized_cents > 0) {
-    rows.push({ key: UNCATEGORIZED_KEY, name: "Uncategorized", cents: data.uncategorized_cents, children: [] });
-  }
-  return rows.sort((a, b) => b.cents - a.cents);
-}
 
 function BarRow({ row, max, total, depth = 0, expanded, onToggle }) {
   const [hovered, setHovered] = useState(false);
