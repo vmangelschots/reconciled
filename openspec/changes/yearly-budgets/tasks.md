@@ -37,7 +37,7 @@
   - add the client functions to `api/categories.js` and `api/budgets.js`.
 
   Verify that the existing `BudgetsPage` and `OverviewPage` tests still pass, plus a `ProgressBar` test for the warning tone.
-- [ ] 4.2 Reorder the page to Monthly summary, This year, then Categories. Give the monthly table the shared columns (Budget / Left headers, no "Set limit" column) and the "Yearly budgets … this month" footer row. Build `BudgetEditor` as an expansion row opened from the Budget cell, with:
+- [x] 4.2 Reorder the page to Monthly summary, This year, then Categories. Give the monthly table the shared columns (Budget / Left headers, no "Set limit" column) and the "Yearly budgets … this month" footer row. Build `BudgetEditor` as an expansion row opened from the Budget cell, with:
   - the kind segmented control and per-kind fields (day and month for a target);
   - the scope line and the live pro-rating line;
   - the confirmation `Dialog` when switching to or from Monthly would drop amounts;
@@ -49,7 +49,7 @@
   - "Yearly to on a date" (no dialog) and setting a target date;
   - "The editor states the scope";
   - "Yearly spending line".
-- [ ] 4.3 Add the "This year (YYYY) · to D Mon" panel:
+- [x] 4.3 Add the "This year (YYYY) · to D Mon" panel:
   - the Budget cell with "of 1,200 · from Oct" when pro-rated;
   - the Status column: bar with pace marker, runway or "over for", warning tone when ahead, and target icon-plus-text states;
   - "Parent / Sub" labels;
@@ -61,7 +61,7 @@
   - "Due soon", "Not seen yet", "Overdue", "Partly paid", "Paid over" and "Slightly under" labels;
   - "Viewing a month before the start", "Set the start month" and "Clear the start month";
   - "Two years of history" and "A single line is not a history".
-- [ ] 4.4 Below 640px (`useMediaQuery`), render both summaries as stacked rows (name and left; "spent of budget"; status line), with the editor opening below the tapped row and its fields stacked. Verify with a `BudgetsPage` test that mocks a narrow viewport and checks the stacked layout and that the editor opens.
+- [x] 4.4 Below 640px (`useMediaQuery`), render both summaries as stacked rows (name and left; "spent of budget"; status line), with the editor opening below the tapped row and its fields stacked. Verify with a `BudgetsPage` test that mocks a narrow viewport and checks the stacked layout and that the editor opens.
 
 ## 5. Overview
 
