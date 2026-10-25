@@ -330,6 +330,16 @@ describe("BudgetsPage budget editor", () => {
     );
   });
 
+  it("doesn't carry a monthly amount over as a yearly one", async () => {
+    renderPage();
+    const form = await openEditor("Groceries");
+    expect(within(form).getByLabelText("Amount")).toHaveValue(100);
+    await userEvent.click(within(form).getByRole("button", { name: "Yearly" }));
+    expect(within(form).getByLabelText("Amount")).toHaveValue(null);
+    await userEvent.click(within(form).getByRole("button", { name: "Monthly" }));
+    expect(within(form).getByLabelText("Amount")).toHaveValue(100);
+  });
+
   it("switches without asking when there is nothing to drop", async () => {
     renderPage();
     const form = await openEditor("Transport");

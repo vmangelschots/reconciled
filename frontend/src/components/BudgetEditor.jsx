@@ -86,6 +86,16 @@ export function BudgetEditor({ category, month, limitCents, startMonth, onSaved,
   const pastValues = viewedYear < thisYear ? historyValuesFor(category.yearly_history, viewedYear) : null;
   const februaryMax = dueMonth === "02" ? 28 : 31;
 
+  // A monthly amount isn't a yearly one, so crossing between them starts
+  // from that kind's own amount (or empty) rather than carrying it over.
+  function changeKind(next) {
+    if ((next === "monthly") !== (kind === "monthly")) {
+      const own = next === "monthly" ? (initialKind === "monthly" ? limitCents : null) : category.yearly?.amount_cents;
+      setAmount(centsText(own));
+    }
+    setKind(next);
+  }
+
   async function save() {
     setSubmitting(true);
     try {
@@ -129,7 +139,7 @@ export function BudgetEditor({ category, month, limitCents, startMonth, onSaved,
     <form onSubmit={handleSubmit} className="flex flex-col gap-3" aria-label={`Budget for ${category.name}`}>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
         <span className="text-sm text-ink-secondary">Budget</span>
-        <SegmentedControl label="Budget" options={KINDS} value={kind} onChange={setKind} />
+        <SegmentedControl label="Budget" options={KINDS} value={kind} onChange={changeKind} />
         <label className="flex items-center gap-2 text-sm text-ink-secondary">
           <Input
             type="number"

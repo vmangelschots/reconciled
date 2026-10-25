@@ -451,8 +451,8 @@ function BudgetList({ items, footer = [], isWide, editingId, onEdit, highlightId
                 {item.name}
               </span>
               {item.leftCents != null && (
-                <span className={cn("num text-sm", item.leftCents < 0 ? "text-critical" : "text-ink-primary")}>
-                  {formatMoney(item.leftCents)} left
+                <span className={cn("num text-sm", item.over ? "text-critical" : "text-ink-primary")}>
+                  {item.leftCents < 0 ? `${formatMoney(-item.leftCents)} over` : `${formatMoney(item.leftCents)} left`}
                 </span>
               )}
               <EditBudgetButton name={item.name} onClick={() => onEdit(item.id)} />
@@ -481,7 +481,7 @@ function BudgetList({ items, footer = [], isWide, editingId, onEdit, highlightId
     <Table>
       <colgroup>
         <col />
-        <col className="w-36" />
+        <col className="w-48" />
         <col className="w-28" />
         <col className="w-28" />
         <col className="w-52" />
@@ -525,7 +525,7 @@ function BudgetRows({ item, editing, onEdit, highlight }) {
               <EditBudgetButton name={item.name} onClick={() => onEdit(item.id)} />
             </span>
           </span>
-          {item.budgetNote && <span className="block text-xs text-ink-muted">{item.budgetNote}</span>}
+          {item.budgetNote && <span className="block whitespace-nowrap text-xs text-ink-muted">{item.budgetNote}</span>}
         </TableCell>
         <TableCell className="num text-right">{formatMoney(item.spentCents)}</TableCell>
         <TableCell className={cn("num text-right", item.over && "text-critical")}>{formatCents(item.leftCents)}</TableCell>

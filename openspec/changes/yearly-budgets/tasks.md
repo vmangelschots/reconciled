@@ -78,7 +78,7 @@
 
 ## 6. Check
 
-- [ ] 6.1 In the local stack, set the start month to October 2026 and create:
+- [x] 6.1 In the local stack, set the start month to October 2026 and create:
   - a yearly "Clothing" budget;
   - a "Property tax" target due 1 November;
   - a target paid slightly off its amount;
