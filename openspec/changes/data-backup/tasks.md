@@ -117,7 +117,7 @@
   Result: the kubeconform image couldn't be pulled locally (ghcr.io denied
   the pull), so locally the annotation was only checked to parse as a
   string. The CI `manifests` job runs kubeconform on the PR.
-- [ ] 5.2 Run the end-to-end check against a throwaway Postgres (not the
+- [x] 5.2 Run the end-to-end check against a throwaway Postgres (not the
   local stack's database):
   1. import a Crelan CSV and categorize a few lines;
   2. download a backup from the Settings page in the running app;
@@ -128,6 +128,31 @@
   match what they were before step 3, that the user is still signed in, and
   that the confirm dialog and both buttons fit at 390px wide. Note the
   results in this task.
+
+  Results (throwaway Postgres on port 55433, dev server and Vite on
+  localhost):
+  - Revolut sample (29 lines, Savings to a pockets account) and the Crelan
+    export (608 lines) imported, and a few lines categorized. Download:
+    `reconciled-backup-2026-10-25.json`, 351 KB, 3 accounts and 637
+    transactions.
+  - After archiving Revolut, adding a transaction and a category, then
+    restoring:
+    - the accounts, balances (Crelan −3,488.83, Pockets 95.28, Revolut
+      −19.14), last-import dates, Review count and categories all equal the
+      state before;
+    - the session was still signed in;
+    - the next new transaction saved with id 638, no clash.
+  - Restoring half the file: 400 "This backup can't be read…", and the data
+    was unchanged.
+  - In the browser, on the phone layout (Chrome's narrowest window, 500px):
+    - the Settings card and the confirm dialog ("Made Oct 25, 2026 · 3
+      accounts · 638 transactions", the warning, Cancel and Replace
+      everything) fit;
+    - Replace everything showed "Restored 3 accounts and 638 transactions."
+      and opened the Overview, still signed in.
+
+    Download wasn't clicked in the browser, so no file was saved into the
+    user's Downloads; the API run covered it.
 
 ## Workflow follow-up
 
