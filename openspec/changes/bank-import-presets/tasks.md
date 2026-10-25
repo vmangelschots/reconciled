@@ -92,18 +92,18 @@
 
 ## 6. Import page
 
-- [ ] 6.1 In `ImportPage.jsx`, add the Accounts step: one Select per
+- [x] 6.1 In `ImportPage.jsx`, add the Accounts step: one Select per
   Product with the active accounts plus "Don't import", Continue
   disabled until every Product has a choice, and a call to
   `assignProducts` in `api/imports.js`. Verify with `ImportPage.test.jsx`
   tests that cover the preselected Current, the remembered Savings, a
   blocked Continue for an unchosen Product, and Skip.
-- [ ] 6.2 In the preview, add the "Recognized as a <bank> export" note,
+- [x] 6.2 In the preview, add the "Recognized as a <bank> export" note,
   an Account column when the candidates span several accounts, and
   `→ <account>` / `← <account>` for pocket pairs in the Match column.
   Verify with `ImportPage.test.jsx` tests for a Revolut two-account
   preview and a single-account preview without the Account column.
-- [ ] 6.3 Preselect the mapping step from `saved_mapping`. Verify with
+- [x] 6.3 Preselect the mapping step from `saved_mapping`. Verify with
   an `ImportPage.test.jsx` test where the upload response's
   `saved_mapping` fills the selects and the date format. Run
   `npm test`, `npm run lint` and `npm run build`.
