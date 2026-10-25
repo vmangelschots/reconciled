@@ -211,7 +211,8 @@ def flag_duplicates(account, candidates):
         )
         if match is not None:
             claimed.add(match.pk)
-        flagged.append({**candidate, "index": index, "is_duplicate": match is not None})
+        # An index numbered across all of an import's accounts is kept.
+        flagged.append({"index": index, **candidate, "is_duplicate": match is not None})
     return flagged
 
 
@@ -234,6 +235,10 @@ def flag_transfer_matches(account, candidates):
     claimed = set()
     flagged = []
     for candidate in candidates:
+        # A pocket move is matched to its other side in the same file.
+        if candidate.get("pocket_pair"):
+            flagged.append({**candidate, "transfer_match": None})
+            continue
         on = date.fromisoformat(candidate["date"])
         options = [
             t

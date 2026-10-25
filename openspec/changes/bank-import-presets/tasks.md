@@ -47,14 +47,14 @@
 
 ## 4. Import API
 
-- [ ] 4.1 Make candidates carry `account_id` and `account_name` on every
+- [x] 4.1 Make candidates carry `account_id` and `account_name` on every
   path. Run duplicate and transfer flagging per account, skip
   pocket-paired candidates in `flag_transfer_matches`, and have `commit`
   create each row on its candidate's account and fill
   `imported_accounts`. Verify that the existing `imports` tests pass
   unchanged (CSV, OFX and the transfer confirmation all go to the one
   account) and that there is a test for "Confirm an import".
-- [ ] 4.2 In `create`, detect presets. Crelan, and Revolut with a single
+- [x] 4.2 In `create`, detect presets. Crelan, and Revolut with a single
   Product, return candidates at once with `preset`. Revolut with several
   Products returns `products` and the preselected `product_accounts`.
   Add the `assign` action, which rejects a missing choice or an
@@ -64,7 +64,7 @@
   - "Current and Savings in one file", "Skip a product" and "Only the
     current account";
   - "A new product must be chosen" (the `assign` call is rejected).
-- [ ] 4.3 At commit, link both-selected pocket pairs with a new
+- [x] 4.3 At commit, link both-selected pocket pairs with a new
   `transactions.transfers.link_pair`, and leave linked rows out of
   `categorize`. Verify with API tests for:
   - "Money moved into a pocket" (both rows linked, neither categorized,
@@ -72,7 +72,7 @@
   - "Only one side committed";
   - "A pocket move stays a transfer";
   - "An import into two accounts".
-- [ ] 4.4 At commit, save the session's `mapping` (CSV) or
+- [x] 4.4 At commit, save the session's `mapping` (CSV) or
   `product_accounts` (Revolut) to the upload account's
   `AccountImportSettings`. Have upload return `saved_mapping` when every
   remembered column is present, and preselect remembered product
