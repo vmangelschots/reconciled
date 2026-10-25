@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   LogOut,
   PiggyBank,
+  Settings,
   TrendingUp,
   Upload,
 } from 'lucide-react'
@@ -32,6 +33,7 @@ const NAV_ITEMS = [
   { to: '/forecast', label: 'Forecast', icon: TrendingUp, group: 'main' },
   { to: '/import', label: 'Import', icon: Upload, group: 'more' },
   { to: '/accounts', label: 'Accounts', icon: Landmark, group: 'more' },
+  { to: '/settings', label: 'Settings', icon: Settings, group: 'more' },
 ]
 
 // How many guessed categories wait on the Review page; hidden at 0.
