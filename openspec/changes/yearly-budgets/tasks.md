@@ -6,13 +6,13 @@
 
 ## 2. Yearly figures
 
-- [ ] 2.1 Add the pure helpers in `budgets/yearly.py` as in design.md: `budgeted_period`, `prorated_cents`, `target_counts`, `reference_day`, `pace`, `runway_cents`, `tolerance_cents`, `target_state`, and picking a year's `YearlyBudget` values. Verify with `SimpleTestCase` tests for these spec scenarios:
+- [x] 2.1 Add the pure helpers in `budgets/yearly.py` as in design.md: `budgeted_period`, `prorated_cents`, `target_counts`, `reference_day`, `pace`, `runway_cents`, `tolerance_cents`, `target_state`, and picking a year's `YearlyBudget` values. Verify with `SimpleTestCase` tests for these spec scenarios:
   - "Starting in October", "Starting in June", "Rounded down to the cent" and "Before the start year";
   - "Due after the start" and "Due before the start";
   - "Runway in October", "Pace from the start month" and "Over for the year";
   - "Slightly under", "The tolerance has a floor", and every "Target states" scenario, plus the boundaries: due today, 14 days out, the 7th and 8th day after the due date, and exactly at the tolerance;
   - "Raise next year's budget", "Moving a due date" and "Added mid-year counts the whole year".
-- [ ] 2.2 Add `yearly_rows(month, today)` (spending since the budgeted period start, `ahead`, `prorated_from`) and `yearly_spent_cents`, and limit `budget_rows` to monthly categories. Verify with `budgets` tests for:
+- [x] 2.2 Add `yearly_rows(month, today)` (spending since the budgeted period start, `ahead`, `prorated_from`) and `yearly_spent_cents`, and limit `budget_rows` to monthly categories. Verify with `budgets` tests for:
   - "Spending in any month counts" and "A new year starts fresh";
   - "Spending before the start is ignored", "No start month" and "Monthly budgets are unaffected";
   - "Viewing an earlier month of the year", "Viewing a month before the start" and "Running ahead";
