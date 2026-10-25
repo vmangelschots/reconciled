@@ -2,7 +2,7 @@
 
 ## 1. Data model
 
-- [ ] 1.1 In `budgets/models.py`, add `Category.budget_kind` (`monthly`/`yearly`/`target`, default `monthly`), `YearlyBudget` (`category`, `from_year`, `amount_cents`, nullable `due_month`/`due_day`, unique on category + from_year) and `BudgetSettings` (nullable `start_month`), with one migration and admin registration. Verify that `python manage.py makemigrations --check` is clean and that the existing `budgets` tests pass with every category monthly.
+- [x] 1.1 In `budgets/models.py`, add `Category.budget_kind` (`monthly`/`yearly`/`target`, default `monthly`), `YearlyBudget` (`category`, `from_year`, `amount_cents`, nullable `due_month`/`due_day`, unique on category + from_year) and `BudgetSettings` (nullable `start_month`), with one migration and admin registration. Verify that `python manage.py makemigrations --check` is clean and that the existing `budgets` tests pass with every category monthly.
 
 ## 2. Yearly figures
 

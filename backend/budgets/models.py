@@ -25,6 +25,16 @@ class Category(models.Model):
     # Only a top-level category can be a tab group; its subcategories are
     # the tabs. See budgets/tabs.py and openspec/specs/repayment-tabs.
     is_tab_group = models.BooleanField(default=False)
+
+    class BudgetKind(models.TextChoices):
+        MONTHLY = "monthly"
+        YEARLY = "yearly"
+        # Yearly on a date: one amount due on a day and month each year.
+        TARGET = "target"
+
+    # Monthly amounts live in CategoryLimit, yearly ones in YearlyBudget -
+    # see openspec/specs/yearly-budgets.
+    budget_kind = models.CharField(max_length=10, choices=BudgetKind.choices, default=BudgetKind.MONTHLY)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -96,3 +106,53 @@ class CategoryLimit(models.Model):
     def __str__(self):
         scope = "default" if self.month is None else self.month.isoformat()
         return f"{self.category.name} ({scope}): {self.limit_cents}"
+
+
+class YearlyBudget(models.Model):
+    """A yearly or yearly-on-a-date budget's values from `from_year` on.
+
+    One row per year in which the values changed: year Y uses the row
+    with the largest from_year <= Y, or the oldest row when none is that
+    early, so a budget always covers whole years. Editing writes the
+    current year's row, which keeps earlier years as they were and gives
+    one history line per year. The due fields are null for a plain
+    yearly budget.
+    """
+
+    category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name="yearly_budgets")
+    from_year = models.PositiveSmallIntegerField()
+    amount_cents = models.BigIntegerField()
+    due_month = models.PositiveSmallIntegerField(null=True, blank=True)
+    due_day = models.PositiveSmallIntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-from_year"]
+        constraints = [
+            models.UniqueConstraint(fields=["category", "from_year"], name="unique_yearly_budget_per_year"),
+        ]
+
+    def __str__(self):
+        return f"{self.category.name} ({self.from_year}+): {self.amount_cents}"
+
+
+class BudgetSettings(models.Model):
+    """The single row of budget-wide settings; read with `load()`.
+
+    `start_month` is the first-of-month date budgeting by year starts
+    from, or null for "every year counts in full".
+    """
+
+    start_month = models.DateField(null=True, blank=True)
+
+    class Meta:
+        verbose_name_plural = "budget settings"
+
+    @classmethod
+    def load(cls):
+        settings, _created = cls.objects.get_or_create(pk=1)
+        return settings
+
+    def __str__(self):
+        return f"Budgeting from {self.start_month}" if self.start_month else "Budgeting from the start"
