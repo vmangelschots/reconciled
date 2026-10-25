@@ -28,7 +28,10 @@ transaction fields date, amount, and description, and optionally payee
 and a separate debit/credit column pair. The system SHALL auto-detect
 the file's column delimiter rather than assuming comma. The system
 SHALL require the user to select the date column's format from a fixed
-list of supported formats rather than guessing it.
+list of supported formats rather than guessing it. A date value followed
+by a time SHALL parse with the selected format, and the time SHALL be
+ignored. A CSV recognized as a bank export (see the
+`bank-export-formats` capability) SHALL skip this step.
 
 #### Scenario: Map a simple CSV export
 - **WHEN** the user maps column "Posted Date" to date, "Amount" to
@@ -65,6 +68,11 @@ list of supported formats rather than guessing it.
 - **THEN** the system parses that date as the 1st of October, not
   January 10th
 
+#### Scenario: A date with a time
+- **WHEN** the user selects "YYYY-MM-DD" for a column containing
+  "2026-10-12 2:00:00"
+- **THEN** the system parses that date as 12 October 2026
+
 ### Requirement: Parse OFX files without manual mapping
 For an OFX file, the system SHALL parse date, amount, payee, and
 description directly from the file's standard fields without requiring
@@ -87,10 +95,12 @@ written to the ledger.
 
 ### Requirement: Detect likely duplicate transactions
 The system SHALL mark a candidate transaction as a likely duplicate when
-an existing transaction on the target account has the same date, the same
-amount, and a matching or highly similar description. Parts of a split
-transaction SHALL NOT be compared; the split transaction itself SHALL be.
-An import SHALL never change a split transaction or its parts.
+an existing transaction on the candidate's account has the same date,
+the same amount, and a matching or highly similar description. Each
+existing transaction SHALL mark at most one candidate of an import, the
+first matching one in file order. Parts of a split transaction SHALL NOT
+be compared; the split transaction itself SHALL be. An import SHALL
+never change a split transaction or its parts.
 
 #### Scenario: Flag a re-imported transaction
 - **WHEN** the user re-imports a file containing a transaction that was
@@ -115,16 +125,34 @@ An import SHALL never change a split transaction or its parts.
   date as a -30.00 part of a split "Pizzeria" transaction
 - **THEN** the line is not marked as a duplicate
 
+#### Scenario: Two identical payments on one day
+- **WHEN** the account has one -7.80 "LAGO Mons" transaction on 11
+  October, and an import has two -7.80 "LAGO Mons" lines on 11 October
+- **THEN** the first line is marked as a likely duplicate and the second
+  is not
+
+#### Scenario: Both identical payments re-imported
+- **WHEN** the account already has both -7.80 "LAGO Mons" transactions
+  on 11 October, and the same two lines are imported again
+- **THEN** both lines are marked as likely duplicates
+
 ### Requirement: Commit import
-The system SHALL create a transaction on the target account for each
-candidate the user confirms, and SHALL create no transactions until the
-user confirms the import.
+The system SHALL create a transaction for each candidate the user
+confirms, on that candidate's account: the target account, or the
+account a bank-export rule sent it to. It SHALL create no transactions
+until the user confirms the import.
 
 #### Scenario: Confirm an import
 - **WHEN** the user reviews the preview and confirms the import with 18
   of 20 candidates selected (2 duplicates excluded)
 - **THEN** the system creates exactly 18 transactions on the target
   account and the account's current balance reflects all of them
+
+#### Scenario: An import into two accounts
+- **WHEN** a Revolut import sends 26 Current lines to "Revolut" and 2
+  Savings lines to "Revolut Pockets", and the user confirms all of them
+- **THEN** 26 transactions are created in "Revolut" and 2 in "Revolut
+  Pockets"
 
 ### Requirement: Imported lines confirm created transfer counterparts
 When an import's preview contains a line with the same amount as a
@@ -151,9 +179,10 @@ creating a new transaction.
 ### Requirement: Committing an import auto-categorizes new transactions
 When an import is committed, the system SHALL run the categorizer (see the
 `auto-categorization` capability) over the transactions it creates. A line
-that confirms a created transfer counterpart SHALL NOT be categorized. The
-import's upload, mapping and preview steps SHALL NOT show or ask about
-categories.
+that confirms a created transfer counterpart, or that is linked as a
+pocket move (see the `bank-export-formats` capability), SHALL NOT be
+categorized. The import's upload, mapping and preview steps SHALL NOT
+show or ask about categories.
 
 #### Scenario: Imported repeat payees arrive categorized
 - **WHEN** the user commits an import of 20 lines, 14 of them from payees
@@ -164,6 +193,10 @@ categories.
 #### Scenario: A transfer confirmation stays a transfer
 - **WHEN** a committed line confirms a created transfer counterpart
 - **THEN** that transaction keeps its transfer link and gets no category
+
+#### Scenario: A pocket move stays a transfer
+- **WHEN** both sides of a Revolut pocket move are committed
+- **THEN** both are linked as a transfer and neither gets a category
 
 ### Requirement: Import summary points to the review
 After a commit that categorized at least one transaction, the import's
@@ -215,3 +248,38 @@ still be able to pick another account.
 - **WHEN** the user last opened Revolut's transactions and then opens
   Import from the navigation
 - **THEN** Import opens with "Revolut" selected
+
+### Requirement: Remember the CSV mapping per account
+After a CSV import is committed, the system SHALL remember its column
+mapping and date format for the target account. On the next CSV upload
+to that account, the mapping step SHALL preselect them, as long as every
+remembered column is in the new file. Otherwise it SHALL start empty, as
+today. The user SHALL be able to change a preselected choice.
+
+#### Scenario: Second upload is preselected
+- **WHEN** the user committed an import into "Joint" mapping "Posted
+  Date" (DD/MM/YYYY), "Amount" and "Description", then uploads another
+  file with the same columns to "Joint"
+- **THEN** the mapping step shows those columns and DD/MM/YYYY already
+  selected
+
+#### Scenario: Different columns start empty
+- **WHEN** the next file uploaded to "Joint" has no "Posted Date" column
+- **THEN** the mapping step starts with nothing selected
+
+#### Scenario: Remembered per account
+- **WHEN** the user uploads a CSV to "Savings", which was never imported
+  with a mapping
+- **THEN** the mapping step starts with nothing selected
+
+### Requirement: An import counts for every account it imports into
+A committed import SHALL count as an import of each account it sent
+lines to, even when all of that account's lines were duplicates or
+unticked. This includes the target account and any account a Revolut
+Product was sent to. A skipped Product's account SHALL NOT count.
+
+#### Scenario: The pocket account is imported too
+- **WHEN** on 24 October the user commits a Revolut import that sends
+  Current to "Revolut" and Savings to "Revolut Pockets"
+- **THEN** both accounts were last imported on 24 October, and neither
+  shows a stale-import reminder
