@@ -29,7 +29,7 @@
 
 ## 3. Bank presets
 
-- [ ] 3.1 Add `imports/presets.py` with `detect_preset(columns)` and the
+- [x] 3.1 Add `imports/presets.py` with `detect_preset(columns)` and the
   Crelan and Revolut parsers (Started Date, Amount − Fee, COMPLETED
   only, plus `product` and `started_at` per candidate). Verify with
   `SimpleTestCase` tests for:
@@ -40,7 +40,7 @@
   - "A card payment uses the day it was made", "The fee is part of the
     amount" and "Unfinished rows are left out", using rows from the
     proposal's Revolut sample.
-- [ ] 3.2 Add the pocket-pair pass: same `started_at`, opposite amounts,
+- [x] 3.2 Add the pocket-pair pass: same `started_at`, opposite amounts,
   different accounts. Verify with unit tests for the "To pocket EUR
   Electricity" -350/+350 pair, the unpaired "Luminus SA" row, and two
   rows on the same account that never pair.
