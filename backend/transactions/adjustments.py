@@ -81,7 +81,10 @@ def recompute_if_valued(account_id):
 
 @receiver(post_save, sender=Transaction)
 @receiver(post_delete, sender=Transaction)
-def _transaction_changed(sender, instance, **kwargs):
+def _transaction_changed(sender, instance, raw=False, **kwargs):
+    # A restore saves rows as they were (raw), adjustments included.
+    if raw:
+        return
     # Deleting an account cascades to its rows; there is nothing left to
     # recompute then.
     if Account.objects.filter(pk=instance.account_id).exists():
@@ -89,6 +92,6 @@ def _transaction_changed(sender, instance, **kwargs):
 
 
 @receiver(post_save, sender=Account)
-def _account_changed(sender, instance, created, **kwargs):
-    if not created:
+def _account_changed(sender, instance, created, raw=False, **kwargs):
+    if not created and not raw:
         recompute_if_valued(instance.pk)

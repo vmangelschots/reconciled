@@ -2,7 +2,7 @@
 
 ## 1. Backup format
 
-- [ ] 1.1 Create the `backup` Django app with no models and add it to
+- [x] 1.1 Create the `backup` Django app with no models and add it to
   `INSTALLED_APPS`. In `backup/format.py`:
   - list `BACKED_UP_MODELS` and `EXCLUDED_MODELS` (design D2);
   - document the version rule in the docstring (D4);
@@ -11,7 +11,7 @@
 
   Verify that the test passes and that it fails when a model is removed
   from `BACKED_UP_MODELS`.
-- [ ] 1.2 Write `build_backup()`, which returns the envelope from D1:
+- [x] 1.2 Write `build_backup()`, which returns the envelope from D1:
   - `app`, `format_version: 1`, `exported_at`;
   - the latest applied migration per backed-up app;
   - `summary`, with accounts and ledger-row transactions;
@@ -28,7 +28,7 @@
 
 ## 2. Restore
 
-- [ ] 2.1 Write `read_backup(data)`, which checks and deserializes without
+- [x] 2.1 Write `read_backup(data)`, which checks and deserializes without
   writing (D3 step 1). It raises a `BackupError` with the spec's messages:
   - not a Reconciled backup;
   - can't be read;
@@ -38,7 +38,7 @@
 
   Verify with a test per message, and check that the data is untouched after
   each.
-- [ ] 2.2 Write `restore_backup(objects)` (D3 step 2):
+- [x] 2.2 Write `restore_backup(objects)` (D3 step 2):
   - TRUNCATE the backed-up tables and the `imported_accounts` through table,
     with RESTART IDENTITY CASCADE;
   - raw-save every object, including its M2M;
@@ -61,12 +61,12 @@
 
 ## 3. API
 
-- [ ] 3.1 Add `GET /api/backup/`. It returns the envelope as JSON with
+- [x] 3.1 Add `GET /api/backup/`. It returns the envelope as JSON with
   `Content-Disposition: attachment; filename="reconciled-backup-YYYY-MM-DD.json"`.
 
   Verify with tests for the status, the header, the body, and 401 without a
   session.
-- [ ] 3.2 Add `POST /api/backup/restore/` (multipart `file`). It returns
+- [x] 3.2 Add `POST /api/backup/restore/` (multipart `file`). It returns
   `{"accounts": n, "transactions": m}` on success, or 400 with `detail` from
   `BackupError`. A missing file also gets a 400.
 

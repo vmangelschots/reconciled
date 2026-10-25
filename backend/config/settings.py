@@ -62,6 +62,7 @@ INSTALLED_APPS = [
     "imports",
     "forecasting",
     "reports",
+    "backup",
 ]
 
 MIDDLEWARE = [

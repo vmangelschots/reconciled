@@ -2,7 +2,7 @@
 
 ## Context
 
-- All of the user's data sits in eight models across five apps:
+- All of the user's data sits in nine models across five apps:
   - `accounts.Account`;
   - `transactions.Transaction`, with self-links for `transfer_counterpart`
     and `split_parent`;
@@ -76,7 +76,7 @@ The backup is Django's "python" serialization of each model,
 
 `backend/backup/format.py` holds:
 
-- `BACKED_UP_MODELS`: the eight models above, in dependency order (that
+- `BACKED_UP_MODELS`: the nine models above, in dependency order (that
   order only matters for readability, see Context);
 - `EXCLUDED_MODELS`: currently none in the data apps.
 
@@ -101,11 +101,15 @@ out. A test lists every model in `accounts`, `budgets`, `transactions`,
      ignorenonexistent=True)` into a list. This catches bad field values
      before any delete.
 2. **Write**, inside `transaction.atomic()`:
-   - `TRUNCATE … RESTART IDENTITY CASCADE` the eight tables and the
+   - `TRUNCATE … RESTART IDENTITY CASCADE` the nine tables and the
      `imported_accounts` through table;
    - `save()` each deserialized object, a raw save that also sets its M2M;
    - reset each table's id sequence with
      `connection.ops.sequence_reset_sql`.
+
+   Saving raw also tells the value-adjustment signal handlers to skip
+   their recompute, so adjustments aren't recalculated from a half-loaded
+   ledger and keep their stored amounts and times.
 
    An `IntegrityError` raised by the deferred FK check at commit (a dangling
    link) or any other database error rolls everything back. The endpoint
