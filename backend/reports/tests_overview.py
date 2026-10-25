@@ -7,7 +7,7 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from accounts.models import Account
-from budgets.models import Category, CategoryLimit
+from budgets.models import BudgetSettings, Category, CategoryLimit, YearlyBudget
 from imports.models import ImportSession
 from transactions.models import Transaction
 from transactions.splits import SplitLine, save_split
@@ -287,3 +287,86 @@ class OverviewTests(TestCase):
     def test_bad_or_missing_month(self):
         self.assertEqual(self.get(month="2026-13").status_code, 400)
         self.assertEqual(self.client.get(reverse("report-overview")).status_code, 400)
+
+
+@patch("reports.views._today", lambda: TODAY)
+class YearlyOverviewTests(TestCase):
+    """The yearly parts of openspec/specs/overview, at the API."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(get_user_model().objects.create_user(username="u", password="x"))
+        self.joint = Account.objects.create(name="Joint", account_type="checking", starting_balance_cents=0)
+        BudgetSettings.objects.create(pk=1, start_month=date(2026, 10, 1))
+        self.clothing = self.yearly("Clothing", 120000)
+
+    def yearly(self, name, cents, due=None):
+        category = Category.objects.create(name=name, budget_kind="target" if due else "yearly")
+        YearlyBudget.objects.create(
+            category=category, from_year=2026, amount_cents=cents,
+            due_month=due[0] if due else None, due_day=due[1] if due else None,
+        )
+        return category
+
+    def spend(self, category, cents, day, month=10):
+        Transaction.objects.create(
+            account=self.joint, date=date(2026, month, day), amount_cents=-cents, payee="x", category=category
+        )
+
+    def attention(self, month="2026-10"):
+        return self.client.get(reverse("report-overview"), {"month": month}).json()["attention"]["yearly"]
+
+    def test_yearly_spending_has_its_own_line(self):
+        groceries = Category.objects.create(name="Groceries")
+        CategoryLimit.objects.create(category=groceries, month=None, limit_cents=260000)
+        self.spend(groceries, 194000, 3)
+        self.spend(self.clothing, 18000, 5)
+        tax = self.yearly("Property tax", 40000, due=(11, 1))
+        self.spend(tax, 40000, 20)
+        budget = self.client.get(reverse("report-overview"), {"month": "2026-10"}).json()["budget"]
+        self.assertEqual(budget["spent_cents"], 194000)
+        self.assertEqual(budget["limit_cents"], 260000)
+        self.assertEqual(budget["yearly_spent_cents"], 58000)
+        self.assertEqual(budget["outside_cents"], 0)
+
+    def test_a_yearly_budget_ahead_of_pace(self):
+        self.spend(self.clothing, 27000, 5)
+        [item] = self.attention()
+        self.assertEqual((item["name"], item["state"], item["share"]), ("Clothing", "ahead", 90))
+
+    def test_on_pace_is_not_a_warning(self):
+        self.spend(self.clothing, 18000, 5)
+        self.assertEqual(self.attention(), [])
+
+    def test_targets_that_need_action(self):
+        tax = self.yearly("Property tax", 40000, due=(11, 1))
+        water = self.yearly("Water tax", 12000, due=(10, 1))
+        self.spend(water, 13500, 2)
+        with patch("reports.views._today", lambda: date(2026, 11, 9)):
+            items = self.attention("2026-11")
+        self.assertEqual([(i["name"], i["state"]) for i in items], [("Property tax", "overdue"), ("Water tax", "over")])
+        self.assertEqual(items[0]["due_date"], "2026-11-01")
+        self.assertEqual(tax.id, items[0]["id"])
+
+    def test_not_seen_yet_is_listed(self):
+        self.yearly("Property tax", 40000, due=(11, 1))
+        with patch("reports.views._today", lambda: date(2026, 11, 4)):
+            items = self.attention("2026-11")
+        self.assertEqual([(i["name"], i["state"]) for i in items], [("Property tax", "not_seen")])
+
+    def test_paid_within_tolerance_is_not_listed(self):
+        tax = self.yearly("Property tax", 40000, due=(11, 1))
+        self.spend(tax, 39812, 20)
+        self.assertEqual(self.attention(), [])
+
+    def test_due_soon_in_the_current_month(self):
+        self.yearly("Property tax", 40000, due=(11, 1))
+        self.assertEqual([i["state"] for i in self.attention()], ["due_soon"])
+
+    def test_a_past_month_lists_no_early_warnings(self):
+        self.yearly("Property tax", 40000, due=(11, 1))
+        self.spend(self.clothing, 27000, 5)
+        with patch("reports.views._today", lambda: date(2026, 11, 20)):
+            # October, seen from late November: the target was due soon at
+            # the end of October and Clothing was at 90%, but under budget.
+            self.assertEqual(self.attention("2026-10"), [])

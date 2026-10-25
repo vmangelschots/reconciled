@@ -1,3 +1,6 @@
+from datetime import date
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
@@ -8,7 +11,7 @@ from transactions.models import Transaction
 from transactions.splits import SplitLine, save_split
 from transactions.transfers import link_transfer
 
-from .models import Category, CategoryLimit
+from .models import BudgetSettings, Category, CategoryLimit, YearlyBudget
 
 
 class CategoryTests(TestCase):
@@ -391,12 +394,180 @@ class BudgetSummaryQueryTests(TestCase):
         client = APIClient()
         client.force_authenticate(user=get_user_model().objects.create_user(username="b", password="x"))
         account = Account.objects.create(name="Main", account_type="checking", starting_balance_cents=0)
+        BudgetSettings.objects.create(pk=1)
         for i in range(6):
             category = Category.objects.create(name=f"C{i}")
             CategoryLimit.objects.create(category=category, month=None, limit_cents=1000)
             Transaction.objects.create(account=account, date="2026-01-05", amount_cents=-100, payee="x", category=category)
+            yearly = Category.objects.create(name=f"Y{i}", budget_kind="yearly")
+            YearlyBudget.objects.create(category=yearly, from_year=2026, amount_cents=1000)
+            Transaction.objects.create(account=account, date="2026-01-05", amount_cents=-100, payee="x", category=yearly)
 
-        with self.assertNumQueries(4):
+        # Four for the monthly rows and uncategorized, one for the month's
+        # yearly spending, four for the yearly rows.
+        with self.assertNumQueries(9):
             response = client.get(reverse("budget-summary"), {"month": "2026-01"})
 
         self.assertEqual([c["spent_cents"] for c in response.json()["categories"]], [100] * 6)
+        self.assertEqual([c["spent_cents"] for c in response.json()["yearly"]["categories"]], [100] * 6)
+
+
+@patch("budgets.utils.today", lambda: date(2026, 10, 24))
+class BudgetKindTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(user=get_user_model().objects.create_user(username="b", password="x"))
+        self.clothing = Category.objects.create(name="Clothing")
+
+    def _set_budget(self, category, **body):
+        return self.client.put(reverse("category-set-budget", args=[category.id]), body, format="json")
+
+    def _category(self, category):
+        return next(c for c in self.client.get(reverse("category-list")).json() if c["id"] == category.id)
+
+    def test_new_categories_are_monthly(self):
+        response = self.client.post(reverse("category-list"), {"name": "Groceries"}, format="json")
+        self.assertEqual(response.json()["budget_kind"], "monthly")
+
+    def test_make_a_category_yearly(self):
+        response = self._set_budget(self.clothing, kind="yearly", amount_cents=120000)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["budget_kind"], "yearly")
+        self.assertEqual(response.json()["yearly"], {"amount_cents": 120000, "due": None})
+        self.assertEqual(YearlyBudget.objects.get().from_year, 2026)
+
+    def test_no_kind_for_a_tab(self):
+        tabs = Category.objects.create(name="Tabs", is_tab_group=True)
+        jan = Category.objects.create(name="Jan", parent=tabs)
+        self.assertEqual(self._set_budget(jan, kind="yearly", amount_cents=1000).status_code, 400)
+        self.assertEqual(self._set_budget(tabs, kind="yearly", amount_cents=1000).status_code, 400)
+
+    def test_monthly_to_yearly_drops_monthly_limits(self):
+        CategoryLimit.objects.create(category=self.clothing, month=None, limit_cents=10000)
+        CategoryLimit.objects.create(category=self.clothing, month=date(2026, 12, 1), limit_cents=25000)
+        self.assertEqual(self._category(self.clothing)["monthly_limits"], {"default_cents": 10000, "override_count": 1})
+        self._set_budget(self.clothing, kind="yearly", amount_cents=120000)
+        self.assertFalse(CategoryLimit.objects.exists())
+
+    def test_yearly_to_monthly_drops_yearly_amounts(self):
+        YearlyBudget.objects.create(category=self.clothing, from_year=2025, amount_cents=100000)
+        YearlyBudget.objects.create(category=self.clothing, from_year=2026, amount_cents=120000)
+        self.clothing.budget_kind = "yearly"
+        self.clothing.save()
+        response = self._set_budget(self.clothing, kind="monthly", amount_cents=10000)
+        self.assertEqual(response.json()["budget_kind"], "monthly")
+        self.assertFalse(YearlyBudget.objects.exists())
+        self.assertEqual(CategoryLimit.objects.get().limit_cents, 10000)
+
+    def test_nothing_to_drop(self):
+        self.assertEqual(self._category(self.clothing)["monthly_limits"], {"default_cents": None, "override_count": 0})
+        self.assertEqual(self._set_budget(self.clothing, kind="yearly", amount_cents=50000).status_code, 200)
+
+    def test_yearly_to_on_a_date_keeps_the_budget(self):
+        YearlyBudget.objects.create(category=self.clothing, from_year=2025, amount_cents=40000)
+        self.clothing.budget_kind = "yearly"
+        self.clothing.save()
+        response = self._set_budget(self.clothing, kind="target", amount_cents=40000, due="11-01")
+        self.assertEqual(response.json()["yearly"], {"amount_cents": 40000, "due": "11-01"})
+        self.assertEqual(
+            response.json()["yearly_history"],
+            [
+                {"from_year": 2026, "amount_cents": 40000, "due": "11-01"},
+                {"from_year": 2025, "amount_cents": 40000, "due": None},
+            ],
+        )
+
+    def test_a_due_date_is_required(self):
+        self.assertEqual(self._set_budget(self.clothing, kind="target", amount_cents=40000).status_code, 400)
+
+    def test_a_yearly_amount_is_required(self):
+        self.assertEqual(self._set_budget(self.clothing, kind="yearly").status_code, 400)
+
+    def test_no_monthly_limit_on_a_yearly_category(self):
+        self._set_budget(self.clothing, kind="yearly", amount_cents=120000)
+        response = self.client.put(
+            reverse("category-set-limit", args=[self.clothing.id]), {"month": None, "limit_cents": 100}, format="json"
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_set_a_target(self):
+        response = self._set_budget(self.clothing, kind="target", amount_cents=40000, due="11-01")
+        self.assertEqual(response.json()["yearly"], {"amount_cents": 40000, "due": "11-01"})
+
+    def test_reject_29_february(self):
+        self.assertEqual(self._set_budget(self.clothing, kind="target", amount_cents=40000, due="02-29").status_code, 400)
+
+    def test_a_change_mid_year_covers_the_whole_year(self):
+        self._set_budget(self.clothing, kind="yearly", amount_cents=120000)
+        self._set_budget(self.clothing, kind="yearly", amount_cents=150000)
+        self.assertEqual(list(YearlyBudget.objects.values_list("from_year", "amount_cents")), [(2026, 150000)])
+
+    def test_two_years_of_history(self):
+        self._set_budget(self.clothing, kind="yearly", amount_cents=120000)
+        with patch("budgets.utils.today", lambda: date(2027, 1, 5)):
+            self._set_budget(self.clothing, kind="yearly", amount_cents=150000)
+            self.assertEqual(self._category(self.clothing)["yearly"]["amount_cents"], 150000)
+        self.assertEqual(
+            [(h["from_year"], h["amount_cents"]) for h in self._category(self.clothing)["yearly_history"]],
+            [(2027, 150000), (2026, 120000)],
+        )
+
+    def test_several_changes_in_one_year(self):
+        for amount in (120000, 130000, 150000):
+            self._set_budget(self.clothing, kind="yearly", amount_cents=amount)
+        self.assertEqual(self._category(self.clothing)["yearly_history"], [{"from_year": 2026, "amount_cents": 150000, "due": None}])
+
+
+@patch("budgets.utils.today", lambda: date(2026, 10, 24))
+class YearlySummaryTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(user=get_user_model().objects.create_user(username="b", password="x"))
+        self.account = Account.objects.create(name="Main", account_type="checking", starting_balance_cents=0)
+        self.clothing = Category.objects.create(name="Clothing", budget_kind="yearly")
+        YearlyBudget.objects.create(category=self.clothing, from_year=2026, amount_cents=120000)
+        Transaction.objects.create(
+            account=self.account, date="2026-10-10", amount_cents=-18000, payee="x", category=self.clothing
+        )
+
+    def _summary(self, month="2026-10"):
+        return self.client.get(reverse("budget-summary"), {"month": month}).json()
+
+    def _set_start(self, start_month):
+        return self.client.put(reverse("budget-settings"), {"start_month": start_month}, format="json")
+
+    def test_viewing_october(self):
+        self._set_start("2026-10")
+        yearly = self._summary()["yearly"]
+        self.assertEqual((yearly["year"], yearly["through"], yearly["start_month"]), (2026, "2026-10-24", "2026-10-01"))
+        row = yearly["categories"][0]
+        self.assertEqual((row["budget_cents"], row["spent_cents"], row["remaining_cents"]), (30000, 18000, 12000))
+
+    def test_yearly_spending_line(self):
+        tax = Category.objects.create(name="Property tax", budget_kind="target")
+        YearlyBudget.objects.create(category=tax, from_year=2026, amount_cents=40000, due_month=11, due_day=1)
+        Transaction.objects.create(account=self.account, date="2026-10-20", amount_cents=-40000, payee="x", category=tax)
+        summary = self._summary()
+        self.assertEqual(summary["yearly_spent_cents"], 58000)
+        self.assertEqual(summary["categories"], [])
+        self.assertEqual(summary["uncategorized_spent_cents"], 0)
+
+    def test_set_the_start_month(self):
+        self.assertEqual(self._summary()["yearly"]["categories"][0]["budget_cents"], 120000)
+        response = self._set_start("2026-10")
+        self.assertEqual(response.json(), {"start_month": "2026-10"})
+        self.assertEqual(self.client.get(reverse("budget-settings")).json(), {"start_month": "2026-10"})
+        self.assertEqual(self._summary()["yearly"]["categories"][0]["budget_cents"], 30000)
+
+    def test_clear_the_start_month(self):
+        self._set_start("2026-10")
+        self.assertEqual(self._set_start(None).json(), {"start_month": None})
+        self.assertEqual(self._summary()["yearly"]["categories"][0]["budget_cents"], 120000)
+
+    def test_viewing_a_month_before_the_start(self):
+        self._set_start("2026-10")
+        yearly = self._summary("2026-09")["yearly"]
+        self.assertEqual((yearly["starts"], yearly["categories"]), ("2026-10-01", []))
+
+    def test_reject_a_malformed_start_month(self):
+        self.assertEqual(self._set_start("October").status_code, 400)

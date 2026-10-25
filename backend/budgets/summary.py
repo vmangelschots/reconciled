@@ -16,12 +16,13 @@ def budgeted_categories():
 
 
 def budget_rows(period_start):
-    """One row per budgeted category for the month starting at
+    """One row per monthly budgeted category for the month starting at
     `period_start`: its limit (the month's override, else the default,
     else None) and its spending, the net outflow of its transactions.
     Two grouped queries instead of one pair per category."""
     period_end = month_range(period_start)
-    categories = list(budgeted_categories())
+    # Yearly categories have their own figures - see budgets/yearly.py.
+    categories = list(budgeted_categories().filter(budget_kind=Category.BudgetKind.MONTHLY))
 
     spent = {
         row["category_id"]: -row["total"]

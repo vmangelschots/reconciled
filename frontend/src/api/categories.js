@@ -27,3 +27,14 @@ export function setCategoryLimit(id, { month, limit_cents }) {
     body: { month, limit_cents },
   });
 }
+
+// kind: "monthly" | "yearly" | "target" (yearly on a date). amount_cents is
+// the monthly default or the yearly amount; due is "MM-DD" for a target.
+// Switching to or from monthly removes the other kind's amounts - see
+// specs/yearly-budgets.
+export function setCategoryBudget(id, { kind, amount_cents, due }) {
+  return apiFetch(`/api/categories/${id}/budget/`, {
+    method: "PUT",
+    body: { kind, amount_cents, due },
+  });
+}

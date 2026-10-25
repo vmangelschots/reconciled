@@ -60,6 +60,14 @@ describe("ProgressBar", () => {
     expect(screen.getByTestId("progress-fill")).toHaveClass("bg-critical");
     expect(screen.queryByTestId("progress-marker")).toBeNull();
   });
+
+  it("turns amber with the warning tone until it is over", () => {
+    const { rerender } = render(<ProgressBar value={270} max={300} tone="warning" />);
+    expect(screen.getByTestId("progress-fill")).toHaveClass("bg-warning");
+
+    rerender(<ProgressBar value={330} max={300} tone="warning" />);
+    expect(screen.getByTestId("progress-fill")).toHaveClass("bg-critical");
+  });
 });
 
 describe("Panel", () => {

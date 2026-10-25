@@ -10,6 +10,7 @@ import * as overviewApi from "../api/overview";
 import * as reportsApi from "../api/reports";
 import * as tabsApi from "../api/tabs";
 import { formatMoney } from "../lib/money";
+import { formatDayMonth } from "../lib/yearlyBudgets";
 
 vi.mock("../api/accounts", () => ({ listAccounts: vi.fn() }));
 vi.mock("../api/overview", () => ({ getOverview: vi.fn() }));
@@ -225,6 +226,28 @@ describe("Budget tile", () => {
     expect(within(tile).queryByTestId("progress-marker")).toBeNull();
   });
 
+  it("shows yearly spending first in its own line", async () => {
+    overviewApi.getOverview.mockResolvedValue(overview({ budget: { yearly_spent_cents: 58000 } }));
+    renderPage();
+    const tile = await screen.findByRole("region", { name: "Budget" });
+
+    await waitFor(() => expect(tile).toHaveTextContent(`${eur(194000)} of ${eur(260000)}`));
+    expect(tile).toHaveTextContent(
+      `${eur(58000)} on yearly budgets · +${eur(12000)} outside budgets · ${eur(21300)} uncategorized`,
+    );
+  });
+
+  it("counts yearly spending in the month's total without limits", async () => {
+    overviewApi.getOverview.mockResolvedValue(
+      overview({
+        budget: { has_limits: false, limit_cents: 0, spent_cents: 0, outside_cents: 50000, uncategorized_cents: 0, yearly_spent_cents: 58000 },
+      }),
+    );
+    renderPage();
+    const tile = await screen.findByRole("region", { name: "Budget" });
+    await waitFor(() => expect(tile).toHaveTextContent(eur(108000)));
+  });
+
   it("offers to set budgets when there are none", async () => {
     overviewApi.getOverview.mockResolvedValue(
       overview({ budget: { has_limits: false, limit_cents: 0, spent_cents: 0, outside_cents: 50000, uncategorized_cents: 0 } }),
@@ -274,6 +297,62 @@ describe("Needs attention", () => {
       "/budgets?month=2026-10",
       "/import?account=2",
     ]);
+  });
+
+  it("lists yearly warnings after category warnings", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 9, 24));
+    overviewApi.getOverview.mockResolvedValue(
+      overview({
+        accounts: [{ id: 2, name: "Crelan", balance_cents: 0, last_import_date: "2026-10-12" }],
+        attention: {
+          review_count: 12,
+          uncategorized_count: 4,
+          categories: [
+            { id: 5, name: "Groceries", parent_name: null, spent_cents: 41200, limit_cents: 35000, share: 117, over: true },
+            { id: 6, name: "Restaurants", parent_name: null, spent_cents: 18000, limit_cents: 20000, share: 90, over: false },
+          ],
+          yearly: [
+            {
+              id: 8, name: "Property tax", parent_name: null, kind: "target", state: "due_soon", share: 0,
+              spent_cents: 0, budget_cents: 40000, due_date: "2026-11-01",
+            },
+          ],
+        },
+      }),
+    );
+    renderPage();
+    const attention = await screen.findByRole("region", { name: "Needs attention" });
+
+    await waitFor(() => expect(within(attention).getAllByRole("link")).toHaveLength(6));
+    const links = within(attention).getAllByRole("link");
+    expect(links.map((l) => l.textContent.split(/(?<=[a-z%)])(?=[A-Z€])/)[0])).toEqual([
+      "12 guesses to review",
+      `4 uncategorized (${eur(21300)} this month)`,
+      `Groceries ${eur(6200)} over`,
+      "Restaurants at 90%",
+      "Property tax due in 8 days",
+      "Crelan: last import 12 days ago",
+    ]);
+    expect(links[4]).toHaveAttribute("href", "/budgets?month=2026-10");
+    expect(links[4]).toHaveTextContent(`Due ${formatDayMonth("2026-11-01")} · ${eur(0)} of ${eur(40000)}`);
+    vi.useRealTimers();
+  });
+
+  it.each([
+    [{ kind: "yearly", state: "ahead", share: 90, spent_cents: 27000, budget_cents: 30000, due_date: null }, "Clothing at 90% of 2026", "Yearly · €270 of €300"],
+    [{ kind: "yearly", state: "over", share: 110, spent_cents: 33000, budget_cents: 30000, due_date: null }, "Clothing €30 over", "Yearly · €330 of €300"],
+    [{ kind: "target", state: "overdue", share: 0, spent_cents: 0, budget_cents: 40000, due_date: "2026-10-01" }, "Clothing overdue", null],
+    [{ kind: "target", state: "not_seen", share: 0, spent_cents: 0, budget_cents: 40000, due_date: "2026-10-20" }, "Clothing not seen yet", null],
+    [{ kind: "target", state: "partly_paid", share: 75, spent_cents: 30000, budget_cents: 40000, due_date: "2026-10-01" }, "Clothing €100 short", null],
+  ])("words a yearly item %o", async (fields, primary, secondary) => {
+    overviewApi.getOverview.mockResolvedValue(
+      overview({ attention: { yearly: [{ id: 3, name: "Clothing", parent_name: null, ...fields }] } }),
+    );
+    renderPage();
+    const attention = await screen.findByRole("region", { name: "Needs attention" });
+    const link = await within(attention).findByRole("link", { name: new RegExp(primary.replace(/[€%]/g, ".")) });
+    if (secondary) expect(link).toHaveTextContent(secondary.replace(/€(\d+)/g, (_, n) => eur(Number(n) * 100)));
   });
 
   it("opens Budgets on the month being viewed", async () => {
