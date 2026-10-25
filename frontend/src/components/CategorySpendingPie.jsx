@@ -39,7 +39,11 @@ function LegendRow({ slice, total, active, onActivate, onDeactivate, onDrill }) 
   const drillable = slice.children?.length > 0 && onDrill;
   const content = (
     <>
-      <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: slice.fill, opacity: slice.opacity }} aria-hidden="true" />
+      {/* An SVG swatch, so Uncategorized's url(#pattern) fill resolves -
+          as a CSS background it would load the page URL as an image. */}
+      <svg className="h-2.5 w-2.5 shrink-0" viewBox="0 0 10 10" aria-hidden="true">
+        <rect width="10" height="10" rx="2" fill={slice.fill} fillOpacity={slice.opacity} />
+      </svg>
       <span className="min-w-0 flex-1 truncate text-ink-primary">{slice.name}</span>
       <span className="shrink-0 tabular-nums text-ink-primary">{formatMoney(slice.cents)}</span>
       <span className="w-10 shrink-0 text-right tabular-nums text-ink-muted">{sharePercent(slice.cents, total)}%</span>
