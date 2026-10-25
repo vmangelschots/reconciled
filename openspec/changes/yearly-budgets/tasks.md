@@ -21,13 +21,13 @@
 
 ## 3. Budgets API
 
-- [ ] 3.1 Add `PUT /api/categories/{id}/budget/` (kind, amount, due). It follows the switching rules in design.md and rejects tabs, 29 February, a target without a due date, and a missing yearly amount. Make `PUT .../limit/` reject non-monthly categories. Expose `budget_kind`, the current yearly values, `yearly_history` and `monthly_limits` on the category serializer. Verify with tests for:
+- [x] 3.1 Add `PUT /api/categories/{id}/budget/` (kind, amount, due). It follows the switching rules in design.md and rejects tabs, 29 February, a target without a due date, and a missing yearly amount. Make `PUT .../limit/` reject non-monthly categories. Expose `budget_kind`, the current yearly values, `yearly_history` and `monthly_limits` on the category serializer. Verify with tests for:
   - "New categories are monthly", "Make a category yearly" and "No kind for a tab";
   - "Monthly to yearly", "Yearly to monthly" and "Nothing to drop" (the rows deleted or kept);
   - "Yearly to on a date" and "A due date is required";
   - "No monthly limit on a yearly category", "Set a target" and "Reject 29 February";
   - "A change mid-year covers the whole year", "Two years of history" and "Several changes in one year".
-- [ ] 3.2 Add `GET/PUT /api/budgets/settings/` for the start month. Add `yearly_spent_cents` and the `yearly` section (with `through`) to `GET /api/budgets/summary/`. Verify with tests for "Viewing October", "Yearly spending line", "Set the start month" (figures change after the PUT) and "Clear the start month".
+- [x] 3.2 Add `GET/PUT /api/budgets/settings/` for the start month. Add `yearly_spent_cents` and the `yearly` section (with `through`) to `GET /api/budgets/summary/`. Verify with tests for "Viewing October", "Yearly spending line", "Set the start month" (figures change after the PUT) and "Clear the start month".
 
 ## 4. Budgets page
 
