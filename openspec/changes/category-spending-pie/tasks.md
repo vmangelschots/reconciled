@@ -27,7 +27,7 @@
 
 ## 4. Check
 
-- [ ] 4.1 In the local stack, with a month of at least nine categories, some subcategories and some uncategorized spending, check the switch, the donut, the legend, Other, hatching, hover, drilling in and back, the table under the pie, and the remembered choice after a reload. Do this in light and dark mode at full width and at 390px. Verify that frontend `npm test`, `npm run lint` and `npm run build` pass.
+- [x] 4.1 In the local stack, with a month of at least nine categories, some subcategories and some uncategorized spending, check the switch, the donut, the legend, Other, hatching, hover, drilling in and back, the table under the pie, and the remembered choice after a reload. Do this in light and dark mode at full width and at 390px. Verify that frontend `npm test`, `npm run lint` and `npm run build` pass.
 
 ## Workflow follow-up
 
