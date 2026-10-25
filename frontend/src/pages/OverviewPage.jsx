@@ -1,5 +1,6 @@
 import {
   AlertTriangle,
+  CalendarClock,
   ChartBarDecreasing,
   ChartPie,
   CheckCircle2,
@@ -9,7 +10,7 @@ import {
   Tag,
   Upload,
 } from "lucide-react";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { Link } from "react-router-dom";
 import { getOverview } from "../api/overview";
 import { getCashFlow, getCategorySpending } from "../api/reports";
@@ -33,6 +34,7 @@ import { cn } from "../lib/cn";
 import { formatShortDate } from "../lib/dates";
 import { formatMoneyWhole } from "../lib/money";
 import { currentMonth, daysSince, monthLabel, monthName } from "../lib/months";
+import { formatDayMonth } from "../lib/yearlyBudgets";
 import { useAccounts } from "../accounts/AccountsContext";
 
 // The last import counts as stale after this many days - see the
@@ -81,13 +83,15 @@ function BalanceTile({ data, month, isCurrent }) {
 }
 
 function BudgetTile({ budget }) {
+  const yearlySpent = budget.yearly_spent_cents ?? 0;
   const extras = [
+    yearlySpent > 0 && `${whole(yearlySpent)} on yearly budgets`,
     budget.outside_cents > 0 && `+${whole(budget.outside_cents)} outside budgets`,
     budget.uncategorized_cents > 0 && `${whole(budget.uncategorized_cents)} uncategorized`,
   ].filter(Boolean);
 
   if (!budget.has_limits) {
-    const spent = budget.spent_cents + budget.outside_cents + budget.uncategorized_cents;
+    const spent = budget.spent_cents + budget.outside_cents + budget.uncategorized_cents + yearlySpent;
     return (
       <Stat label="Spent" value={whole(spent)}>
         <Link to="/budgets" className="text-sm text-accent hover:underline">
@@ -122,7 +126,17 @@ function BudgetTile({ budget }) {
         {left < 0 ? `${whole(-left)} over` : `${whole(left)} left`}
         {perDay != null && ` · ${whole(perDay)} a day`}
       </span>
-      {extras.length > 0 && <span className="text-xs text-ink-muted">{extras.join(" · ")}</span>}
+      {extras.length > 0 && (
+        // Each piece stays on one line, so the line only breaks between them.
+        <span className="flex flex-wrap gap-x-1 text-xs text-ink-muted">
+          {extras.map((extra, i) => (
+            <Fragment key={extra}>
+              {i > 0 && " "}
+              <span className="whitespace-nowrap">{i > 0 ? `· ${extra}` : extra}</span>
+            </Fragment>
+          ))}
+        </span>
+      )}
     </Stat>
   );
 }
@@ -205,9 +219,43 @@ function attentionItems(data, month, isCurrent) {
       tone: c.over ? "text-critical" : undefined,
     });
   }
+  for (const y of attention.yearly ?? []) items.push(yearlyItem(y, month));
   const stale = staleImportItem(data.accounts);
   if (stale) items.push(stale);
   return items;
+}
+
+// A yearly budget or target that needs attention - see specs/overview,
+// "Yearly warnings".
+function yearlyItem(y, month) {
+  const over = y.spent_cents - y.budget_cents;
+  const daysLeft = y.due_date ? -daysSince(y.due_date) : null;
+  const primary = {
+    over: `${y.name} ${whole(over)} over`,
+    ahead: `${y.name} at ${y.share}% of ${month.slice(0, 4)}`,
+    due_soon: `${y.name} due ${daysLeft === 0 ? "today" : daysLeft === 1 ? "tomorrow" : `in ${daysLeft} days`}`,
+    not_seen: `${y.name} not seen yet`,
+    overdue: `${y.name} overdue`,
+    partly_paid: `${y.name} ${whole(-over)} short`,
+  }[y.state];
+  const figures =
+    y.kind === "target"
+      ? `Due ${formatDayMonth(y.due_date)} · ${whole(y.spent_cents)} of ${whole(y.budget_cents)}`
+      : `Yearly · ${whole(y.spent_cents)} of ${whole(y.budget_cents)}`;
+  const critical = y.state === "over" || y.state === "overdue";
+  return {
+    key: `yearly-${y.id}`,
+    to: `/budgets?month=${month}`,
+    icon:
+      y.state === "due_soon" ? (
+        <CalendarClock className="h-4 w-4 text-ink-muted" />
+      ) : (
+        <AlertTriangle className={cn("h-4 w-4", critical ? "text-critical" : "text-warning")} />
+      ),
+    primary,
+    secondary: `${y.parent_name ? `${y.parent_name} · ` : ""}${figures}`,
+    tone: critical ? "text-critical" : undefined,
+  };
 }
 
 function NeedsAttention({ data, month, isCurrent }) {

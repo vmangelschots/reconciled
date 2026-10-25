@@ -10,6 +10,7 @@ from accounts.models import Account
 from budgets.models import Category
 from budgets.summary import budget_rows
 from budgets.utils import month_range, parse_month
+from budgets.yearly import yearly_rows, yearly_spent_cents
 from imports.models import ImportSession
 from transactions.categorize import needs_review, uncategorized
 from transactions.models import Transaction
@@ -164,6 +165,54 @@ def _attention_categories(rows, pace):
     return over + warn
 
 
+# Yearly warnings, most pressing first - see openspec/specs/overview.
+YEARLY_ORDER = ["overdue", "over", "partly_paid", "not_seen", "ahead", "due_soon"]
+
+
+def _attention_yearly(yearly, current):
+    """Yearly budgets and targets that need attention in the chosen month.
+    Due soon and ahead of pace are early warnings, so only for the current
+    month; a target paid within its tolerance is never listed."""
+    names = {}
+    items = []
+    for row in yearly["categories"]:
+        names[row["category_id"]] = row["category_name"]
+        if row["kind"] == "target":
+            state = "over" if row["state"] == "paid_over" else row["state"]
+        elif row["over"]:
+            state = "over"
+        elif row["ahead"]:
+            state = "ahead"
+        else:
+            continue
+        if state not in YEARLY_ORDER or (not current and state in ("due_soon", "ahead")):
+            continue
+        items.append(
+            {
+                "id": row["category_id"],
+                "name": row["category_name"],
+                "parent_id": row["parent_id"],
+                "kind": row["kind"],
+                "state": state,
+                "share": row["spent_cents"] * 100 // row["budget_cents"] if row["budget_cents"] > 0 else None,
+                "spent_cents": row["spent_cents"],
+                "budget_cents": row["budget_cents"],
+                "due_date": row["due_date"],
+            }
+        )
+    parents = dict(Category.objects.filter(id__in={i["parent_id"] for i in items if i["parent_id"]}).values_list("id", "name"))
+    for item in items:
+        item["parent_name"] = parents.get(item.pop("parent_id"))
+    items.sort(
+        key=lambda i: (
+            YEARLY_ORDER.index(i["state"]),
+            -(i["spent_cents"] - i["budget_cents"]) if i["state"] == "over" else 0,
+            -(i["share"] or 0) if i["state"] == "ahead" else 0,
+        )
+    )
+    return items
+
+
 def _category_label(category):
     if category is None:
         return None
@@ -223,6 +272,8 @@ class OverviewView(APIView):
         )
 
         rows = budget_rows(month)
+        yearly = yearly_rows(month, today)
+        yearly_spent = yearly_spent_cents(month)
         limited = [r for r in rows if r["limit_cents"] is not None]
         _, uncategorized_cents = month_spending(month)
         days_in_month = (month_end - month).days
@@ -256,6 +307,7 @@ class OverviewView(APIView):
                         r["spent_cents"] for r in rows if r["limit_cents"] is None and r["spent_cents"] > 0
                     ),
                     "uncategorized_cents": uncategorized_cents,
+                    "yearly_spent_cents": yearly_spent,
                     "pace": pace,
                     "days_left": days_in_month - today.day + 1 if current else None,
                 },
@@ -263,6 +315,7 @@ class OverviewView(APIView):
                     "review_count": needs_review().count(),
                     "uncategorized_count": uncategorized().count(),
                     "categories": _attention_categories(rows, pace),
+                    "yearly": _attention_yearly(yearly, current),
                 },
                 "recent": [_recent_row(t) for t in recent],
             }

@@ -65,12 +65,12 @@
 
 ## 5. Overview
 
-- [ ] 5.1 In `OverviewView`, add `budget.yearly_spent_cents` and `attention.yearly`, ordered as in the spec, and leave out targets paid within the tolerance. Verify with `reports/tests_overview.py` cases for:
+- [x] 5.1 In `OverviewView`, add `budget.yearly_spent_cents` and `attention.yearly`, ordered as in the spec, and leave out targets paid within the tolerance. Verify with `reports/tests_overview.py` cases for:
   - "Yearly spending has its own line";
   - "A yearly budget ahead of pace" and "On pace is not a warning";
   - "Targets that need action", "Not seen yet is listed" and "Paid within tolerance is not listed";
   - "A past month lists no early warnings".
-- [ ] 5.2 In `OverviewPage.jsx`:
+- [x] 5.2 In `OverviewPage.jsx`:
   - put "€X on yearly budgets" first in the tile's line, with nowrap pieces, and include it in the no-limits total;
   - render the yearly attention items after category warnings, with their second lines and icon colours as in design.md, linking to Budgets on the chosen month.
 
