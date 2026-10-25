@@ -110,7 +110,7 @@
 
 ## 7. End-to-end check
 
-- [ ] 7.1 On the local stack, against throwaway accounts:
+- [x] 7.1 On the local stack, against throwaway accounts:
   - Import the proposal's Revolut sample with Savings sent to a pocket
     account. Check that the dates are the Started Dates, that the
     Current balance change equals the sum of the Current amounts, that
@@ -123,6 +123,22 @@
     follow the fallback order.
   - Delete the throwaway accounts afterwards, and leave the real
     accounts untouched.
+
+  Ran against a throwaway Postgres container and a dev server, not the
+  real local stack, so this branch's migrations never touched real data:
+  - The full 29-line Revolut sample created 29 lines. The first Vanalles
+    line is dated 30 September (its Started Date).
+  - The Current balance change was -19.14, equal to the file's Current
+    amounts. The pocket account held +95.28 (+350.00 - 254.72).
+  - The pocket move was linked with no category and
+    `created_by_transfer` False.
+  - All three accounts show today as last import.
+  - The re-import preselected Savings and flagged 29 of 29 lines as
+    duplicates, including both LAGO Mons -7.80 lines.
+  - A real 608-row Crelan export was recognized and committed. Payees
+    came from Tegenpartij 599 times, Mededeling 4 and Type verrichting
+    5, and none were empty.
+  - The container was removed afterwards.
 
 ## Workflow follow-up
 
