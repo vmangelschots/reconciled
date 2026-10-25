@@ -127,9 +127,10 @@ are never a sum of its subcategories' figures, and vice versa.
 The system SHALL exclude uncategorized transactions from every category's
 spend total, and SHALL report the total amount of uncategorized
 transactions for the month separately. Transfers between the user's
-accounts SHALL NOT count as uncategorized spend. A split transaction
-SHALL NOT count as uncategorized spend; its parts SHALL count toward
-their own categories, or as uncategorized spend when they have none.
+accounts and value adjustments SHALL NOT count as uncategorized spend. A
+split transaction SHALL NOT count as uncategorized spend; its parts
+SHALL count toward their own categories, or as uncategorized spend when
+they have none.
 
 #### Scenario: Uncategorized spend is shown separately
 - **WHEN** a month has 50.00 in uncategorized transactions
@@ -146,6 +147,11 @@ their own categories, or as uncategorized spend when they have none.
   "Groceries" and -20.00 with no category
 - **THEN** the budget summary shows 40.00 spent in "Groceries" and 20.00
   as uncategorized spend
+
+#### Scenario: Value adjustments are not uncategorized spend
+- **WHEN** a month has 50.00 in uncategorized transactions and a
+  -8,000.00 value adjustment on "Funds"
+- **THEN** the budget summary shows 50.00 as uncategorized spend
 
 ### Requirement: Mark a top-level category as a tab group
 The system SHALL let the user mark a top-level category as a tab group,

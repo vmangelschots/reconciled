@@ -57,36 +57,6 @@ account's transactions.
 - **THEN** it is not listed, and the 8 rows are the most recent other
   transactions
 
-### Requirement: Accounts tile
-The overview SHALL show an Accounts tile listing each active account with
-its current balance and how long ago it was last imported: "imported
-today", "imported N days ago", or "No imports yet". The import line SHALL
-use the warning colour when the last import is more than 7 days ago or
-there is none. For an investment, property or loan account, the line
-SHALL instead say when its value was last set ("value set 1 Oct", or
-"No value set"), never in the warning colour. Each row SHALL open that
-account's transactions.
-
-#### Scenario: Two accounts
-- **WHEN** on 24 October "Revolut" has 2,140.00, last imported on 21
-  October, and "Crelan" has 1,342.00, last imported on 12 October
-- **THEN** the tile lists "Revolut €2,140 · imported 3 days ago" and
-  "Crelan €1,342 · imported 12 days ago", the second in the warning
-  colour
-
-#### Scenario: A new account
-- **WHEN** "Savings" has never been imported
-- **THEN** its row says "No imports yet" in the warning colour
-
-#### Scenario: A valued account
-- **WHEN** "House" (property) was last set to a value on 1 October and
-  never imported
-- **THEN** its row says "value set 1 Oct" in the normal muted colour
-
-#### Scenario: Open an account
-- **WHEN** the user selects "Crelan" in the tile
-- **THEN** Crelan's transactions open
-
 ### Requirement: Stale import reminder
 Needs attention SHALL show one stale-import line when any active account
 was last imported more than 7 days ago or never. Investment, property
@@ -116,6 +86,16 @@ one.
 - **THEN** no import item is shown
 
 ## ADDED Requirements
+
+### Requirement: Valued accounts in the Accounts tile
+For an investment, property or loan account, the Accounts tile line
+SHALL say when its value was last set ("value set 1 Oct", or "No value
+set") instead of when it was last imported, never in the warning colour.
+
+#### Scenario: A valued account
+- **WHEN** "House" (property) was last set to a value on 1 October and
+  never imported
+- **THEN** its row says "value set 1 Oct" in the normal muted colour
 
 ### Requirement: Everyday money and net worth
 When the active accounts span more than one tier, the Balance tile SHALL
