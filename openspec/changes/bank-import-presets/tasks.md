@@ -85,7 +85,7 @@
 
 ## 5. Last import
 
-- [ ] 5.1 Switch the reports' last-import query to `imported_accounts`.
+- [x] 5.1 Switch the reports' last-import query to `imported_accounts`.
   Verify with a `reports` overview test for "The pocket account is
   imported too", and that `test_last_import_date_per_account` still
   passes.

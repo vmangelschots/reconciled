@@ -249,11 +249,13 @@ class OverviewView(APIView):
         month_end = month_range(month)
 
         accounts = list(Account.objects.filter(archived=False).order_by("name", "id"))
+        # An import counts for every account it sent lines to, such as a
+        # Revolut pocket account next to the upload's account.
         last_imports = dict(
-            ImportSession.objects.filter(account__in=accounts, status=ImportSession.Status.COMMITTED)
-            .values("account_id")
+            ImportSession.objects.filter(imported_accounts__in=accounts, status=ImportSession.Status.COMMITTED)
+            .values("imported_accounts")
             .annotate(last=Max("updated_at"))
-            .values_list("account_id", "last")
+            .values_list("imported_accounts", "last")
         )
         account_rows = [
             {

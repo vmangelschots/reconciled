@@ -220,6 +220,7 @@ class OverviewTests(TestCase):
         for status, day in ((ImportSession.Status.COMMITTED, 12), (ImportSession.Status.COMMITTED, 3),
                             (ImportSession.Status.PENDING, 20)):
             session = ImportSession.objects.create(account=self.joint, file_format="csv", raw_content="", status=status)
+            session.imported_accounts.add(self.joint)
             ImportSession.objects.filter(pk=session.pk).update(
                 updated_at=datetime(2026, 10, day, 10, tzinfo=dt_timezone.utc)
             )
@@ -227,7 +228,17 @@ class OverviewTests(TestCase):
         accounts = {a["name"]: a["last_import_date"] for a in self.body()["accounts"]}
         self.assertEqual(accounts, {"Joint": "2026-10-12", "Savings": None})
 
-    # --- recent ---
+    def test_the_pocket_account_is_imported_too(self):
+        session = ImportSession.objects.create(
+            account=self.joint, file_format="csv", raw_content="", status=ImportSession.Status.COMMITTED
+        )
+        session.imported_accounts.set([self.joint, self.savings])
+        ImportSession.objects.filter(pk=session.pk).update(updated_at=datetime(2026, 10, 24, 10, tzinfo=dt_timezone.utc))
+
+        accounts = {a["name"]: a["last_import_date"] for a in self.body()["accounts"]}
+        self.assertEqual(accounts, {"Joint": "2026-10-24", "Savings": "2026-10-24"})
+
+        # --- recent ---
 
     def test_last_eight_with_a_split_listed_once(self):
         for day in range(1, 11):
