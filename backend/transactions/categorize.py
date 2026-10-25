@@ -143,11 +143,15 @@ def categorize(transactions):
     the AI step: a failure only leaves its rows uncategorized."""
     guesser = get_guesser()
     result = CategorizeResult(ai_status="off" if guesser is None else "skipped")
-    # A split transaction and its parts are never guessed.
+    # A split transaction and its parts are never guessed, nor is a value
+    # adjustment.
     candidates = [
         t
         for t in transactions
-        if t.category_id is None and t.transfer_counterpart_id is None and t.split_parent_id is None
+        if t.category_id is None
+        and t.transfer_counterpart_id is None
+        and t.split_parent_id is None
+        and not t.is_adjustment
     ]
     split = set(
         Transaction.objects.filter(split_parent__in=[t.pk for t in candidates]).values_list(
@@ -214,15 +218,16 @@ def categorize(transactions):
 
 def needs_review():
     """Transactions whose category is a guess nobody has confirmed yet."""
-    return Transaction.objects.filter(category__isnull=False, category_confirmed=False)
+    return Transaction.objects.excluding_adjustments().filter(category__isnull=False, category_confirmed=False)
 
 
 def uncategorized():
-    """What the backfill can try: no category, not a transfer, and not a
-    split transaction or one of its parts."""
+    """What the backfill can try: no category, not a transfer or a value
+    adjustment, and not a split transaction or one of its parts."""
     return (
         Transaction.objects.ledger_rows()
         .counted_rows()
+        .excluding_adjustments()
         .filter(category__isnull=True, transfer_counterpart__isnull=True)
     )
 

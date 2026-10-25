@@ -77,6 +77,8 @@ class TransactionViewSet(viewsets.ModelViewSet):
         parts. A 400 is {"detail", "line"}: line is the index of the part
         it concerns, or null."""
         txn = self.get_object()
+        if txn.is_adjustment:
+            return self._split_error("A value adjustment can't be split.")
         if request.method == "DELETE":
             return self._unsplit(txn, request.data or {})
 
@@ -161,8 +163,9 @@ class TransactionViewSet(viewsets.ModelViewSet):
         ids = request.data.get("ids")
         if not isinstance(ids, list) or not all(isinstance(i, int) for i in ids):
             return Response({"ids": ["A list of transaction ids is required."]}, status=status.HTTP_400_BAD_REQUEST)
-        # A transfer never has a category, so it's never confirmed this way.
-        rows = Transaction.objects.filter(pk__in=ids, transfer_counterpart__isnull=True)
+        # A transfer never has a category, so it's never confirmed this way,
+        # and neither is a value adjustment.
+        rows = Transaction.objects.excluding_adjustments().filter(pk__in=ids, transfer_counterpart__isnull=True)
 
         if "category" not in request.data:
             confirmed = rows.filter(category__isnull=False, category_confirmed=False).update(

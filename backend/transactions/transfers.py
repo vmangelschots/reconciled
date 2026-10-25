@@ -38,8 +38,10 @@ def _find_match(txn, target_account):
     candidates = (
         # A split transaction or a part is never the other side: the
         # bank line and its parts carry the amount separately.
+        # Nor is a value adjustment.
         Transaction.objects.counted_rows()
         .ledger_rows()
+        .excluding_adjustments()
         .select_for_update()
         .filter(
             account=target_account,
@@ -84,6 +86,8 @@ def link_transfer(txn, target_account):
         raise TransferError("Archived accounts can't be used for new transfers.")
     if txn.parts.exists():
         raise TransferError("A split transaction can't be a transfer. Unsplit it first.")
+    if txn.is_adjustment:
+        raise TransferError("A value adjustment can't be a transfer.")
 
     if txn.transfer_counterpart_id is not None:
         if txn.transfer_counterpart.account_id == target_account.pk:

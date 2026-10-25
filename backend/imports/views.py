@@ -8,6 +8,7 @@ from rest_framework.parsers import JSONParser, MultiPartParser
 from rest_framework.response import Response
 
 from accounts.models import Account
+from transactions.adjustments import recompute_if_valued
 from transactions.ai import get_guesser
 from transactions.categorize import categorize
 from transactions.models import Transaction
@@ -213,6 +214,11 @@ class ImportSessionViewSet(
                 if pair and c["index"] < pair["index"] and c["index"] in new_rows and pair["index"] in new_rows:
                     link_pair(new_rows[c["index"]], new_rows[pair["index"]])
                     pocket_moves.update((c["index"], pair["index"]))
+
+            # bulk_create sends no signals, so value adjustments in the
+            # imported accounts are brought up to date here.
+            for account_id in {row.account_id for row in created}:
+                recompute_if_valued(account_id)
 
             session.status = ImportSession.Status.COMMITTED
             session.save(update_fields=["status"])

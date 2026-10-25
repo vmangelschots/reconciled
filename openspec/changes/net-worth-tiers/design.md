@@ -80,9 +80,10 @@ adjustments, which were already recomputed. It writes with
 `QuerySet.update()` so it triggers nothing itself. It runs from
 `post_save`/`post_delete` signals on `Transaction` (any row in an account
 that has adjustments) and `post_save` on `Account` (starting balance).
-Signals catch every write path: API edits, imports, transfer counterparts
-and splits. Explicit calls would have to be added to each of those and
-kept in sync. The work is a handful of rows per account, since only
+Signals catch every single-row write path: API edits, transfer
+counterparts and splits. Import commit creates its rows with
+`bulk_create`, which sends no signals, so it calls `recompute_if_valued`
+for each account it imported into. The work is a handful of rows per account, since only
 valued accounts have adjustments.
 
 Rows dated on the same day as an adjustment count as before it ("the

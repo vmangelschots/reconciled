@@ -193,8 +193,8 @@ def flag_duplicates(account, candidates):
 
     by_date_amount = {}
     # The bank's lines only: a split transaction is compared, its parts
-    # never are.
-    for txn in Transaction.objects.ledger_rows().filter(account=account):
+    # never are, and neither is a value adjustment.
+    for txn in Transaction.objects.ledger_rows().excluding_adjustments().filter(account=account):
         by_date_amount.setdefault((txn.date.isoformat(), txn.amount_cents), []).append(txn)
 
     claimed = set()

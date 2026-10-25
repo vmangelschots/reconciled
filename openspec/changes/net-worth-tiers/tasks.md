@@ -22,26 +22,26 @@
 
 ## 2. Adjustment transactions
 
-- [ ] 2.1 Add `Transaction.is_adjustment` and `adjustment_value_cents`
+- [x] 2.1 Add `Transaction.is_adjustment` and `adjustment_value_cents`
   (migration), and a `TransactionQuerySet.excluding_adjustments()`
   helper. Verify that `makemigrations --check` is clean and the existing
   `transactions` tests pass.
-- [ ] 2.2 Add `recompute_adjustments(account)` and the signals that run it
+- [x] 2.2 Add `recompute_adjustments(account)` and the signals that run it
   on transaction save/delete and account save, as in design.md. Verify
   with tests for "Back-dating keeps a later value", "An earlier
   transaction arrives", "Later transactions still count", "Delete the
   latest adjustment", "Delete an earlier adjustment", and a starting
   balance edit on an account with an adjustment.
-- [ ] 2.3 Add `POST /api/accounts/{id}/set-value/`. Verify with tests for
+- [x] 2.3 Add `POST /api/accounts/{id}/set-value/`. Verify with tests for
   "Revalue the house", "A value on an earlier date", "Same day replaces",
   "Same value still records the value", "Update the mortgage balance"
   (signed value), and 400s for a checking account and an archived
   account.
-- [ ] 2.4 Make the transaction API reject updates, category changes,
+- [x] 2.4 Make the transaction API reject updates, category changes,
   transfer marking and splitting on an adjustment, while allowing DELETE.
   Verify with a test for each rejected action, and for "Type changed
   away" (adjustments kept and deletable, set-value rejected).
-- [ ] 2.5 Exclude adjustments in:
+- [x] 2.5 Exclude adjustments in:
   - `active_transactions()`
   - `uncategorized_spent()`
   - `uncategorized()`

@@ -19,6 +19,12 @@ class TransactionQuerySet(models.QuerySet):
         rows, so checking the parent is enough."""
         return self.filter(category__parent__is_tab_group=True)
 
+    def excluding_adjustments(self):
+        """Everything except value adjustments, which change a balance but
+        are never income, spending or uncategorized - see the
+        value-adjustments spec."""
+        return self.filter(is_adjustment=False)
+
     def outside_tabs(self):
         """Everything except tab rows - what income and spending reports
         count. Uncategorized rows stay in."""
@@ -79,6 +85,12 @@ class Transaction(models.Model):
         on_delete=models.CASCADE,
         related_name="parts",
     )
+    # A value adjustment holds the value the user set its account to on its
+    # date; its amount is the difference from the balance before it,
+    # recomputed when earlier rows change. All rules live in
+    # transactions/adjustments.py.
+    is_adjustment = models.BooleanField(default=False)
+    adjustment_value_cents = models.BigIntegerField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

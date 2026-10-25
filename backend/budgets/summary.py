@@ -61,11 +61,12 @@ def budget_rows(period_start):
 
 
 def uncategorized_spent(period_start):
-    """The month's net uncategorized amount as spending: transfers and
-    split transactions themselves left out (a split counts through its
-    parts)."""
+    """The month's net uncategorized amount as spending: transfers, value
+    adjustments and split transactions themselves left out (a split counts
+    through its parts)."""
     total = (
         Transaction.objects.counted_rows()
+        .excluding_adjustments()
         .filter(
             category__isnull=True,
             transfer_counterpart__isnull=True,
