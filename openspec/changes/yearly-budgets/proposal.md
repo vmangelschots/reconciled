@@ -1,5 +1,7 @@
 # Proposal
 
+Issue: #19
+
 ## Why
 
 Budgets only know one shape: one limit per category per month. Some
