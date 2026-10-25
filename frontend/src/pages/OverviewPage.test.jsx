@@ -379,6 +379,76 @@ describe("Recent transactions", () => {
   });
 });
 
+describe("Spending by category view", () => {
+  const legendFor = (month) => screen.findByRole("list", { name: `Spending share per category in ${month}` });
+
+  it("opens in bars on a first visit", async () => {
+    renderPage();
+    expect(await screen.findByRole("list", { name: "Spending per category in October 2026" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Bars" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Pie" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("switches to the pie", async () => {
+    renderPage();
+    await userEvent.click(await screen.findByRole("button", { name: "Pie" }));
+
+    const legend = await legendFor("October 2026");
+    expect(within(legend).getByText("Groceries 2026-10")).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Spending per category in October 2026" })).not.toBeInTheDocument();
+  });
+
+  it("remembers the pie the next time the overview opens", async () => {
+    const { unmount } = renderPage();
+    await userEvent.click(await screen.findByRole("button", { name: "Pie" }));
+    unmount();
+
+    renderPage();
+    expect(await legendFor("October 2026")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pie" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("shows the same table under the pie", async () => {
+    renderPage();
+    await userEvent.click(await screen.findByRole("button", { name: "Pie" }));
+    const spendingPanel = panel("Spending by category");
+
+    await userEvent.click(within(spendingPanel).getByRole("button", { name: "Table" }));
+
+    const table = within(spendingPanel).getByRole("table");
+    expect(within(table).getByRole("columnheader", { name: "Spent" })).toBeInTheDocument();
+    expect(within(table).getByText("Groceries 2026-10")).toBeInTheDocument();
+  });
+
+  it("goes back to all categories when the month changes", async () => {
+    reportsApi.getCategorySpending.mockImplementation((month) =>
+      Promise.resolve({
+        month,
+        categories: [
+          {
+            category_id: 1,
+            name: "Food",
+            spent_cents: 9000,
+            direct_cents: 1000,
+            subcategories: [{ category_id: 2, name: "Lunch", spent_cents: 8000 }],
+          },
+        ],
+        uncategorized_cents: 0,
+      }),
+    );
+    renderPage();
+    await userEvent.click(await screen.findByRole("button", { name: "Pie" }));
+    await userEvent.click(within(await legendFor("October 2026")).getByRole("button", { name: /Food/ }));
+    expect(screen.getByRole("button", { name: "← All categories" })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Previous month" }));
+
+    const legend = await legendFor("September 2026");
+    expect(within(legend).getByText("Food")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "← All categories" })).not.toBeInTheDocument();
+  });
+});
+
 describe("Charts and tabs", () => {
   it("both charts follow the page's month", async () => {
     renderPage();
