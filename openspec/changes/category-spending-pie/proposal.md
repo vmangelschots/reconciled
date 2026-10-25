@@ -1,5 +1,7 @@
 # Proposal
 
+Issue: #17
+
 ## Why
 
 "Spending by category" on the overview only shows horizontal bars. Bars
