@@ -2,7 +2,7 @@
 
 ## 1. Editable starting balance
 
-- [ ] 1.1 Remove the starting-balance `validate` guard from `AccountSerializer` and the now-unused `Account.has_transactions`. Replace the two "blocked" tests in `accounts/tests.py` with one that creates a real transaction (-300.00) on a 1000.00 account, PATCHes the starting balance to 1200.00, and asserts a 200 response, a `current_balance_cents` of 90000 and an unchanged transaction. Verify that backend `python manage.py test` passes.
+- [x] 1.1 Remove the starting-balance `validate` guard from `AccountSerializer` and the now-unused `Account.has_transactions`. Replace the two "blocked" tests in `accounts/tests.py` with one that creates a real transaction (-300.00) on a 1000.00 account, PATCHes the starting balance to 1200.00, and asserts a 200 response, a `current_balance_cents` of 90000 and an unchanged transaction. Verify that backend `python manage.py test` passes.
 
 ## 2. Check
 

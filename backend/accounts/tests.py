@@ -1,5 +1,3 @@
-from unittest.mock import PropertyMock, patch
-
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
@@ -73,42 +71,24 @@ class AccountTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["current_balance_cents"], 120000)
 
-    def test_edit_starting_balance_blocked_once_account_has_transactions(self):
-        # The real `transactions` app doesn't exist until task 3.x, so this
-        # exercises the rule via a mock. Task 3.2 should add a true
-        # integration test (create a real transaction, then attempt the
-        # edit) once the Transaction model exists - see tasks.md.
+    def test_edit_starting_balance_after_transactions_exist_succeeds(self):
         account = Account.objects.create(
             name="Main Checking", account_type="checking", starting_balance_cents=100000
         )
-        with patch.object(
-            Account, "has_transactions", new_callable=PropertyMock, return_value=True
-        ):
-            response = self.client.patch(
-                reverse("account-detail", args=[account.id]),
-                {"starting_balance_cents": 999},
-                format="json",
-            )
-        self.assertEqual(response.status_code, 400)
-        account.refresh_from_db()
-        self.assertEqual(account.starting_balance_cents, 100000)
-
-    def test_edit_starting_balance_blocked_once_account_has_a_real_transaction(self):
-        # The integration-level version of the test above, promised in
-        # tasks.md 3.2 now that the real Transaction model exists.
-        account = Account.objects.create(
-            name="Main Checking", account_type="checking", starting_balance_cents=100000
+        transaction = Transaction.objects.create(
+            account=account, date="2026-01-01", amount_cents=-30000, payee="Rent"
         )
-        Transaction.objects.create(account=account, date="2026-01-01", amount_cents=-500, payee="Coffee")
 
         response = self.client.patch(
             reverse("account-detail", args=[account.id]),
-            {"starting_balance_cents": 999},
+            {"starting_balance_cents": 120000},
             format="json",
         )
-        self.assertEqual(response.status_code, 400)
-        account.refresh_from_db()
-        self.assertEqual(account.starting_balance_cents, 100000)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["current_balance_cents"], 90000)
+        transaction.refresh_from_db()
+        self.assertEqual(transaction.amount_cents, -30000)
+        self.assertEqual(transaction.account_id, account.id)
 
     def test_balance_includes_transactions(self):
         account = Account.objects.create(

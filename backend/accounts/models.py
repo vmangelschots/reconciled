@@ -24,11 +24,6 @@ class Account(models.Model):
         return self.name
 
     @property
-    def has_transactions(self):
-        """Whether this account has at least one transaction."""
-        return self.transactions.exists()
-
-    @property
     def current_balance_cents(self):
         """starting balance + sum of transactions, per the accounts spec."""
         # Parts of a split are inside their transaction's amount already.
