@@ -296,6 +296,37 @@ class DateFormatTests(TestCase):
         self.assertEqual(response.status_code, 400)
 
 
+class DateWithTimeTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        user = get_user_model().objects.create_user(username="budgeter", password="x")
+        self.client.force_authenticate(user=user)
+        self.account = Account.objects.create(
+            name="Main Checking", account_type="checking", starting_balance_cents=0
+        )
+
+    def preview(self, content, date_format):
+        upload = self.client.post(
+            reverse("importsession-list"),
+            {"account": self.account.id, "file": csv_file(content)},
+            format="multipart",
+        )
+        return self.client.post(
+            reverse("importsession-map", args=[upload.json()["id"]]),
+            {"date": "Date", "date_format": date_format, "amount": "Amount", "description": "Description"},
+            format="json",
+        )
+
+    def test_a_date_with_a_time(self):
+        response = self.preview("Date,Amount,Description\n2026-10-12 2:00:00,-254.72,Luminus SA\n", "YYYY-MM-DD")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["candidates"][0]["date"], "2026-10-12")
+
+    def test_a_date_alone_parses_as_before(self):
+        response = self.preview("Date,Amount,Description\n12.10.2026,-254.72,Luminus SA\n", "DD.MM.YYYY")
+        self.assertEqual(response.json()["candidates"][0]["date"], "2026-10-12")
+
+
 @override_settings(OPENAI_API_KEY="")
 class SemicolonEndToEndTests(TestCase):
     """The full upload -> map -> preview -> commit flow against a
@@ -424,6 +455,27 @@ class DuplicateDetectionTests(TestCase):
         [candidate] = self.preview("Posted Date,Amount,Description\n2026-03-03,-30.00,Pizzeria\n")
 
         self.assertFalse(candidate["is_duplicate"])
+
+
+    def test_two_identical_payments_on_one_day(self):
+        Transaction.objects.create(account=self.account, date="2026-10-11", amount_cents=-780, payee="LAGO Mons")
+
+        first, second = self.preview(
+            "Posted Date,Amount,Description\n2026-10-11,-7.80,LAGO Mons\n2026-10-11,-7.80,LAGO Mons\n"
+        )
+
+        self.assertTrue(first["is_duplicate"])
+        self.assertFalse(second["is_duplicate"])
+
+    def test_both_identical_payments_reimported(self):
+        for _ in range(2):
+            Transaction.objects.create(account=self.account, date="2026-10-11", amount_cents=-780, payee="LAGO Mons")
+
+        candidates = self.preview(
+            "Posted Date,Amount,Description\n2026-10-11,-7.80,LAGO Mons\n2026-10-11,-7.80,LAGO Mons\n"
+        )
+
+        self.assertEqual([c["is_duplicate"] for c in candidates], [True, True])
 
 
 @override_settings(OPENAI_API_KEY="")

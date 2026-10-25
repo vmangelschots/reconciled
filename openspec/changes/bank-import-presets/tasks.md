@@ -19,10 +19,10 @@
 
 ## 2. Parsing fixes
 
-- [ ] 2.1 Make `_parse_date` parse only the part before the first
+- [x] 2.1 Make `_parse_date` parse only the part before the first
   whitespace. Verify with `imports` tests for "A date with a time" and
   for an existing date-only value that parses unchanged.
-- [ ] 2.2 Make `flag_duplicates` claim each existing transaction once, in
+- [x] 2.2 Make `flag_duplicates` claim each existing transaction once, in
   file order. Verify with tests for "Two identical payments on one day"
   and "Both identical payments re-imported", and that the existing
   duplicate and split-duplicate tests still pass.
