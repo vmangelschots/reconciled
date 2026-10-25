@@ -1,10 +1,21 @@
-import { AlertTriangle, CheckCircle2, HandCoins, Inbox, Landmark, Tag, Upload } from "lucide-react";
+import {
+  AlertTriangle,
+  ChartBarDecreasing,
+  ChartPie,
+  CheckCircle2,
+  HandCoins,
+  Inbox,
+  Landmark,
+  Tag,
+  Upload,
+} from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { getOverview } from "../api/overview";
 import { getCashFlow, getCategorySpending } from "../api/reports";
 import { listTabs } from "../api/tabs";
 import { CategorySpendingChart } from "../components/CategorySpendingChart";
+import { CategorySpendingPie } from "../components/CategorySpendingPie";
 import { InOutChart } from "../components/InOutChart";
 import { OpenTabsCard } from "../components/OpenTabsCard";
 import { Amount } from "../components/ui/Amount";
@@ -27,6 +38,25 @@ import { useAccounts } from "../accounts/AccountsContext";
 // The last import counts as stale after this many days - see the
 // overview spec's "Stale import reminder".
 const STALE_IMPORT_DAYS = 7;
+
+// Which view "Spending by category" opens in, remembered per browser.
+const CATEGORY_CHART_KEY = "reconciled-category-chart"; // "bars" | "pie"
+
+function getStoredCategoryChart() {
+  try {
+    return window.localStorage.getItem(CATEGORY_CHART_KEY) === "pie" ? "pie" : "bars";
+  } catch {
+    return "bars";
+  }
+}
+
+function storeCategoryChart(view) {
+  try {
+    window.localStorage.setItem(CATEGORY_CHART_KEY, view);
+  } catch {
+    // Private windows can refuse storage; the choice just isn't remembered.
+  }
+}
 
 const whole = (cents) => formatMoneyWhole(cents);
 
@@ -243,11 +273,39 @@ function RecentTransactions({ rows, showAccounts }) {
   );
 }
 
-function TableToggle({ shown, onToggle }) {
+function TableToggle({ shown, onToggle, short = false }) {
   return (
-    <Button type="button" variant="ghost" size="sm" onClick={onToggle}>
-      {shown ? "Hide table" : "Show as table"}
+    <Button type="button" variant="ghost" size="sm" onClick={onToggle} aria-pressed={short ? shown : undefined}>
+      {short ? "Table" : shown ? "Hide table" : "Show as table"}
     </Button>
+  );
+}
+
+const CATEGORY_VIEWS = [
+  { value: "bars", label: "Bars", Icon: ChartBarDecreasing },
+  { value: "pie", label: "Pie", Icon: ChartPie },
+];
+
+function ChartViewSwitch({ view, onChange }) {
+  return (
+    <div className="inline-flex rounded-lg bg-surface-2 p-0.5" role="group" aria-label="Chart view">
+      {CATEGORY_VIEWS.map(({ value, label, Icon }) => (
+        <button
+          key={value}
+          type="button"
+          aria-label={label}
+          aria-pressed={view === value}
+          title={label}
+          onClick={() => onChange(value)}
+          className={cn(
+            "flex h-7 w-8 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
+            view === value ? "bg-surface text-ink-primary shadow-sm" : "text-ink-muted hover:text-ink-primary",
+          )}
+        >
+          <Icon className="h-4 w-4" aria-hidden="true" />
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -262,6 +320,7 @@ export function OverviewPage() {
   const isWide = useMediaQuery("(min-width: 640px)");
   const { accounts, loaded } = useAccounts();
   const [categoryTable, setCategoryTable] = useState(false);
+  const [categoryView, setCategoryView] = useState(getStoredCategoryChart);
   const [inOutTable, setInOutTable] = useState(false);
 
   const overview = useReport(() => getOverview(month), loaded && accounts.length > 0 ? month : null);
@@ -347,16 +406,37 @@ export function OverviewPage() {
             title="Spending by category"
             loading={spending.loading && !spending.data}
             error={spending.error ? loadError("spending per category") : null}
-            actions={spending.data && <TableToggle shown={categoryTable} onToggle={() => setCategoryTable((v) => !v)} />}
+            actions={
+              spending.data && (
+                <>
+                  <ChartViewSwitch
+                    view={categoryView}
+                    onChange={(view) => {
+                      setCategoryView(view);
+                      storeCategoryChart(view);
+                    }}
+                  />
+                  <TableToggle shown={categoryTable} onToggle={() => setCategoryTable((v) => !v)} short={!isWide} />
+                </>
+              )
+            }
           >
-            {spending.data && (
-              <CategorySpendingChart
-                key={spending.data.month}
-                data={spending.data}
-                monthLabel={monthLabel(spending.data.month)}
-                showTable={categoryTable}
-              />
-            )}
+            {spending.data &&
+              (categoryView === "pie" ? (
+                <CategorySpendingPie
+                  key={spending.data.month}
+                  data={spending.data}
+                  monthLabel={monthLabel(spending.data.month)}
+                  showTable={categoryTable}
+                />
+              ) : (
+                <CategorySpendingChart
+                  key={spending.data.month}
+                  data={spending.data}
+                  monthLabel={monthLabel(spending.data.month)}
+                  showTable={categoryTable}
+                />
+              ))}
           </Panel>
           <Panel
             title="Recent transactions"

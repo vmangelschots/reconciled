@@ -23,7 +23,7 @@
 
 ## 3. Switch on the overview
 
-- [ ] 3.1 In `OverviewPage`, add the segmented bars/pie switch before `TableToggle` in the panel actions (icons `ChartBarDecreasing` and `ChartPie`, active state as in design.md). Remember the choice in localStorage under `reconciled-category-chart` inside try/catch, default to bars, and render `CategorySpendingPie` or `CategorySpendingChart` with the same table toggle. Verify with `OverviewPage` tests for "Switch to the pie", "The choice is remembered", "First visit", "Table under the pie" and "Move to the previous month" resetting a drill.
+- [x] 3.1 In `OverviewPage`, add the segmented bars/pie switch before `TableToggle` in the panel actions (icons `ChartBarDecreasing` and `ChartPie`, active state as in design.md). Remember the choice in localStorage under `reconciled-category-chart` inside try/catch, default to bars, and render `CategorySpendingPie` or `CategorySpendingChart` with the same table toggle. Verify with `OverviewPage` tests for "Switch to the pie", "The choice is remembered", "First visit", "Table under the pie" and "Move to the previous month" resetting a drill.
 
 ## 4. Check
 
