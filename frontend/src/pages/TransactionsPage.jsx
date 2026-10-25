@@ -1,4 +1,4 @@
-import { ChevronDown, Split, Upload } from "lucide-react";
+import { ChevronDown, Scale, Split, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, Navigate, NavLink, useNavigate, useParams } from "react-router-dom";
 import { useAccounts } from "../accounts/AccountsContext";
@@ -14,6 +14,7 @@ import {
   updateTransaction,
 } from "../api/transactions";
 import { CategoryCombobox } from "../components/CategoryCombobox";
+import { SetValueDialog } from "../components/SetValueDialog";
 import { SplitEditor } from "../components/SplitEditor";
 import { Button, buttonVariants } from "../components/ui/Button";
 import { Amount } from "../components/ui/Amount";
@@ -28,6 +29,7 @@ import { categoryDisplayLabel } from "../lib/categoryTree";
 import { cn } from "../lib/cn";
 import { formatShortDate } from "../lib/dates";
 import { formatMoney, formatMoneyWhole } from "../lib/money";
+import { VALUED_TYPES } from "../lib/tiers";
 import { useReviewCount } from "../review/ReviewCountContext";
 
 // The plain Transactions address opens the account last opened here, or
@@ -91,7 +93,7 @@ function AccountPills({ accounts, current }) {
 export function TransactionsPage() {
   const { accountId: accountParam } = useParams();
   const accountId = Number(accountParam);
-  const { accounts, loaded: accountsLoaded, setLastOpened } = useAccounts();
+  const { accounts, loaded: accountsLoaded, setLastOpened, refresh: refreshAccounts } = useAccounts();
   const navigate = useNavigate();
   const [categories, setCategories] = useState([]);
   // An archived account isn't in the active list; it is fetched by id.
@@ -102,6 +104,7 @@ export function TransactionsPage() {
   const [editing, setEditing] = useState(null); // { id, kind: "form" | "split" }
   const [loading, setLoading] = useState(true);
   const [pendingIds, setPendingIds] = useState(new Set());
+  const [settingValue, setSettingValue] = useState(false);
   const hasLoadedRef = useRef(false);
   const nextTempIdRef = useRef(-1);
   const toast = useToast();
@@ -211,6 +214,10 @@ export function TransactionsPage() {
       toast.success("Transaction deleted.");
       refreshReviewCount();
       setTransactions((prev) => prev.filter((t) => t.id !== id));
+      // Deleting can change the account's balance, and the amounts of the
+      // value adjustments after it.
+      refreshAccounts();
+      if (VALUED_TYPES.has(account?.account_type)) reload();
     } catch (e) {
       toast.error(e.data ? Object.values(e.data).flat().join(" ") : e.message);
     } finally {
@@ -381,9 +388,20 @@ export function TransactionsPage() {
     );
   }
 
+  const canSetValue = !isArchived && VALUED_TYPES.has(account.account_type);
+
   return (
     <section className="flex flex-col gap-6">
-      <PageHeader title="Transactions">
+      <PageHeader
+        title="Transactions"
+        actions={
+          canSetValue && (
+            <Button variant="outline" size="sm" onClick={() => setSettingValue(true)}>
+              Set value
+            </Button>
+          )
+        }
+      >
         <span className="flex items-center gap-2 text-sm text-ink-secondary">
           <span className={cn(accounts.length > 1 && !isArchived && "hidden lg:inline")}>{account.name}</span>
           {isArchived && (
@@ -395,6 +413,18 @@ export function TransactionsPage() {
       </PageHeader>
 
       {accounts.length > 1 && !isArchived && <AccountPills accounts={accounts} current={activeAccount} />}
+
+      {canSetValue && settingValue && (
+        <SetValueDialog
+          account={account}
+          open={settingValue}
+          onOpenChange={setSettingValue}
+          onSaved={() => {
+            refreshAccounts();
+            reload();
+          }}
+        />
+      )}
 
       <Panel title="Filters">
         <div className="flex flex-wrap items-end gap-4">
@@ -475,6 +505,13 @@ export function TransactionsPage() {
             const openSplit = () => setEditing({ id: t.id, kind: "split" });
             // The left bar ties a split's rows together.
             const barCell = grouped ? "shadow-[inset_2px_0_0_var(--ink-muted)]" : undefined;
+            if (t.is_adjustment) {
+              return (
+                <tbody key={t.id} className="group border-b border-border last:border-b-0">
+                  <AdjustmentRow transaction={t} pending={pending} onDelete={() => handleDelete(t.id)} />
+                </tbody>
+              );
+            }
             if (editing?.kind === "form" && editing.id === t.id) {
               return (
                 <tbody key={t.id} className="border-b border-border last:border-b-0">
@@ -632,6 +669,39 @@ export function TransactionsPage() {
         </Panel>
       )}
     </section>
+  );
+}
+
+// A value adjustment: what the account was set to, no category, and a
+// neutral amount since it is never income or spending. It can only be
+// deleted; the hidden Edit keeps Delete in line with the other rows. See
+// the value-adjustments spec.
+function AdjustmentRow({ transaction, pending, onDelete }) {
+  return (
+    <TableRow className="hover:bg-transparent group-hover:bg-surface-2">
+      <TableCell className="whitespace-nowrap text-ink-secondary">{formatShortDate(transaction.date)}</TableCell>
+      <TableCell>
+        <span className="flex items-center gap-2 text-ink-secondary">
+          <Scale className="h-4 w-4 shrink-0" aria-hidden="true" />
+          Value adjustment
+        </span>
+      </TableCell>
+      <TableCell className="text-ink-secondary">
+        Set to <span className="num">{formatMoneyWhole(transaction.adjustment_value_cents)}</span>
+      </TableCell>
+      <TableCell className="text-ink-muted">—</TableCell>
+      <TableCell className="text-right">
+        <Amount cents={transaction.amount_cents} signed className="text-ink-secondary" />
+      </TableCell>
+      <TableCell className="flex gap-2">
+        <Button variant="outline" size="sm" className="invisible" aria-hidden="true" tabIndex={-1}>
+          Edit
+        </Button>
+        <Button variant="ghost" size="sm" disabled={pending} onClick={onDelete}>
+          Delete
+        </Button>
+      </TableCell>
+    </TableRow>
   );
 }
 

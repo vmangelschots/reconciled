@@ -1,11 +1,16 @@
 import { apiFetch } from "./client";
 
+// Each type belongs to a tier, from most to least liquid - see the
+// accounts spec's "Account tiers". Listed in tier order.
 export const ACCOUNT_TYPES = [
-  { value: "checking", label: "Checking" },
-  { value: "savings", label: "Savings" },
-  { value: "credit_card", label: "Credit Card" },
-  { value: "cash", label: "Cash" },
-  { value: "other", label: "Other" },
+  { value: "checking", label: "Checking", tier: "everyday" },
+  { value: "cash", label: "Cash", tier: "everyday" },
+  { value: "credit_card", label: "Credit Card", tier: "everyday" },
+  { value: "other", label: "Other (everyday)", tier: "everyday" },
+  { value: "savings", label: "Savings", tier: "savings" },
+  { value: "investment", label: "Investment", tier: "investments" },
+  { value: "property", label: "Property", tier: "property" },
+  { value: "loan", label: "Loan", tier: "loans" },
 ];
 
 export function listAccounts() {
@@ -27,4 +32,10 @@ export function archiveAccount(id) {
 // Also returns archived accounts, so their ledger stays reachable.
 export function getAccount(id) {
   return apiFetch(`/api/accounts/${id}/`);
+}
+
+// Records the account's value on a date as a value adjustment; returns
+// { adjustment, current_balance_cents }. See the value-adjustments spec.
+export function setAccountValue(id, data) {
+  return apiFetch(`/api/accounts/${id}/set-value/`, { method: "POST", body: data });
 }

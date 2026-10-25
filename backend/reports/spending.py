@@ -10,11 +10,12 @@ from transactions.models import Transaction
 def active_transactions():
     # Transfers between the user's own accounts are neither income nor
     # spending, so no report counts them (they never have a category), and
-    # neither are tab rows: money lent out or paid back. A split
-    # transaction counts through its parts.
+    # neither are tab rows: money lent out or paid back, or value
+    # adjustments. A split transaction counts through its parts.
     return (
         Transaction.objects.counted_rows()
         .outside_tabs()
+        .excluding_adjustments()
         .filter(account__archived=False, transfer_counterpart__isnull=True)
     )
 

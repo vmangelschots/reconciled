@@ -123,3 +123,49 @@ class AccountTests(TestCase):
         rows = self.client.get(reverse("account-list")).json()
 
         self.assertEqual(rows[0]["current_balance_cents"], 94000)
+
+
+class AccountTierTests(TestCase):
+    """The accounts spec's "Account tiers" and "Accounts are listed by tier"."""
+
+    def setUp(self):
+        self.client = APIClient()
+        user = get_user_model().objects.create_user(username="budgeter", password="irrelevant-for-this-test")
+        self.client.force_authenticate(user=user)
+
+    def test_create_a_mortgage(self):
+        response = self.client.post(
+            reverse("account-list"),
+            {"name": "Mortgage", "account_type": "loan", "starting_balance_cents": -25000000},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["current_balance_cents"], -25000000)
+        self.assertEqual(response.json()["tier"], "loans")
+
+    def test_tier_follows_the_type(self):
+        response = self.client.post(
+            reverse("account-list"),
+            {"name": "Funds", "account_type": "investment", "starting_balance_cents": 0},
+            format="json",
+        )
+        self.assertEqual(response.json()["tier"], "investments")
+
+    def test_changing_the_type_moves_the_tier(self):
+        account = Account.objects.create(name="Revolut Pockets", account_type="savings", starting_balance_cents=0)
+        self.assertEqual(account.tier, "savings")
+        response = self.client.patch(
+            reverse("account-detail", args=[account.id]), {"account_type": "checking"}, format="json"
+        )
+        self.assertEqual(response.json()["tier"], "everyday")
+
+    def test_a_house_after_everyday_accounts(self):
+        for name, account_type in [
+            ("House", "property"),
+            ("Crelan", "checking"),
+            ("Spaarrekening", "savings"),
+            ("Revolut", "checking"),
+        ]:
+            Account.objects.create(name=name, account_type=account_type, starting_balance_cents=0)
+        names = [a["name"] for a in self.client.get(reverse("account-list")).json()]
+        self.assertEqual(names, ["Crelan", "Revolut", "Spaarrekening", "House"])

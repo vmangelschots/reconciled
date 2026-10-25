@@ -108,4 +108,101 @@ describe("AccountsPage", () => {
     expect(accountsApi.archiveAccount).toHaveBeenCalledWith(1);
     expect(accountsApi.listAccounts).toHaveBeenCalledTimes(1);
   });
+
+  it("groups the type choice by tier, with Other under Everyday", async () => {
+    accountsApi.listAccounts.mockResolvedValue(ACCOUNTS);
+    renderPage();
+    await findTable();
+    await userEvent.click(screen.getByRole("button", { name: "Add account" }));
+    await userEvent.click(screen.getByRole("combobox", { name: "Account type" }));
+
+    const groups = await screen.findAllByRole("group");
+    const labelled = groups.map((g) => within(g).getAllByRole("option").map((o) => o.textContent));
+    expect(labelled).toEqual([
+      ["Checking", "Cash", "Credit Card", "Other (everyday)"],
+      ["Savings"],
+      ["Investment"],
+      ["Property"],
+      ["Loan"],
+    ]);
+    expect(within(groups[0]).getByText("Everyday")).toBeInTheDocument();
+  });
+
+  it("shows each account's tier", async () => {
+    accountsApi.listAccounts.mockResolvedValue([
+      { id: 1, name: "Revolut", account_type: "checking", tier: "everyday", current_balance_cents: 0 },
+      { id: 3, name: "House", account_type: "property", tier: "property", current_balance_cents: 0 },
+    ]);
+    renderPage();
+    const tbl = await findTable();
+    const tierOf = (name) => within(tbl.getByText(name).closest("tr")).getAllByRole("cell")[2].textContent;
+    expect(tierOf("House")).toBe("Property");
+    expect(tierOf("Revolut")).toBe("Everyday");
+  });
+
+  it("creates a mortgage from what is still owed", async () => {
+    accountsApi.listAccounts.mockResolvedValue(ACCOUNTS);
+    accountsApi.createAccount.mockResolvedValue({});
+    renderPage();
+    await findTable();
+    await userEvent.click(screen.getByRole("button", { name: "Add account" }));
+    await userEvent.type(screen.getByLabelText("Name"), "Mortgage");
+    await userEvent.click(screen.getByRole("combobox", { name: "Account type" }));
+    await userEvent.click(await screen.findByRole("option", { name: "Loan" }));
+    const owed = screen.getByLabelText("Still owed");
+    await userEvent.clear(owed);
+    await userEvent.type(owed, "250000");
+    await userEvent.click(screen.getByRole("button", { name: "Add account" }));
+
+    expect(accountsApi.createAccount).toHaveBeenCalledWith({
+      name: "Mortgage",
+      account_type: "loan",
+      starting_balance_cents: -25000000,
+    });
+  });
+
+  it("rejects a negative amount owed", async () => {
+    accountsApi.listAccounts.mockResolvedValue(ACCOUNTS);
+    renderPage();
+    await findTable();
+    await userEvent.click(screen.getByRole("button", { name: "Add account" }));
+    await userEvent.type(screen.getByLabelText("Name"), "Mortgage");
+    await userEvent.click(screen.getByRole("combobox", { name: "Account type" }));
+    await userEvent.click(await screen.findByRole("option", { name: "Loan" }));
+    const owed = screen.getByLabelText("Still owed");
+    await userEvent.clear(owed);
+    await userEvent.type(owed, "-250000");
+    await userEvent.click(screen.getByRole("button", { name: "Add account" }));
+
+    expect(accountsApi.createAccount).not.toHaveBeenCalled();
+    expect(await screen.findByText("Enter what you still owe as a positive amount.")).toBeInTheDocument();
+  });
+
+  it("edits a loan's starting balance as what is owed", async () => {
+    accountsApi.listAccounts.mockResolvedValue([
+      {
+        id: 4,
+        name: "Mortgage",
+        account_type: "loan",
+        tier: "loans",
+        starting_balance_cents: -25000000,
+        current_balance_cents: -25000000,
+      },
+    ]);
+    accountsApi.updateAccount.mockResolvedValue({});
+    renderPage();
+    const tbl = await findTable();
+    await userEvent.click(tbl.getByRole("button", { name: "Edit" }));
+    const owed = screen.getByLabelText("Still owed");
+    expect(owed).toHaveValue(250000);
+    await userEvent.clear(owed);
+    await userEvent.type(owed, "240000");
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(accountsApi.updateAccount).toHaveBeenCalledWith(4, {
+      name: "Mortgage",
+      account_type: "loan",
+      starting_balance_cents: -24000000,
+    });
+  });
 });

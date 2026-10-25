@@ -12,9 +12,9 @@ For each of the 12 calendar months ending with a chosen month (by
 default the current one), the system SHALL report money in (the sum of
 positive amounts) and money out (the sum of negative amounts, as a
 positive figure). Only non-archived accounts count; transfers between
-the user's accounts count toward neither. An empty month reports zero
-for both. A split transaction counts through its parts, so a part that
-is a transfer counts toward neither.
+the user's accounts and value adjustments count toward neither. An
+empty month reports zero for both. A split transaction counts through
+its parts, so a part that is a transfer counts toward neither.
 
 #### Scenario: Income and spending are totalled separately
 - **WHEN** an active account has +2,000.00 and -1,500.00 in March, and
@@ -38,6 +38,10 @@ is a transfer counts toward neither.
 - **WHEN** March's only transaction in "Checking" is -60.00, split into
   -30.00 "Restaurants" and -30.00 as a transfer to "Savings"
 - **THEN** March reports money out 30.00 and zero money in
+
+#### Scenario: Value adjustments are excluded
+- **WHEN** March's only entry is a -8,000.00 value adjustment on "Funds"
+- **THEN** March reports zero money in and zero money out
 
 ### Requirement: In vs out chart
 The dashboard SHALL show money in and money out as paired bars, one pair

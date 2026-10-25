@@ -61,6 +61,8 @@ class TransactionSerializer(serializers.ModelSerializer):
             "transfer",
             "split_parent",
             "parts",
+            "is_adjustment",
+            "adjustment_value_cents",
             "created_at",
             "updated_at",
         ]
@@ -69,6 +71,8 @@ class TransactionSerializer(serializers.ModelSerializer):
             "category_source",
             "category_reason",
             "split_parent",
+            "is_adjustment",
+            "adjustment_value_cents",
             "created_at",
             "updated_at",
         ]
@@ -95,6 +99,12 @@ class TransactionSerializer(serializers.ModelSerializer):
         return check_assignable(category)
 
     def validate(self, attrs):
+        # A value adjustment is changed by setting the value again, never
+        # edited; see openspec/specs/value-adjustments.
+        if self.instance is not None and self.instance.is_adjustment:
+            raise serializers.ValidationError(
+                {"detail": "A value adjustment can't be edited. Delete it and set the value again."}
+            )
         # The transactions spec lists date/amount/payee/category/notes as
         # editable; account is deliberately not in that list, so a
         # transaction can't be moved to a different account after creation.

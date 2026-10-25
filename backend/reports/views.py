@@ -6,7 +6,7 @@ from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounts.models import Account
+from accounts.models import TIER_ORDER, Account, tier_position
 from budgets.models import Category
 from budgets.summary import budget_rows
 from budgets.utils import month_range, parse_month
@@ -248,7 +248,7 @@ class OverviewView(APIView):
         current = month == today.replace(day=1)
         month_end = month_range(month)
 
-        accounts = list(Account.objects.filter(archived=False).order_by("name", "id"))
+        accounts = list(Account.objects.filter(archived=False).order_by(tier_position(), "name", "id"))
         # An import counts for every account it sent lines to, such as a
         # Revolut pocket account next to the upload's account.
         last_imports = dict(
@@ -257,15 +257,30 @@ class OverviewView(APIView):
             .annotate(last=Max("updated_at"))
             .values_list("imported_accounts", "last")
         )
+        last_values = dict(
+            Transaction.objects.filter(account__in=accounts, is_adjustment=True)
+            .values("account")
+            .annotate(last=Max("date"))
+            .values_list("account", "last")
+        )
         account_rows = [
             {
                 "id": a.id,
                 "name": a.name,
+                "account_type": a.account_type,
+                "tier": a.tier,
                 "balance_cents": a.current_balance_cents,
                 "last_import_date": timezone.localdate(last_imports[a.id]) if a.id in last_imports else None,
+                "last_value_date": last_values.get(a.id),
             }
             for a in accounts
         ]
+        # Per tier, in tier order, for the tiers that have an account - see
+        # the overview spec's "Everyday money and net worth".
+        tier_totals = {}
+        for row in account_rows:
+            tier_totals[row["tier"]] = tier_totals.get(row["tier"], 0) + row["balance_cents"]
+        tiers = [{"tier": t, "balance_cents": tier_totals[t]} for t in TIER_ORDER if t in tier_totals]
 
         in_month = active_transactions().filter(date__gte=month, date__lt=month_end)
         totals = in_month.aggregate(
@@ -286,6 +301,7 @@ class OverviewView(APIView):
         recent = (
             Transaction.objects.ledger_rows()
             .filter(account__in=accounts)
+            .excluding_adjustments()
             .exclude(amount_cents__gt=0, transfer_counterpart__account__archived=False)
             .select_related("account", "category__parent", "transfer_counterpart__account")
             .annotate(part_count=Count("parts"))
@@ -296,6 +312,8 @@ class OverviewView(APIView):
             {
                 "month": month.strftime("%Y-%m"),
                 "balance_cents": sum(a["balance_cents"] for a in account_rows),
+                "everyday_cents": tier_totals.get("everyday", 0),
+                "tiers": tiers,
                 "accounts": account_rows,
                 "in_out": {
                     "in_cents": totals["money_in"] or 0,

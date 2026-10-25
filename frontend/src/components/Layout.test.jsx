@@ -176,6 +176,20 @@ describe('Accounts in the sidebar', () => {
     expect(screen.getByRole('link', { name: /Joint/ })).not.toHaveAttribute('aria-current')
   })
 
+  it('shows the everyday total next to a house', async () => {
+    accountsApi.listAccounts.mockResolvedValue([
+      { id: 1, name: 'Revolut', tier: 'everyday', current_balance_cents: 120000, archived: false },
+      { id: 2, name: 'Crelan', tier: 'everyday', current_balance_cents: 80000, archived: false },
+      { id: 3, name: 'House', tier: 'property', current_balance_cents: 29500000, archived: false },
+    ])
+    mockViewport(true)
+    renderLayout()
+
+    expect(await screen.findByText('Everyday · 2 accounts')).toBeInTheDocument()
+    expect(screen.getByText(formatMoney(200000))).toBeInTheDocument()
+    expect(screen.queryByText(/Total ·/)).toBeNull()
+  })
+
   it('shows no sub-items with one account', async () => {
     accountsApi.listAccounts.mockResolvedValue([ACCOUNTS[0]])
     mockViewport(true)
