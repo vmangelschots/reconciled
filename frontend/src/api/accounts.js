@@ -33,3 +33,9 @@ export function archiveAccount(id) {
 export function getAccount(id) {
   return apiFetch(`/api/accounts/${id}/`);
 }
+
+// Records the account's value on a date as a value adjustment; returns
+// { adjustment, current_balance_cents }. See the value-adjustments spec.
+export function setAccountValue(id, data) {
+  return apiFetch(`/api/accounts/${id}/set-value/`, { method: "POST", body: data });
+}

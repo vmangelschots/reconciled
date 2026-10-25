@@ -86,7 +86,7 @@
 
 ## 4. Ledger
 
-- [ ] 4.1 Render an adjustment row with:
+- [x] 4.1 Render an adjustment row with:
   - the `Scale` icon, "Value adjustment" and "Set to €…"
   - a muted "—" for the category
   - a neutral amount
@@ -94,7 +94,7 @@
 
   Verify with `TransactionsPage` tests for "Shown in the ledger" and
   deleting an adjustment.
-- [ ] 4.2 Add the "Set value" dialog to the ledger header on investment,
+- [x] 4.2 Add the "Set value" dialog to the ledger header on investment,
   property and loan accounts, as in design.md. It has:
   - the current balance
   - a date field (default today)
