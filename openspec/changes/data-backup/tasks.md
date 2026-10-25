@@ -77,7 +77,7 @@
 
 ## 4. Frontend
 
-- [ ] 4.1 Add `api/backup.js`:
+- [x] 4.1 Add `api/backup.js`:
   - `downloadBackup()`: a credentialed fetch, then a blob, then a temporary
     `<a download>` using the server's filename;
   - `restoreBackup(file)` through `apiUpload`;
@@ -86,7 +86,7 @@
 
   Verify with vitest tests for `readBackupSummary` (a valid file, a CSV, cut
   off JSON) and for the download error path.
-- [ ] 4.2 Add `SettingsPage` at `/settings` (D7). It has:
+- [x] 4.2 Add `SettingsPage` at `/settings` (D7). It has:
   - a Backup card with a Download backup button that shows a success toast,
     or an error toast on failure;
   - a Restore… button with a hidden file input;
@@ -101,7 +101,7 @@
   Verify with vitest tests for download, the not-a-backup error, the
   summary in the confirm, cancel (no upload), a successful restore
   (toast and navigation) and a server error toast.
-- [ ] 4.3 Add Settings after Accounts in `Layout.jsx` (the `more` group,
+- [x] 4.3 Add Settings after Accounts in `Layout.jsx` (the `more` group,
   lucide `Settings` icon) and the route in `App.jsx`.
 
   Verify by updating `Layout.test.jsx` so the sidebar and the More sheet
