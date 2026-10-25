@@ -113,6 +113,21 @@ def link_transfer(txn, target_account):
 
 
 @db_transaction.atomic
+def link_pair(a, b):
+    """Link two bank lines known to be the two sides of one move (a Revolut
+    pocket move, both sides in the same import) directly to each other -
+    never by the closest-date search, which could pick another line with
+    the same amount. Both came from the bank, so neither is marked as
+    created by the transfer and later edits stay independent."""
+    a.category = None
+    b.category = None
+    a.transfer_counterpart = b
+    b.transfer_counterpart = a
+    a.save(update_fields=["category", "transfer_counterpart", "updated_at"])
+    b.save(update_fields=["category", "transfer_counterpart", "updated_at"])
+
+
+@db_transaction.atomic
 def unlink_transfer(txn):
     """Turn a transfer back into a normal transaction (no-op if it isn't one)."""
     _unlink(_locked(txn))

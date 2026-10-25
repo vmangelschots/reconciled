@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { useSearchParams } from "react-router-dom";
 import { useAccounts } from "../accounts/AccountsContext";
 import { listAccounts } from "../api/accounts";
-import { commitImport, mapCsvColumns, uploadImportFile } from "../api/imports";
+import { assignProducts, commitImport, mapCsvColumns, uploadImportFile } from "../api/imports";
 import { Button, buttonVariants } from "../components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import { Label } from "../components/ui/Label";
@@ -20,12 +20,28 @@ import { useReviewCount } from "../review/ReviewCountContext";
 
 const CSV_FIELDS = ["date", "amount", "description", "payee"];
 const UNMAPPED = "none";
+// The Accounts step's "Don't import" choice (sent as null).
+const SKIP = "skip";
 // No default - the user must choose explicitly (design.md: guessing the
 // date format is exactly the bug this change fixes, so it isn't
 // reintroduced here as a pre-selected "sensible" default).
 const DATE_FORMATS = ["YYYY-MM-DD", "DD/MM/YYYY", "MM/DD/YYYY", "DD-MM-YYYY", "MM-DD-YYYY", "DD.MM.YYYY"];
 // When a running commit starts saying the AI step can take a while.
 const SLOW_HINT_MS = 4000;
+
+// The Accounts step's Select value for a Product: "" while unchosen.
+function productChoice(productAccounts, product) {
+  if (!(product in productAccounts)) return "";
+  return productAccounts[product] === null ? SKIP : String(productAccounts[product]);
+}
+
+// The Match column: a pocket move names the other side's account with the
+// ledger's transfer arrows.
+function matchLabel(c) {
+  if (c.pocket_pair) return `${c.amount_cents < 0 ? "→" : "←"} ${c.pocket_pair.account_name}`;
+  if (c.transfer_match) return `Matches transfer from ${c.transfer_match.counterpart_account_name}`;
+  return c.is_duplicate ? "Likely duplicate" : "";
+}
 
 function plural(n, one, many) {
   return `${n} ${n === 1 ? one : many}`;
@@ -70,6 +86,7 @@ export function ImportPage() {
     payee: UNMAPPED,
   });
   const [dateFormat, setDateFormat] = useState("");
+  const [productAccounts, setProductAccounts] = useState({});
   const [selected, setSelected] = useState(new Set());
   const [result, setResult] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -101,6 +118,14 @@ export function ImportPage() {
       const data = await uploadImportFile(accountId, file);
       setSession(data);
       if (data.candidates?.length) selectNonDuplicates(data.candidates);
+      if (data.products) setProductAccounts(data.product_accounts ?? {});
+      if (data.saved_mapping) {
+        // This account's last mapping, still valid for this file's columns.
+        setMapping(
+          Object.fromEntries(CSV_FIELDS.map((field) => [field, data.saved_mapping[field] || UNMAPPED])),
+        );
+        setDateFormat(data.saved_mapping.date_format ?? "");
+      }
     } catch (e) {
       toast.error(e.data?.detail ?? e.message);
     } finally {
@@ -120,6 +145,21 @@ export function ImportPage() {
       };
       const data = await mapCsvColumns(session.id, mappingPayload);
       setSession({ ...session, ...data });
+      selectNonDuplicates(data.candidates);
+    } catch (e) {
+      toast.error(e.data?.detail ?? e.message);
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleAssign(event) {
+    event.preventDefault();
+    setSubmitting(true);
+    try {
+      const data = await assignProducts(session.id, productAccounts);
+      // Products answered: on to the preview (or "nothing to import").
+      setSession({ ...session, ...data, products: undefined });
       selectNonDuplicates(data.candidates);
     } catch (e) {
       toast.error(e.data?.detail ?? e.message);
@@ -159,6 +199,9 @@ export function ImportPage() {
   function startOver() {
     setSession(null);
     setFile(null);
+    setProductAccounts({});
+    setMapping({ date: UNMAPPED, amount: UNMAPPED, description: UNMAPPED, payee: UNMAPPED });
+    setDateFormat("");
     setSelected(new Set());
     setResult(null);
   }
@@ -193,12 +236,17 @@ export function ImportPage() {
   }
 
   if (session?.candidates?.length) {
+    // An Account column only when the lines go to more than one account.
+    const severalAccounts = new Set(session.candidates.map((c) => c.account_id)).size > 1;
     return (
       <section className="flex flex-col gap-4">
         <PageHeader title="Import" />
         <Card>
           <CardHeader>
             <CardTitle>Preview</CardTitle>
+            {session.preset_label && (
+              <p className="text-sm text-ink-secondary">Recognized as a {session.preset_label} export.</p>
+            )}
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             <Table>
@@ -206,6 +254,7 @@ export function ImportPage() {
                 <TableRow>
                   <TableHead />
                   <TableHead>Date</TableHead>
+                  {severalAccounts && <TableHead>Account</TableHead>}
                   <TableHead>Description</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
                   <TableHead>Match</TableHead>
@@ -223,17 +272,12 @@ export function ImportPage() {
                       />
                     </TableCell>
                     <TableCell className="whitespace-nowrap">{formatShortDate(c.date)}</TableCell>
+                    {severalAccounts && <TableCell className="whitespace-nowrap">{c.account_name}</TableCell>}
                     <TableCell>{c.description}</TableCell>
                     <TableCell className="text-right">
                       <Amount cents={c.amount_cents} signed />
                     </TableCell>
-                    <TableCell className={c.is_duplicate ? "text-ink-muted" : undefined}>
-                      {c.transfer_match
-                        ? `Matches transfer from ${c.transfer_match.counterpart_account_name}`
-                        : c.is_duplicate
-                          ? "Likely duplicate"
-                          : ""}
-                    </TableCell>
+                    <TableCell className={c.is_duplicate ? "text-ink-muted" : undefined}>{matchLabel(c)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -257,6 +301,81 @@ export function ImportPage() {
               {slowCommit && (
                 <p className="text-xs text-ink-secondary">Guessing categories, this can take up to a minute.</p>
               )}
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+    );
+  }
+
+  if (session?.products) {
+    const activeAccounts = accounts.filter((a) => !a.archived);
+    const allChosen = session.products.every((product) => product in productAccounts);
+    return (
+      <section className="flex flex-col gap-4">
+        <PageHeader title="Import" />
+        <Card>
+          <CardHeader>
+            <CardTitle>Accounts</CardTitle>
+            <p className="text-sm text-ink-secondary">
+              Recognized as a {session.preset_label} export. Choose where each part of it goes.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleAssign} className="flex flex-col gap-4">
+              <div className="flex flex-wrap gap-4">
+                {session.products.map((product) => (
+                  <div key={product} className="flex flex-col gap-1.5">
+                    <Label>{product}</Label>
+                    <Select
+                      value={productChoice(productAccounts, product)}
+                      onValueChange={(v) =>
+                        setProductAccounts({ ...productAccounts, [product]: v === SKIP ? null : Number(v) })
+                      }
+                    >
+                      <SelectTrigger className="w-56" aria-label={product}>
+                        <SelectValue placeholder="Choose an account" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {activeAccounts.map((a) => (
+                          <SelectItem key={a.id} value={String(a.id)}>
+                            {a.name}
+                          </SelectItem>
+                        ))}
+                        <SelectItem value={SKIP}>Don't import</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <Button type="submit" disabled={submitting || !allChosen}>
+                  Continue
+                </Button>
+                <Button type="button" variant="outline" onClick={startOver}>
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </section>
+    );
+  }
+
+  if (session?.preset) {
+    // A recognized export whose every line was left out (e.g. only
+    // pending Revolut rows, or every Product skipped).
+    return (
+      <section className="flex flex-col gap-4">
+        <PageHeader title="Import" />
+        <Card>
+          <CardContent className="flex flex-col gap-4 pt-6">
+            <p className="text-sm text-ink-secondary">
+              Recognized as a {session.preset_label} export, but there is nothing in it to import.
+            </p>
+            <div>
+              <Button onClick={startOver}>Import another file</Button>
             </div>
           </CardContent>
         </Card>

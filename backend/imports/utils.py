@@ -83,7 +83,10 @@ def _parse_amount_cents(raw):
 
 
 def _parse_date(raw, date_format):
+    # Only the date part counts: "2026-10-12 2:00:00" is 12 October. None
+    # of the DATE_FORMATS contain a space, so this never cuts a date short.
     raw = raw.strip()
+    raw = raw.split(None, 1)[0] if raw else raw
     pattern = DATE_FORMATS.get(date_format)
     if not pattern:
         raise ImportParseError(f"Unsupported date format '{date_format}'.")
@@ -181,7 +184,10 @@ def _is_similar(a, b, threshold=DUPLICATE_SIMILARITY_THRESHOLD):
 def flag_duplicates(account, candidates):
     """Attach is_duplicate + index to each candidate, comparing against
     existing transactions on the same account by exact date + exact
-    amount + a fuzzy-matched description/payee.
+    amount + a fuzzy-matched description/payee. Each existing transaction
+    is claimed by the first matching candidate in file order, so two
+    identical payments on one day aren't both hidden by a single earlier
+    one.
     """
     from transactions.models import Transaction
 
@@ -191,14 +197,22 @@ def flag_duplicates(account, candidates):
     for txn in Transaction.objects.ledger_rows().filter(account=account):
         by_date_amount.setdefault((txn.date.isoformat(), txn.amount_cents), []).append(txn)
 
+    claimed = set()
     flagged = []
     for index, candidate in enumerate(candidates):
         key = (candidate["date"], candidate["amount_cents"])
-        is_duplicate = any(
-            _is_similar(candidate["description"], existing.payee)
-            for existing in by_date_amount.get(key, [])
+        match = next(
+            (
+                existing
+                for existing in by_date_amount.get(key, [])
+                if existing.pk not in claimed and _is_similar(candidate["description"], existing.payee)
+            ),
+            None,
         )
-        flagged.append({**candidate, "index": index, "is_duplicate": is_duplicate})
+        if match is not None:
+            claimed.add(match.pk)
+        # An index numbered across all of an import's accounts is kept.
+        flagged.append({"index": index, **candidate, "is_duplicate": match is not None})
     return flagged
 
 
@@ -221,6 +235,10 @@ def flag_transfer_matches(account, candidates):
     claimed = set()
     flagged = []
     for candidate in candidates:
+        # A pocket move is matched to its other side in the same file.
+        if candidate.get("pocket_pair"):
+            flagged.append({**candidate, "transfer_match": None})
+            continue
         on = date.fromisoformat(candidate["date"])
         options = [
             t
