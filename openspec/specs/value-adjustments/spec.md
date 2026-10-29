@@ -15,7 +15,9 @@ user set the account's value on a date. The system SHALL record a value
 adjustment dated that day that holds the value set, and whose amount is
 the difference from the account's balance at the end of that date
 without it. Setting a value on a date that already has an adjustment
-SHALL replace it. Other account types SHALL NOT offer this.
+SHALL replace it, unless that adjustment was posted by a loan schedule,
+in which case setting the value SHALL be rejected. Other account types,
+and a loan account with a loan setup, SHALL NOT offer this.
 
 #### Scenario: Revalue the house
 - **WHEN** "House" (property) has a balance of 295,000.00 and the user
@@ -44,6 +46,17 @@ SHALL replace it. Other account types SHALL NOT offer this.
 #### Scenario: Not offered on everyday or savings accounts
 - **WHEN** the user opens the ledger of a checking or savings account
 - **THEN** there is no option to set its value
+
+#### Scenario: Not offered on a loan with a schedule
+- **WHEN** the user opens the ledger of "Mortgage", which has a loan
+  setup
+- **THEN** the header offers "Schedule" and no "Set value"
+
+#### Scenario: A scheduled adjustment is not replaced
+- **WHEN** "Mortgage" has an adjustment posted by its loan schedule on 4
+  November, and the user sets its value on 4 November
+- **THEN** the request is rejected with a message, and the scheduled
+  adjustment is unchanged
 
 ### Requirement: A set value holds on its date
 Each adjustment SHALL keep the account at its set value at the end of
@@ -85,7 +98,10 @@ A value adjustment SHALL show in its account's ledger as "Value
 adjustment" with the value it was set to, and SHALL count toward the
 balance like any transaction. Its amount SHALL show in a neutral colour.
 It SHALL have no category, edit, split or transfer control. The user
-SHALL be able to delete it.
+SHALL be able to delete it, unless it was posted by a loan schedule: such
+an adjustment SHALL show "Installment N of M", or "Schedule start" for
+the line-up, in place of its category, linking to the loan's schedule,
+and SHALL have no delete control.
 
 #### Scenario: Shown in the ledger
 - **WHEN** "House" has a +15,000.00 adjustment set to 310,000.00 on 1
@@ -108,6 +124,19 @@ SHALL be able to delete it.
 - **WHEN** "Funds" has adjustments and its type is changed to "savings"
 - **THEN** the adjustments stay in the ledger, keep their values and can
   still be deleted, but no new value can be set
+
+#### Scenario: A scheduled adjustment in the ledger
+- **WHEN** "Mortgage" has the adjustment posted for installment 24 of
+  300
+- **THEN** its row reads "Value adjustment" and "Set to -€187,340",
+  with "Installment 24 of 300" in place of its category, opening the
+  "Mortgage" schedule, and no delete control; deleting it through the
+  API is rejected
+
+#### Scenario: The line-up in the ledger
+- **WHEN** "Mortgage" has the adjustment posted when its loan was set up
+- **THEN** its row shows "Schedule start" in place of its category,
+  with no delete control
 
 ### Requirement: Value adjustments are neither income nor spending
 A value adjustment SHALL NOT count as income, spending, uncategorized
