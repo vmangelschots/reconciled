@@ -623,7 +623,8 @@ class CorrectionTests(LoanTestCase):
         self.correct(date(2026, 11, 12), 170000)
         for on, today in (
             (date(2026, 11, 13), date(2026, 11, 12)),
-            (date(2026, 10, 19), date(2026, 11, 12)),
+            # More than a month before the 20 October setup.
+            (date(2026, 9, 19), date(2026, 11, 12)),
             (date(2026, 11, 12), date(2026, 11, 12)),
         ):
             with self.subTest(on=on), self.assertRaises(LoanError):
@@ -754,3 +755,73 @@ class SetUpWithBankBalanceTests(LoanTestCase):
         self.assertEqual(result["payment_cents"], payment)
         self.assertNotEqual(result["schedule_payment_cents"], payment)
         self.assertEqual([p["date"] for p in result["found_payments"]], [date(2026, 9, 28)])
+
+
+class CorrectionBeforeSetupTests(LoanTestCase):
+    """The loan-schedules spec's corrections dated before the setup day:
+    the household mortgage, set up on 29 October 2026, with the bank's
+    figure from before the 28 October installment."""
+
+    terms = {
+        "principal_cents": euros(160000),
+        "annual_rate": Decimal("2.7836"),
+        "term_months": 300,
+        "first_payment_date": date(2014, 12, 28),
+    }
+    today = date(2026, 10, 29)
+
+    def set_up_mortgage(self, **bank):
+        return set_up_loan(self.mortgage, self.today, paid_from=self.crelan, **bank, **self.terms)
+
+    def lineup(self):
+        return Transaction.objects.get(account=self.mortgage, loan_installment=0)
+
+    def test_a_correction_before_the_setup_day(self):
+        loan = self.set_up_mortgage()
+
+        add_correction(loan, self.today, date(2026, 10, 27), euros(91786.35))
+
+        self.assertFalse(Transaction.objects.filter(account=self.mortgage, date=date(2026, 10, 27)).exists())
+        self.assertEqual(self.lineup().adjustment_value_cents, euros(-91303.56))
+        self.assertEqual(self.balance(self.mortgage), euros(-91303.56))
+        installments = {i.date: i for i in schedule(loan)}
+        self.assertEqual(installments[date(2026, 11, 28)].payment_cents, euros(693.03))
+
+    def test_removing_it_brings_back_the_schedules_line_up(self):
+        loan = self.set_up_mortgage()
+        before = self.lineup().adjustment_value_cents
+        correction = add_correction(loan, self.today, date(2026, 10, 27), euros(91786.35))
+
+        remove_correction(loan, correction, self.today)
+
+        self.assertEqual(self.lineup().adjustment_value_cents, before)
+
+    def test_set_up_with_the_banks_figure_from_before_an_installment(self):
+        loan = self.set_up_mortgage(bank_balance_cents=euros(91786.35), bank_balance_date=date(2026, 10, 27))
+
+        self.assertEqual(loan.corrections.get().date, date(2026, 10, 27))
+        self.assertEqual(self.lineup().adjustment_value_cents, euros(-91303.56))
+
+    def test_a_correction_the_day_before_setup(self):
+        self.set_up_mortgage(bank_balance_cents=euros(91786.35), bank_balance_date=date(2026, 10, 28))
+
+        self.assertEqual(self.lineup().adjustment_value_cents, euros(-91786.35))
+
+    def test_more_than_a_month_back_is_refused(self):
+        with self.assertRaisesMessage(LoanError, "a month before the setup day"):
+            self.set_up_mortgage(bank_balance_cents=euros(91786.35), bank_balance_date=date(2026, 9, 28))
+        self.assertFalse(Loan.objects.exists())
+        loan = self.set_up_mortgage()
+        with self.assertRaises(LoanError):
+            add_correction(loan, self.today, date(2026, 9, 28), euros(91786.35))
+
+    def test_the_preview_checks_the_dated_figure(self):
+        self.pay(date(2026, 10, 28), -693.03)
+
+        result = preview(
+            self.mortgage, self.today, bank_balance_cents=euros(91786.35), bank_balance_date=date(2026, 10, 27),
+            paid_from=self.crelan, **self.terms,
+        )
+
+        self.assertEqual(result["payment_cents"], euros(693.03))
+        self.assertEqual([p["date"] for p in result["found_payments"]], [date(2026, 10, 28)])

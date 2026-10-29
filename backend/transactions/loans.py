@@ -159,11 +159,21 @@ def check_terms(account, principal_cents, annual_rate, term_months, paid_from):
         raise LoanError("A loan can't be paid from an archived account.")
 
 
-def lineup_value(installments, principal_cents, setup_date):
+def lineup_value(installments, principal_cents, setup_date, corrections=()):
     """What the loan is worth on setup day: minus the balance after the
-    last installment before it, or minus the amount borrowed."""
+    last installment or correction before it, whichever is later (the
+    correction on a tie, as an installment on its date counts before it),
+    or minus the amount borrowed."""
     before = [i for i in installments if i.date < setup_date]
+    corrected = max((c for c in corrections if c.date < setup_date), key=lambda c: c.date, default=None)
+    if corrected is not None and (not before or corrected.date >= before[-1].date):
+        return -corrected.balance_cents
     return -(before[-1].balance_after_cents if before else principal_cents)
+
+
+# How far before the setup day a correction may be dated: a bank's figure
+# often predates the latest installment by a few days.
+CORRECTION_LOOKBACK = relativedelta(months=1)
 
 
 def _posting_date(loan, payment, installment, corrections):
@@ -201,13 +211,18 @@ def _post_lineup(loan, installments):
         amount_cents=0,
         payee=ADJUSTMENT_PAYEE,
         is_adjustment=True,
-        adjustment_value_cents=lineup_value(installments, loan.principal_cents, loan.setup_date),
+        adjustment_value_cents=lineup_value(
+            installments, loan.principal_cents, loan.setup_date, list(loan.corrections.all())
+        ),
         loan=loan,
         loan_installment=0,
     )
 
 
 def _post_correction(loan, correction):
+    # One dated before setup posts nothing itself: the line-up follows it.
+    if correction.date < loan.setup_date:
+        return
     _replace_ordinary_adjustment(loan, correction.date)
     Transaction.objects.create(
         account_id=loan.account_id,
@@ -333,18 +348,28 @@ def sync_loans(today):
         sync_loan(loan, today)
 
 
-@db_transaction.atomic
-def set_up_loan(account, today, bank_balance_cents=None, **terms):
-    """Give `account` its loan terms, line it up on `today` and match what
-    is already due. With what the bank says is owed today, the setup gets a
-    correction of it, which takes the line-up's place. Returns the loan."""
-    if Loan.objects.filter(account=account).exists():
-        raise LoanError("This loan is already set up.")
+def _check_bank_balance(today, bank_balance_cents, bank_balance_date):
     if bank_balance_cents is not None and bank_balance_cents < 0:
         raise LoanError("Enter what you owe, 0.00 or more.")
+    if bank_balance_date is not None:
+        _check_correction_date(today, today, bank_balance_date)
+
+
+@db_transaction.atomic
+def set_up_loan(account, today, bank_balance_cents=None, bank_balance_date=None, **terms):
+    """Give `account` its loan terms, line it up on `today` and match what
+    is already due. With what the bank says is owed (today, or on a day up
+    to a month back), the setup gets a correction of it, which the line-up
+    follows. Returns the loan."""
+    if Loan.objects.filter(account=account).exists():
+        raise LoanError("This loan is already set up.")
+    _check_bank_balance(today, bank_balance_cents, bank_balance_date)
     loan = Loan.objects.create(account=account, setup_date=today, **terms)
     if bank_balance_cents is not None:
-        _post_correction(loan, LoanCorrection.objects.create(loan=loan, date=today, balance_cents=bank_balance_cents))
+        correction = LoanCorrection.objects.create(
+            loan=loan, date=bank_balance_date or today, balance_cents=bank_balance_cents
+        )
+        _post_correction(loan, correction)
     _post_lineup(loan, schedule(loan))
     sync_loan(loan, today)
     return loan
@@ -454,15 +479,20 @@ def _with_candidate(loan, candidate, without=None):
     )
 
 
+def _check_correction_date(today, setup_date, on):
+    if on > today:
+        raise LoanError("The date can't be in the future.")
+    earliest = setup_date - CORRECTION_LOOKBACK
+    if on < earliest:
+        raise LoanError(
+            f"The date can't be before {on_day(earliest)}, a month before the setup day. Edit the terms instead."
+        )
+
+
 def _check_correction(loan, today, on, balance_cents, payment_cents):
     """Raise LoanError when this can't be a correction of `loan`; else the
     schedule it gives."""
-    if on > today:
-        raise LoanError("The date can't be in the future.")
-    if on < loan.setup_date:
-        raise LoanError(
-            f"The date can't be before the setup day ({on_day(loan.setup_date)}). Edit the terms instead."
-        )
+    _check_correction_date(today, loan.setup_date, on)
     if loan.corrections.filter(date=on).exists():
         raise LoanError(f"There's already a correction on {on_day(on)}. Remove it first.")
     if balance_cents < 0:
@@ -753,15 +783,17 @@ def suggest_correction(loan, today):
     return {"missed_count": len(missed), "amount_cents": -best[1] if best else None}
 
 
-def preview(account, today, loan=None, bank_balance_cents=None, **terms):
+def preview(account, today, loan=None, bank_balance_cents=None, bank_balance_date=None, **terms):
     """What these terms would give, saving nothing: the monthly payment, the
     next installment, the schedule's balance today, recent payments of that
     amount in the paying account, and for an existing setup, what an edit
-    would repost. With what the bank says is owed today (a new setup only),
-    the payment is the one that correction gives."""
+    would repost. With what the bank says is owed (a new setup only), the
+    payment is the one that correction gives."""
     corrections = list(loan.corrections.all()) if loan is not None else []
+    bank_date = bank_balance_date or today
     if loan is None and bank_balance_cents is not None:
-        corrections.append(_Candidate(today, bank_balance_cents, None))
+        _check_bank_balance(today, bank_balance_cents, bank_balance_date)
+        corrections.append(_Candidate(bank_date, bank_balance_cents, None))
     installments = compute_schedule(
         terms["principal_cents"],
         terms["annual_rate"],
@@ -773,7 +805,7 @@ def preview(account, today, loan=None, bank_balance_cents=None, **terms):
     if not installments:
         raise LoanError("The bank says nothing is owed: there's no schedule left to follow.")
     payment_cents = installments[0].payment_cents
-    corrected_from = _payment_from(installments, today) if bank_balance_cents is not None else None
+    corrected_from = _payment_from(installments, bank_date) if bank_balance_cents is not None else None
     if corrected_from is not None:
         payment_cents = corrected_from.payment_cents
     found = (
@@ -795,7 +827,7 @@ def preview(account, today, loan=None, bank_balance_cents=None, **terms):
         "next_installment": (
             {"number": next_installment.number, "date": next_installment.date} if next_installment else None
         ),
-        "schedule_balance_today_cents": lineup_value(installments, terms["principal_cents"], today),
+        "schedule_balance_today_cents": lineup_value(installments, terms["principal_cents"], today, corrections),
         "current_balance_cents": account.current_balance_cents,
         "found_payments": [_payment_info(t) for t in found],
         "repost": None,

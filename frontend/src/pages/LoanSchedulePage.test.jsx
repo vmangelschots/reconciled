@@ -560,9 +560,12 @@ describe("Setting up with the bank's balance", () => {
     await screen.findByText("No repayment schedule yet");
     await fillTerms(user);
     await user.click(await screen.findByRole("button", { name: "The bank says something else" }));
-    await user.type(screen.getByLabelText("Owed per the bank today"), "104870.35");
+    await user.type(screen.getByLabelText("Owed per the bank"), "104870.35");
     await waitFor(() =>
-      expect(loansApi.previewLoan).toHaveBeenLastCalledWith(4, expect.objectContaining({ bank_balance_cents: 10487035 })),
+      expect(loansApi.previewLoan).toHaveBeenLastCalledWith(
+        4,
+        expect.objectContaining({ bank_balance_cents: 10487035, bank_balance_date: "2026-11-12" }),
+      ),
     );
     expect(screen.getByTestId("terms-check")).toHaveTextContent(
       `${formatMoney(69303)} a month · ${formatMoney(73799)} per the terms`,
@@ -576,6 +579,43 @@ describe("Setting up with the bank's balance", () => {
     await screen.findByText("No repayment schedule yet");
     await fillTerms(user);
     await user.click(await screen.findByRole("button", { name: "enter what it says you owe" }));
-    expect(screen.getByLabelText("Owed per the bank today")).toBeInTheDocument();
+    expect(screen.getByLabelText("Owed per the bank")).toBeInTheDocument();
   });
 });
+
+describe("The bank's figure from before an installment", () => {
+  it("sends the day of the bank's balance when setting up", async () => {
+    const user = userEvent.setup();
+    accountsApi.getAccount.mockResolvedValue({ ...MORTGAGE, has_loan: false, current_balance_cents: 0 });
+    loansApi.getLoan.mockRejectedValue(notFound());
+    loansApi.saveLoan.mockResolvedValue(makeLoan());
+    renderPage();
+    await screen.findByText("No repayment schedule yet");
+    await fillTerms(user);
+    await user.click(await screen.findByRole("button", { name: "The bank says something else" }));
+    await user.type(screen.getByLabelText("Owed per the bank"), "91786.35");
+    const day = screen.getByLabelText("Day of the bank's balance");
+    expect(day).toHaveAttribute("min", "2026-10-12");
+    await user.clear(day);
+    await user.type(day, "2026-11-10");
+    await waitFor(() =>
+      expect(loansApi.previewLoan).toHaveBeenLastCalledWith(
+        4,
+        expect.objectContaining({ bank_balance_cents: 9178635, bank_balance_date: "2026-11-10" }),
+      ),
+    );
+    await user.click(screen.getByRole("button", { name: "Set up schedule" }));
+    await waitFor(() =>
+      expect(loansApi.saveLoan).toHaveBeenCalledWith(4, expect.objectContaining({ bank_balance_date: "2026-11-10" })),
+    );
+  });
+
+  it("lets a correction go back a month before the setup day", async () => {
+    const user = userEvent.setup();
+    loansApi.getLoan.mockResolvedValue(makeLoan({ states: { 24: "due" }, setup: "2026-10-29" }));
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "Correct balance" }));
+    expect(screen.getByLabelText("On")).toHaveAttribute("min", "2026-09-29");
+  });
+});
+

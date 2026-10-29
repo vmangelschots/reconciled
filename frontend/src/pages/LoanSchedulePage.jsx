@@ -48,6 +48,14 @@ function todayIso() {
   return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())).toISOString().slice(0, 10);
 }
 
+// The earliest day a correction can be dated: one month before the setup
+// day, as a bank's figure often predates the latest installment.
+function monthBefore(isoDate) {
+  const [y, m, d] = isoDate.split("-").map(Number);
+  const lastDay = new Date(Date.UTC(y, m - 1, 0)).getUTCDate();
+  return new Date(Date.UTC(y, m - 2, Math.min(d, lastDay))).toISOString().slice(0, 10);
+}
+
 // "693.03" -> 69303, or null when it isn't an amount.
 function toCents(value) {
   const amount = parseFloat(value);
@@ -145,15 +153,20 @@ function toTerms(fields) {
     paid_from: Number(fields.paidFrom),
     payment_category: fields.category,
     // What the bank says is owed today; a new setup only.
-    ...(fields.bank !== undefined && toCents(fields.bank) !== null && { bank_balance_cents: toCents(fields.bank) }),
+    ...(fields.bank !== undefined &&
+      toCents(fields.bank) !== null && {
+        bank_balance_cents: toCents(fields.bank),
+        bank_balance_date: fields.bankDate || todayIso(),
+      }),
   };
 }
 
 // What the entered terms give, before anything is saved - so a cent's
 // difference with the bank shows here, not as a missed payment weeks later.
-// For a new setup, `bank` is what the bank says is owed today (undefined
-// until the user opens it); the payment checked is then the one it gives.
-function TermsCheck({ preview, account, payerName, bank, onBank }) {
+// For a new setup, `bank` is what the bank says is owed on `bankDate`
+// (undefined until the user opens it); the payment checked is then the
+// one it gives.
+function TermsCheck({ preview, account, payerName, bank, onBank, bankDate, onBankDate }) {
   if (!preview) return null;
   if (preview.error) return <p className="text-sm text-ink-muted">{preview.error}</p>;
   const found = preview.found_payments;
@@ -187,7 +200,7 @@ function TermsCheck({ preview, account, payerName, bank, onBank }) {
       </p>
       {onBank && bank !== undefined && (
         <div className="flex flex-wrap items-center gap-2">
-          <Label htmlFor="loan-bank">Owed per the bank today</Label>
+          <Label htmlFor="loan-bank">Owed per the bank</Label>
           <div className="relative">
             <Input
               id="loan-bank"
@@ -201,6 +214,16 @@ function TermsCheck({ preview, account, payerName, bank, onBank }) {
             />
             <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-ink-muted">€</span>
           </div>
+          <span className="text-ink-secondary">on</span>
+          <Input
+            aria-label="Day of the bank's balance"
+            type="date"
+            value={bankDate}
+            min={monthBefore(todayIso())}
+            max={todayIso()}
+            onChange={(e) => onBankDate(e.target.value)}
+            className="h-8 w-40"
+          />
           <button type="button" onClick={() => onBank(undefined)} className="text-xs text-ink-muted hover:text-ink-secondary">
             Use the schedule's
           </button>
@@ -312,7 +335,15 @@ function CorrectionForm({ loan, payerName, initialPayment, onSaved, onCancel }) 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="correction-date">On</Label>
-          <Input id="correction-date" type="date" value={on} max={todayIso()} onChange={(e) => setOn(e.target.value)} required />
+          <Input
+            id="correction-date"
+            type="date"
+            value={on}
+            min={monthBefore(loan.setup_date)}
+            max={todayIso()}
+            onChange={(e) => setOn(e.target.value)}
+            required
+          />
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="correction-owed">Owed per the bank</Label>
@@ -631,7 +662,9 @@ function LoanForm({ account, loan, categories, payers, onSaved, onCancel, onRemo
         account={account}
         payerName={payerName}
         bank={fields.bank}
-        onBank={loan ? undefined : (value) => setFields((f) => ({ ...f, bank: value }))}
+        onBank={loan ? undefined : (value) => setFields((f) => ({ ...f, bank: value, bankDate: f.bankDate || todayIso() }))}
+        bankDate={fields.bankDate}
+        onBankDate={(value) => setFields((f) => ({ ...f, bankDate: value }))}
       />
 
       <div className="flex flex-wrap items-center gap-2">
