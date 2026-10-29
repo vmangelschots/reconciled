@@ -2,18 +2,20 @@
 
 ## 1. Loan terms and the schedule
 
-- [ ] 1.1 Add `accounts.Loan` with the fields in design.md (migration),
+- [x] 1.1 Add `accounts.Loan` with the fields in design.md (migration),
   and add `loan`, `loan_installment`, `loan_payment` and
   `loan_linked_by_hand` to `Transaction`, with the conditional unique
   constraint (migration). Add `"accounts.Loan"` to `BACKED_UP_MODELS`.
   Verify that `python manage.py makemigrations --check` is clean and
   that the existing `backup` tests pass, including the "every model is
   listed" check.
-- [ ] 1.2 Add `transactions/loans.py:schedule(loan)`, which computes the
+- [x] 1.2 Add `transactions/loans.py:schedule(loan)`, which computes the
   installments with `Decimal`, as in design.md. Verify with tests for:
   - "The Belgian monthly rate" (944.22; first row 493.25 / 450.97 /
-    199,549.03), with the result cross-checked against a published
-    Belgian aflossingstabel
+    199,549.03). The cross-check against a published Belgian
+    aflossingstabel moved to 5.1: no public table could be reproduced
+    (the examples found used r / 12 or included fees), so the user's own
+    bank table is the reference.
   - "The last installment absorbs the rounding" (336.58, 336.58,
     336.59)
   - "A loan without interest"

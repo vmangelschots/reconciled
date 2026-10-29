@@ -62,3 +62,27 @@ class Account(models.Model):
         # Parts of a split are inside their transaction's amount already.
         total = self.transactions.ledger_rows().aggregate(total=Sum("amount_cents"))["total"] or 0
         return self.starting_balance_cents + total
+
+
+class Loan(models.Model):
+    """A loan account's annuity terms. The schedule is computed from these,
+    never stored; all rules live in transactions/loans.py. See
+    openspec/specs/loan-schedules."""
+
+    account = models.OneToOneField(Account, on_delete=models.CASCADE, related_name="loan")
+    principal_cents = models.BigIntegerField()
+    # A percentage: 3.0000 is 3%.
+    annual_rate = models.DecimalField(max_digits=7, decimal_places=4)
+    term_months = models.PositiveIntegerField()
+    first_payment_date = models.DateField()
+    paid_from = models.ForeignKey(Account, on_delete=models.PROTECT, related_name="loans_paid")
+    payment_category = models.ForeignKey(
+        "budgets.Category", null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    # Kept on edit, so a repost lines up on the same day.
+    setup_date = models.DateField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Loan for {self.account}"

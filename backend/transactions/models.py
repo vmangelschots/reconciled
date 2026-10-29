@@ -91,6 +91,19 @@ class Transaction(models.Model):
     # transactions/adjustments.py.
     is_adjustment = models.BooleanField(default=False)
     adjustment_value_cents = models.BigIntegerField(null=True, blank=True)
+    # An adjustment posted by a loan schedule: the loan, its installment
+    # (0 is the line-up at setup) and the payment it was matched to.
+    # SET_NULL on loan turns them into ordinary adjustments when the setup
+    # is removed; CASCADE on the payment removes the adjustment with it.
+    # All rules live in transactions/loans.py.
+    loan = models.ForeignKey(
+        "accounts.Loan", null=True, blank=True, on_delete=models.SET_NULL, related_name="adjustments"
+    )
+    loan_installment = models.PositiveIntegerField(null=True, blank=True)
+    loan_payment = models.OneToOneField(
+        "self", null=True, blank=True, on_delete=models.CASCADE, related_name="loan_adjustment"
+    )
+    loan_linked_by_hand = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -98,6 +111,13 @@ class Transaction(models.Model):
 
     class Meta:
         ordering = ["-date", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["loan", "loan_installment"],
+                condition=models.Q(loan__isnull=False),
+                name="one_adjustment_per_installment",
+            )
+        ]
 
     def __str__(self):
         return f"{self.date} {self.payee} ({self.amount_cents})"
