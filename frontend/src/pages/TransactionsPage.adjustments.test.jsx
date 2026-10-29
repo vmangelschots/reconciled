@@ -176,3 +176,93 @@ describe("Set value", () => {
     expect(screen.queryByRole("button", { name: "Set value" })).toBeNull();
   });
 });
+
+// A loan that follows its schedule - see the loan-schedules spec and the
+// value-adjustments spec's scheduled adjustments.
+describe("A loan with a schedule", () => {
+  const SCHEDULED = { ...MORTGAGE, has_loan: true, loan_paid_from: CHECKING.id };
+  const INSTALLMENT = {
+    ...ADJUSTMENT,
+    id: 21,
+    date: "2026-11-04",
+    amount_cents: 45097,
+    adjustment_value_cents: -18734000,
+    loan_installment: 24,
+    loan_term_months: 300,
+  };
+  const LINE_UP = { ...ADJUSTMENT, id: 20, date: "2026-10-20", loan_installment: 0, loan_term_months: 300 };
+  const PAYMENT = {
+    id: 30,
+    date: "2026-11-04",
+    payee: "BNP HYPOTHEEK",
+    notes: "",
+    category: null,
+    transfer: null,
+    parts: [],
+    amount_cents: -94422,
+    is_adjustment: false,
+    loan_match: { loan_account_id: MORTGAGE.id, loan_account_name: "Mortgage", installment: 24 },
+  };
+
+  beforeEach(() => {
+    accountsApi.listAccounts.mockResolvedValue([CHECKING, SAVINGS, HOUSE, SCHEDULED]);
+  });
+
+  it("offers Schedule instead of Set value", async () => {
+    transactionsApi.listTransactions.mockResolvedValue([]);
+    renderLedger(MORTGAGE.id);
+    await findTable();
+    expect(screen.getByRole("link", { name: "Schedule" })).toHaveAttribute("href", "/transactions/4/schedule");
+    expect(screen.queryByRole("button", { name: "Set value" })).toBeNull();
+  });
+
+  it("offers Set value and Set up schedule on a loan without one", async () => {
+    accountsApi.listAccounts.mockResolvedValue([CHECKING, SAVINGS, HOUSE, MORTGAGE]);
+    transactionsApi.listTransactions.mockResolvedValue([]);
+    renderLedger(MORTGAGE.id);
+    await findTable();
+    expect(screen.getByRole("button", { name: "Set value" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Set up schedule" })).toBeInTheDocument();
+  });
+
+  it("names a scheduled adjustment's installment and offers no Delete", async () => {
+    transactionsApi.listTransactions.mockResolvedValue([INSTALLMENT, LINE_UP]);
+    renderLedger(MORTGAGE.id);
+    const table = await findTable();
+    const installment = (await table.findByRole("link", { name: "Installment 24 of 300" })).closest("tr");
+    expect(installment).toHaveTextContent("Set to -€187,340");
+    expect(within(installment).getByRole("link", { name: "Installment 24 of 300" })).toHaveAttribute(
+      "href",
+      "/transactions/4/schedule?installment=24",
+    );
+    expect(within(installment).queryByRole("button", { name: "Delete" })).toBeNull();
+    const lineUp = table.getByRole("link", { name: "Schedule start" }).closest("tr");
+    expect(within(lineUp).queryByRole("button", { name: "Delete" })).toBeNull();
+  });
+
+  it("keeps Delete on an ordinary adjustment", async () => {
+    transactionsApi.listTransactions.mockResolvedValue([ADJUSTMENT]);
+    renderLedger(HOUSE.id);
+    const table = await findTable();
+    const row = (await table.findByText("Value adjustment")).closest("tr");
+    expect(within(row).getByRole("button", { name: "Delete" })).toBeInTheDocument();
+  });
+
+  it("tags the matched payment with its loan and installment", async () => {
+    transactionsApi.listTransactions.mockResolvedValue([PAYMENT]);
+    renderLedger(CHECKING.id);
+    const table = await findTable();
+    const tag = await table.findByRole("link", { name: "Mortgage · installment 24" });
+    expect(tag).toHaveAttribute("href", "/transactions/4/schedule?installment=24");
+  });
+
+  it("doesn't offer the scheduled loan as a transfer target from its payer", async () => {
+    transactionsApi.listTransactions.mockResolvedValue([{ ...PAYMENT, loan_match: null }]);
+    renderLedger(CHECKING.id);
+    const table = await findTable();
+    const row = (await table.findByText("BNP HYPOTHEEK")).closest("tr");
+    await userEvent.click(within(row).getAllByRole("button")[0]);
+    expect(await screen.findByText("→ Spaarrekening")).toBeInTheDocument();
+    expect(screen.queryByText("→ Mortgage")).toBeNull();
+  });
+});

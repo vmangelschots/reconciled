@@ -1,4 +1,4 @@
-import { ChevronDown, Scale, Split, Upload } from "lucide-react";
+import { ChevronDown, Landmark, Scale, Split, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, Navigate, NavLink, useNavigate, useParams } from "react-router-dom";
 import { useAccounts } from "../accounts/AccountsContext";
@@ -375,8 +375,9 @@ export function TransactionsPage() {
   }
 
   // The account list only holds active accounts; a row can't transfer to
-  // its own account.
-  const transferTargets = accounts.filter((a) => a.id !== accountId);
+  // its own account, nor to a loan whose schedule it pays - the schedule
+  // already posts the principal (see the account-transfers spec).
+  const transferTargets = accounts.filter((a) => a.id !== accountId && a.loan_paid_from !== accountId);
   const filtering = Boolean(filters.dateFrom || filters.dateTo || filters.category != null || filters.search);
 
   if (!account) {
@@ -388,17 +389,33 @@ export function TransactionsPage() {
     );
   }
 
-  const canSetValue = !isArchived && VALUED_TYPES.has(account.account_type);
+  // A loan that follows its schedule isn't valued by hand: the next
+  // installment would overwrite it. See the loan-schedules spec.
+  const hasSchedule = account.account_type === "loan" && account.has_loan;
+  const canSetValue = !isArchived && VALUED_TYPES.has(account.account_type) && !hasSchedule;
+  const scheduleLink = account.account_type === "loan" && (hasSchedule || !isArchived) && (
+    <Link
+      to={`/transactions/${account.id}/schedule`}
+      className={buttonVariants({ variant: hasSchedule ? "outline" : "ghost", size: "sm" })}
+    >
+      {hasSchedule ? "Schedule" : "Set up schedule"}
+    </Link>
+  );
 
   return (
     <section className="flex flex-col gap-6">
       <PageHeader
         title="Transactions"
         actions={
-          canSetValue && (
-            <Button variant="outline" size="sm" onClick={() => setSettingValue(true)}>
-              Set value
-            </Button>
+          (canSetValue || scheduleLink) && (
+            <>
+              {canSetValue && (
+                <Button variant="outline" size="sm" onClick={() => setSettingValue(true)}>
+                  Set value
+                </Button>
+              )}
+              {scheduleLink}
+            </>
           )
         }
       >
@@ -508,7 +525,12 @@ export function TransactionsPage() {
             if (t.is_adjustment) {
               return (
                 <tbody key={t.id} className="group border-b border-border last:border-b-0">
-                  <AdjustmentRow transaction={t} pending={pending} onDelete={() => handleDelete(t.id)} />
+                  <AdjustmentRow
+                    transaction={t}
+                    accountId={accountId}
+                    pending={pending}
+                    onDelete={() => handleDelete(t.id)}
+                  />
                 </tbody>
               );
             }
@@ -535,7 +557,10 @@ export function TransactionsPage() {
               <tbody key={t.id} className="group border-b border-border last:border-b-0">
                 <TableRow className={cn("hover:bg-transparent group-hover:bg-surface-2", splitOpen && "bg-surface-2")}>
                   <TableCell className={cn(barCell, "whitespace-nowrap text-ink-secondary")}>{formatShortDate(t.date)}</TableCell>
-                  <TableCell>{t.payee}</TableCell>
+                  <TableCell>
+                    {t.payee}
+                    {t.loan_match && <LoanMatchTag match={t.loan_match} />}
+                  </TableCell>
                   {/* Long notes stay on one line; the full text is in the tooltip. */}
                   <TableCell className="max-w-xs truncate text-ink-secondary" title={t.notes || undefined}>
                     {t.notes}
@@ -672,11 +697,28 @@ export function TransactionsPage() {
   );
 }
 
+// A payment matched to a loan installment names it, linking to the
+// schedule. See the loan-schedules spec's "Matched payments show their
+// installment".
+function LoanMatchTag({ match }) {
+  return (
+    <Link
+      to={`/transactions/${match.loan_account_id}/schedule?installment=${match.installment}`}
+      className="ml-2 inline-flex items-center gap-1 rounded-full bg-surface-2 px-2 py-0.5 text-xs text-ink-muted ring-1 ring-border hover:text-ink-secondary"
+    >
+      <Landmark className="h-3 w-3" aria-hidden="true" />
+      {match.loan_account_name} · installment {match.installment}
+    </Link>
+  );
+}
+
 // A value adjustment: what the account was set to, no category, and a
 // neutral amount since it is never income or spending. It can only be
-// deleted; the hidden Edit keeps Delete in line with the other rows. See
-// the value-adjustments spec.
-function AdjustmentRow({ transaction, pending, onDelete }) {
+// deleted; the hidden Edit keeps Delete in line with the other rows. One
+// posted by a loan schedule names its installment instead of a category
+// and can't be deleted. See the value-adjustments spec.
+function AdjustmentRow({ transaction, accountId, pending, onDelete }) {
+  const scheduled = transaction.loan_installment != null;
   return (
     <TableRow className="hover:bg-transparent group-hover:bg-surface-2">
       <TableCell className="whitespace-nowrap text-ink-secondary">{formatShortDate(transaction.date)}</TableCell>
@@ -689,7 +731,20 @@ function AdjustmentRow({ transaction, pending, onDelete }) {
       <TableCell className="text-ink-secondary">
         Set to <span className="num">{formatMoneyWhole(transaction.adjustment_value_cents)}</span>
       </TableCell>
-      <TableCell className="text-ink-muted">—</TableCell>
+      <TableCell className="text-ink-muted">
+        {scheduled ? (
+          <Link
+            to={`/transactions/${accountId}/schedule?installment=${transaction.loan_installment}`}
+            className="text-ink-secondary underline-offset-2 hover:underline"
+          >
+            {transaction.loan_installment === 0
+              ? "Schedule start"
+              : `Installment ${transaction.loan_installment} of ${transaction.loan_term_months}`}
+          </Link>
+        ) : (
+          "—"
+        )}
+      </TableCell>
       <TableCell className="text-right">
         <Amount cents={transaction.amount_cents} signed className="text-ink-secondary" />
       </TableCell>
@@ -697,9 +752,11 @@ function AdjustmentRow({ transaction, pending, onDelete }) {
         <Button variant="outline" size="sm" className="invisible" aria-hidden="true" tabIndex={-1}>
           Edit
         </Button>
-        <Button variant="ghost" size="sm" disabled={pending} onClick={onDelete}>
-          Delete
-        </Button>
+        {!scheduled && (
+          <Button variant="ghost" size="sm" disabled={pending} onClick={onDelete}>
+            Delete
+          </Button>
+        )}
       </TableCell>
     </TableRow>
   );

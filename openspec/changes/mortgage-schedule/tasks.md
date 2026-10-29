@@ -111,7 +111,7 @@
 
 ## 4. Frontend
 
-- [ ] 4.1 Add the loan API calls to `frontend/src/api/`, and
+- [x] 4.1 Add the loan API calls to `frontend/src/api/`, and
   `LoanSchedulePage` at `transactions/:accountId/schedule` with the
   header and the setup/edit panel, as in design.md:
   - the live preview, debounced on the preview endpoint
@@ -141,7 +141,7 @@
   - linking and unlinking a payment
 
   Check it at 390px wide ("On a phone"): no sideways scrolling.
-- [ ] 4.3 In the ledger:
+- [x] 4.3 In the ledger:
   - render a scheduled adjustment with "Installment N of M" or "Schedule
     start" in the category cell, linking to the schedule, with no Delete
   - tag a matched payment with "<Loan> · installment N"
@@ -151,7 +151,7 @@
   ledger", "The line-up in the ledger", "Tag on the payment" and "A
   scheduled loan is not a transfer target from its payer", and that an
   ordinary adjustment keeps Delete.
-- [ ] 4.4 Add the "<Loan>: payment of <d Mon> not seen" item with its
+- [x] 4.4 Add the "<Loan>: payment of <d Mon> not seen" item with its
   "Installment N of M · €… from <account>" line to Needs attention,
   between the yearly warnings and the stale import, linking to the
   schedule at that installment. Verify with `OverviewPage` tests for the
