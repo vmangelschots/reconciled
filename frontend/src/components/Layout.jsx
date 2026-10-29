@@ -87,12 +87,18 @@ const SIDEBAR_ACCOUNTS = 5
 function TransactionsGroup({ item }) {
   const { accounts } = useAccounts()
   const { pathname } = useLocation()
+  // The user's choice to show all accounts or five; until they choose,
+  // the list is expanded only when the open account is beyond the five.
+  const [showAllChoice, setShowAllChoice] = useState(null)
   if (accounts.length <= 1) return <SidebarLink item={item} />
 
   const Icon = item.icon
   const inGroup = pathname.startsWith('/transactions')
-  const shown = accounts.slice(0, SIDEBAR_ACCOUNTS)
-  const hidden = accounts.length - shown.length
+  const openId = pathname.match(/^\/transactions\/(\d+)/)?.[1]
+  const openIndex = accounts.findIndex((a) => String(a.id) === openId)
+  const showAll = showAllChoice ?? openIndex >= SIDEBAR_ACCOUNTS
+  const shown = showAll ? accounts : accounts.slice(0, SIDEBAR_ACCOUNTS)
+  const hidden = accounts.length - SIDEBAR_ACCOUNTS
   return (
     <div className="flex flex-col gap-0.5">
       <NavLink
@@ -128,10 +134,23 @@ function TransactionsGroup({ item }) {
             )}
           </NavLink>
         ))}
-        {hidden > 0 && (
-          <NavLink to="/accounts" className="px-3 py-1.5 text-xs text-ink-muted hover:text-ink-primary">
+        {hidden > 0 && !showAll && (
+          <button
+            type="button"
+            onClick={() => setShowAllChoice(true)}
+            className="px-3 py-1.5 text-left text-xs text-ink-muted hover:text-ink-primary"
+          >
             +{hidden} more
-          </NavLink>
+          </button>
+        )}
+        {hidden > 0 && showAll && (
+          <button
+            type="button"
+            onClick={() => setShowAllChoice(false)}
+            className="px-3 py-1.5 text-left text-xs text-ink-muted hover:text-ink-primary"
+          >
+            Show fewer
+          </button>
         )}
       </div>
     </div>

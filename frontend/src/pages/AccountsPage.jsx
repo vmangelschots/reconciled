@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { ACCOUNT_TYPES, archiveAccount, createAccount, listAccounts, updateAccount } from "../api/accounts";
 import { TIERS, tierLabel } from "../lib/tiers";
 import { Button } from "../components/ui/Button";
@@ -144,7 +145,16 @@ export function AccountsPage() {
                 </TableRow>
               ) : (
                 <TableRow key={account.id}>
-                  <TableCell>{account.name}</TableCell>
+                  <TableCell>
+                    {/* The way to an account's transactions on a wide screen, where
+                        the sidebar lists only five - see the accounts spec. */}
+                    <Link
+                      to={`/transactions/${account.id}`}
+                      className="font-medium text-ink-primary underline-offset-2 hover:text-accent hover:underline"
+                    >
+                      {account.name}
+                    </Link>
+                  </TableCell>
                   <TableCell>{typeLabel(account.account_type)}</TableCell>
                   <TableCell className="text-ink-secondary">{tierLabel(account.tier)}</TableCell>
                   <TableCell className="text-right">
