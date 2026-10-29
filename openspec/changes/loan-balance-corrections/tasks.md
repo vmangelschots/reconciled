@@ -60,7 +60,7 @@
 
 ## 3. API
 
-- [ ] 3.1 In `accounts/views.py`, add the endpoints: correction preview
+- [x] 3.1 In `accounts/views.py`, add the endpoints: correction preview
   (including the near payment within 0.05), add, and remove with its
   preview. Extend the schedule body with `corrections`, the payment in
   force, `payment_since`, `paid_off_on`, `suggestion` and each
