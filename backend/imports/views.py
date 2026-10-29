@@ -2,6 +2,7 @@ import csv
 import io
 
 from django.db import transaction as db_transaction
+from django.utils import timezone
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import JSONParser, MultiPartParser
@@ -11,6 +12,7 @@ from accounts.models import Account
 from transactions.adjustments import recompute_if_valued
 from transactions.ai import get_guesser
 from transactions.categorize import categorize
+from transactions.loans import sync_loans
 from transactions.models import Transaction
 from transactions.transfers import link_pair
 
@@ -231,6 +233,9 @@ class ImportSessionViewSet(
         # guessed: a line that confirmed a transfer counterpart or became a
         # pocket move stays a transfer.
         categorized = categorize([t for index, t in new_rows.items() if index not in pocket_moves])
+        # After guessing, so a matched loan payment ends with the loan's
+        # category rather than a guess - see openspec/specs/loan-schedules.
+        sync_loans(timezone.localdate())
         return Response(
             {
                 "created_count": len(created),

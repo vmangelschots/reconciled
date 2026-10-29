@@ -63,6 +63,9 @@ class TransactionSerializer(serializers.ModelSerializer):
             "parts",
             "is_adjustment",
             "adjustment_value_cents",
+            "loan_installment",
+            "loan_term_months",
+            "loan_match",
             "created_at",
             "updated_at",
         ]
@@ -73,12 +76,33 @@ class TransactionSerializer(serializers.ModelSerializer):
             "split_parent",
             "is_adjustment",
             "adjustment_value_cents",
+            "loan_installment",
             "created_at",
             "updated_at",
         ]
 
     transfer = serializers.SerializerMethodField()
     parts = serializers.SerializerMethodField()
+    loan_term_months = serializers.SerializerMethodField()
+    loan_match = serializers.SerializerMethodField()
+
+    def get_loan_term_months(self, obj):
+        # Set on an adjustment posted by a loan schedule; see
+        # openspec/specs/loan-schedules.
+        return obj.loan.term_months if obj.loan_id is not None else None
+
+    def get_loan_match(self, obj):
+        """For a payment matched to a loan installment: which loan and
+        installment, for the tag on its row."""
+        try:
+            adjustment = obj.loan_adjustment
+        except Transaction.DoesNotExist:
+            return None
+        return {
+            "loan_account_id": adjustment.account_id,
+            "loan_account_name": adjustment.account.name,
+            "installment": adjustment.loan_installment,
+        }
 
     def get_transfer(self, obj):
         return transfer_info(obj)

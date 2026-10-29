@@ -434,6 +434,43 @@ describe("Needs attention", () => {
     vi.useRealTimers();
   });
 
+  it("lists a missed loan payment after yearly warnings and before the stale import", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(2026, 9, 24));
+    overviewApi.getOverview.mockResolvedValue(
+      overview({
+        accounts: [{ id: 2, name: "Crelan", balance_cents: 0, last_import_date: "2026-10-12" }],
+        attention: {
+          yearly: [
+            {
+              id: 8, name: "Property tax", parent_name: null, kind: "target", state: "due_soon", share: 0,
+              spent_cents: 0, budget_cents: 40000, due_date: "2026-11-01",
+            },
+          ],
+          missed_loans: [
+            {
+              account_id: 4, name: "Mortgage", date: "2026-10-02", installment: 23, term_months: 300,
+              payment_cents: 94422, paid_from_name: "Crelan",
+            },
+          ],
+        },
+      }),
+    );
+    renderPage();
+    const attention = await screen.findByRole("region", { name: "Needs attention" });
+
+    await waitFor(() => expect(within(attention).getAllByRole("link")).toHaveLength(3));
+    const links = within(attention).getAllByRole("link");
+    expect(links.map((l) => l.textContent.split(/(?<=[a-z%)])(?=[A-Z€])/)[0])).toEqual([
+      "Property tax due in 8 days",
+      `Mortgage: payment of ${formatDayMonth("2026-10-02")} not seen`,
+      "Crelan: last import 12 days ago",
+    ]);
+    expect(links[1]).toHaveAttribute("href", "/transactions/4/schedule?installment=23");
+    expect(links[1]).toHaveTextContent(`Installment 23 of 300 · ${formatMoney(94422)} from Crelan`);
+    vi.useRealTimers();
+  });
+
   it.each([
     [{ kind: "yearly", state: "ahead", share: 90, spent_cents: 27000, budget_cents: 30000, due_date: null }, "Clothing at 90% of 2026", "Yearly · €270 of €300"],
     [{ kind: "yearly", state: "over", share: 110, spent_cents: 33000, budget_cents: 30000, due_date: null }, "Clothing €30 over", "Yearly · €330 of €300"],

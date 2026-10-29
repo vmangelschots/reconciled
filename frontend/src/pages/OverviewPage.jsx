@@ -32,7 +32,7 @@ import { useMediaQuery } from "../hooks/useMediaQuery";
 import { useReport } from "../hooks/useReport";
 import { cn } from "../lib/cn";
 import { formatShortDate } from "../lib/dates";
-import { formatMoneyWhole } from "../lib/money";
+import { formatMoney, formatMoneyWhole } from "../lib/money";
 import { currentMonth, daysSince, monthLabel, monthName } from "../lib/months";
 import { formatDayMonth } from "../lib/yearlyBudgets";
 import { VALUED_TYPES, tierLabel } from "../lib/tiers";
@@ -256,9 +256,23 @@ function attentionItems(data, month, isCurrent) {
     });
   }
   for (const y of attention.yearly ?? []) items.push(yearlyItem(y, month));
+  for (const loan of attention.missed_loans ?? []) items.push(missedLoanItem(loan));
   const stale = staleImportItem(data.accounts);
   if (stale) items.push(stale);
   return items;
+}
+
+// A loan installment whose payment wasn't seen - see specs/overview,
+// "Missed loan payments". The second line tells two loans paid from one
+// account apart.
+function missedLoanItem(loan) {
+  return {
+    key: `loan-${loan.account_id}`,
+    to: `/transactions/${loan.account_id}/schedule?installment=${loan.installment}`,
+    icon: <AlertTriangle className="h-4 w-4 text-warning" />,
+    primary: `${loan.name}: payment of ${formatDayMonth(loan.date)} not seen`,
+    secondary: `Installment ${loan.installment} of ${loan.term_months} · ${formatMoney(loan.payment_cents)} from ${loan.paid_from_name}`,
+  };
 }
 
 // A yearly budget or target that needs attention - see specs/overview,

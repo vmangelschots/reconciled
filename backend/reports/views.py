@@ -6,13 +6,14 @@ from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounts.models import TIER_ORDER, Account, tier_position
+from accounts.models import TIER_ORDER, Account, Loan, tier_position
 from budgets.models import Category
 from budgets.summary import budget_rows
 from budgets.utils import month_range, parse_month
 from budgets.yearly import yearly_rows, yearly_spent_cents
 from imports.models import ImportSession
 from transactions.categorize import needs_review, uncategorized
+from transactions.loans import missed_installment, sync_loans
 from transactions.models import Transaction
 
 from .spending import active_transactions, month_spending
@@ -235,6 +236,28 @@ def _recent_row(txn):
     }
 
 
+def _attention_missed_loans(today):
+    """Loans whose latest installment past the matching window has no
+    payment - see the overview spec's "Missed loan payments"."""
+    missed = []
+    loans = Loan.objects.filter(account__archived=False).select_related("account", "paid_from")
+    for loan in sorted(loans, key=lambda l: l.account.name):
+        installment = missed_installment(loan, today)
+        if installment is not None:
+            missed.append(
+                {
+                    "account_id": loan.account_id,
+                    "name": loan.account.name,
+                    "date": installment.date,
+                    "installment": installment.number,
+                    "term_months": loan.term_months,
+                    "payment_cents": installment.payment_cents,
+                    "paid_from_name": loan.paid_from.name,
+                }
+            )
+    return missed
+
+
 class OverviewView(APIView):
     """Every figure the overview shows for one month across all active
     accounts, in one request - see openspec/specs/overview."""
@@ -247,6 +270,7 @@ class OverviewView(APIView):
         today = _today()
         current = month == today.replace(day=1)
         month_end = month_range(month)
+        sync_loans(today)
 
         accounts = list(Account.objects.filter(archived=False).order_by(tier_position(), "name", "id"))
         # An import counts for every account it sent lines to, such as a
@@ -336,6 +360,7 @@ class OverviewView(APIView):
                     "uncategorized_count": uncategorized().count(),
                     "categories": _attention_categories(rows, pace),
                     "yearly": _attention_yearly(yearly, current),
+                    "missed_loans": _attention_missed_loans(today),
                 },
                 "recent": [_recent_row(t) for t in recent],
             }

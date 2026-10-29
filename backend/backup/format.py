@@ -34,6 +34,7 @@ APP_MARKER = "reconciled"
 # backup/tests.py fails for one that is in neither list.
 BACKED_UP_MODELS = [
     "accounts.Account",
+    "accounts.Loan",
     "budgets.Category",
     "budgets.CategoryLimit",
     "budgets.YearlyBudget",

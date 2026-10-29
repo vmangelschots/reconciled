@@ -2,6 +2,8 @@ from datetime import timedelta
 
 from dateutil.relativedelta import relativedelta
 
+from transactions.loans import schedule
+
 _STEP = {
     "weekly": lambda d: d + timedelta(weeks=1),
     "biweekly": lambda d: d + timedelta(weeks=2),
@@ -44,6 +46,30 @@ def expand_occurrences(recurring_transaction, window_start, window_end):
     return occurrences
 
 
+def _loan_occurrences(loan, starting_balance, today, window_end):
+    """A loan with a schedule follows it instead of recurring transactions:
+    on each installment date after today, the balance becomes minus that
+    installment's balance after. See the forecasting spec's "A loan is
+    projected along its schedule"."""
+    occurrences = []
+    balance = starting_balance
+    for installment in schedule(loan):
+        if installment.date <= today:
+            continue
+        if installment.date > window_end:
+            break
+        occurrences.append(
+            {
+                "date": installment.date,
+                "amount_cents": -installment.balance_after_cents - balance,
+                "payee": f"Installment {installment.number} of {loan.term_months}",
+                "recurring_transaction_id": None,
+            }
+        )
+        balance = -installment.balance_after_cents
+    return occurrences
+
+
 def generate_forecast(account, horizon_days, today):
     """Project account's balance forward from `today` out to
     `today + horizon_days`, applying every recurring transaction's
@@ -51,11 +77,16 @@ def generate_forecast(account, horizon_days, today):
     pure projection with nothing materialized or cached.
     """
     window_end = today + timedelta(days=horizon_days)
+    starting_balance = account.current_balance_cents
 
-    occurrences = []
-    for recurring in account.recurring_transactions.all():
-        occurrences.extend(expand_occurrences(recurring, today, window_end))
-    occurrences.sort(key=lambda o: o["date"])
+    loan = getattr(account, "loan", None)
+    if loan is not None:
+        occurrences = _loan_occurrences(loan, starting_balance, today, window_end)
+    else:
+        occurrences = []
+        for recurring in account.recurring_transactions.all():
+            occurrences.extend(expand_occurrences(recurring, today, window_end))
+        occurrences.sort(key=lambda o: o["date"])
 
     amount_by_date = {}
     for occurrence in occurrences:
@@ -63,7 +94,6 @@ def generate_forecast(account, horizon_days, today):
             amount_by_date.get(occurrence["date"], 0) + occurrence["amount_cents"]
         )
 
-    starting_balance = account.current_balance_cents
     running = starting_balance
     points = []
     for offset in range(horizon_days + 1):

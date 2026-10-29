@@ -9,6 +9,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { ReviewPage } from "./pages/ReviewPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { LoanSchedulePage } from "./pages/LoanSchedulePage";
 import { TabPage } from "./pages/TabPage";
 import { TransactionsIndex, TransactionsPage } from "./pages/TransactionsPage";
 
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="accounts" element={<AccountsPage />} />
         <Route path="transactions" element={<TransactionsIndex />} />
         <Route path="transactions/:accountId" element={<TransactionsPage />} />
+        <Route path="transactions/:accountId/schedule" element={<LoanSchedulePage />} />
         <Route path="review" element={<ReviewPage />} />
         <Route path="budgets" element={<BudgetsPage />} />
         <Route path="import" element={<ImportPage />} />
