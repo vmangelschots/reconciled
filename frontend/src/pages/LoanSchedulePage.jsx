@@ -350,8 +350,10 @@ function InstallmentState({ installment, onLink, onUnlink }) {
   if (installment.state === "posted") {
     return (
       <span className="flex flex-wrap items-center gap-1.5 text-ink-secondary">
-        <Check className="h-4 w-4" aria-hidden="true" />
-        Posted {formatShortDate(installment.payment.date)}
+        <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+          <Check className="h-4 w-4" aria-hidden="true" />
+          Posted {formatShortDate(installment.payment.date)}
+        </span>
         {installment.payment.linked_by_hand && (
           <Button type="button" variant="ghost" size="sm" className="h-6 px-2" onClick={onUnlink}>
             Unlink
@@ -365,8 +367,10 @@ function InstallmentState({ installment, onLink, onUnlink }) {
     const Icon = missed ? AlertTriangle : Clock;
     return (
       <span className={cn("flex flex-wrap items-center gap-1.5", missed ? "text-warning" : "text-ink-muted")}>
-        <Icon className="h-4 w-4" aria-hidden="true" />
-        {missed ? "Missed" : "Due"}
+        <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+          <Icon className="h-4 w-4" aria-hidden="true" />
+          {missed ? "Missed" : "Due"}
+        </span>
         <Button type="button" variant="ghost" size="sm" className="h-6 px-2 text-ink-secondary" onClick={onLink}>
           Link payment
         </Button>
@@ -388,7 +392,7 @@ function SetupDivider({ date }) {
 
 const ROW_GRID =
   "grid grid-cols-[1fr_auto] gap-x-4 gap-y-0.5 [grid-template-areas:'date_balance'_'state_split'] " +
-  "sm:grid-cols-[7rem_1fr_1fr_1fr_11rem] sm:items-center sm:[grid-template-areas:'date_interest_principal_balance_state']";
+  "sm:grid-cols-[9rem_1fr_1fr_1fr_12rem] sm:items-center sm:[grid-template-areas:'date_interest_principal_balance_state']";
 
 /**
  * One row per installment: two lines on a phone, columns from `sm` up.
@@ -427,15 +431,6 @@ function ScheduleTable({ loan, focus, onChange }) {
 
   return (
     <Panel title="Repayment schedule" flush>
-      {start > 0 && (
-        <button
-          type="button"
-          onClick={() => setShowEarlier(true)}
-          className="w-full px-5 py-2 text-xs text-ink-muted hover:text-ink-secondary"
-        >
-          Show earlier ({start} installment{start === 1 ? "" : "s"})
-        </button>
-      )}
       <ul className="flex flex-col px-5 pb-2 text-sm">
         <li className={cn(ROW_GRID, "hidden pb-2 text-xs font-medium text-ink-muted sm:grid")} aria-hidden="true">
           <span className="[grid-area:date]">Date</span>
@@ -444,6 +439,17 @@ function ScheduleTable({ loan, focus, onChange }) {
           <span className="text-right [grid-area:balance]">Balance after</span>
           <span className="[grid-area:state]">State</span>
         </li>
+        {start > 0 && (
+          <li>
+            <button
+              type="button"
+              onClick={() => setShowEarlier(true)}
+              className="w-full py-2 text-xs text-ink-muted hover:text-ink-secondary"
+            >
+              Show earlier ({start} installment{start === 1 ? "" : "s"})
+            </button>
+          </li>
+        )}
         {shown.map((installment) => {
           const divider = hasBeforeSetup && installment === firstAfterSetup;
           const isCurrent = installment === current && installment.state !== "posted";
@@ -462,15 +468,15 @@ function ScheduleTable({ loan, focus, onChange }) {
               )}
             >
               <span className="flex flex-col [grid-area:date]">
-                <span className={cn("num", !muted && "text-ink-primary")}>
+                <span className={cn("num whitespace-nowrap", !muted && "text-ink-primary")}>
                   {formatShortDate(installment.date)}
-                  <span className="text-ink-muted"> · {installment.number}</span>
+                  <span className="hidden text-ink-muted sm:inline"> · {installment.number}</span>
                 </span>
                 {installment === last && (
                   <span className="text-xs text-ink-muted">last payment {formatMoney(installment.payment_cents)}</span>
                 )}
               </span>
-              <span className="flex justify-end gap-1 text-xs text-ink-muted [grid-area:split] sm:contents sm:text-sm">
+              <span className="flex justify-end gap-1 whitespace-nowrap text-xs text-ink-muted [grid-area:split] sm:contents sm:text-sm">
                 <span className="num sm:text-right sm:[grid-area:interest]">
                   {formatMoney(installment.interest_cents)}
                   <span className="sm:hidden"> interest · </span>

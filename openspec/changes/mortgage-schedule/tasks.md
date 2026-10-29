@@ -131,7 +131,7 @@
 
   Verify with a `TransactionsPage` test for "Not offered on a loan with
   a schedule".
-- [ ] 4.2 Add the schedule table: columns from `sm` up and two-line rows
+- [x] 4.2 Add the schedule table: columns from `sm` up and two-line rows
   below, the states and tokens from design.md, the "Set up" divider, the
   windowing with "Show earlier" and "Show all", `?installment=N`, and
   "Link payment" / "Unlink". Verify with `LoanSchedulePage` tests for:

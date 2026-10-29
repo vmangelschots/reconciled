@@ -312,7 +312,7 @@ describe("The schedule table", () => {
     renderPage();
     await screen.findByText("Repayment schedule");
     const missed = within(row(23)).getByText("Missed");
-    expect(missed.closest("span")).toHaveClass("text-warning");
+    expect(missed.closest(".text-warning")).not.toBeNull();
 
     await user.click(within(row(23)).getByRole("button", { name: "Link payment" }));
     await user.click(await within(row(23)).findByRole("button", { name: /BNP HYPOTHEEK/ }));
