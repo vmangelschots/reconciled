@@ -2,7 +2,11 @@ import { describe, expect, it } from "vitest";
 import { currentIndex, scheduleWindow, termLabel } from "./loans";
 
 function installments(states) {
-  return states.map((state, index) => ({ number: index + 1, state }));
+  return states.map((state, index) => ({
+    number: index + 1,
+    date: new Date(Date.UTC(2024, 11 + index, 2)).toISOString().slice(0, 10),
+    state,
+  }));
 }
 
 describe("termLabel", () => {
@@ -39,6 +43,19 @@ describe("scheduleWindow", () => {
     const { start, end } = scheduleWindow(missed, 2);
     expect(start).toBeLessThanOrEqual(1);
     expect(end).toBeGreaterThan(1);
+  });
+
+  it("skips covered installments when finding the current one", () => {
+    const corrected = installments([...Array(3).fill("covered"), "due", ...Array(5).fill("upcoming")]);
+    expect(currentIndex(corrected)).toBe(3);
+  });
+
+  it("keeps the latest correction in view", () => {
+    // The correction falls between installments 15 and 16, well before
+    // the current one (24).
+    const keepDate = long[14].date.replace(/-\d\d$/, "-20");
+    const { start } = scheduleWindow(long, null, keepDate);
+    expect(long[start].number).toBe(16);
   });
 
   it("falls back to the last installment when everything is posted", () => {

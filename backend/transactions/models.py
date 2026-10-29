@@ -104,6 +104,12 @@ class Transaction(models.Model):
         "self", null=True, blank=True, on_delete=models.CASCADE, related_name="loan_adjustment"
     )
     loan_linked_by_hand = models.BooleanField(default=False)
+    # The balance correction this adjustment posts (loan set, installment
+    # null). SET_NULL so removing the setup keeps it as an ordinary
+    # adjustment; removing a single correction deletes it in loans.py.
+    loan_correction = models.OneToOneField(
+        "accounts.LoanCorrection", null=True, blank=True, on_delete=models.SET_NULL, related_name="adjustment"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

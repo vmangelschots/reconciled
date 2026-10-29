@@ -35,6 +35,7 @@ APP_MARKER = "reconciled"
 BACKED_UP_MODELS = [
     "accounts.Account",
     "accounts.Loan",
+    "accounts.LoanCorrection",
     "budgets.Category",
     "budgets.CategoryLimit",
     "budgets.YearlyBudget",

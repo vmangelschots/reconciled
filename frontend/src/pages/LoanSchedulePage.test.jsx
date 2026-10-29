@@ -31,6 +31,10 @@ vi.mock("../api/loans", () => ({
   listPaymentCandidates: vi.fn(),
   linkPayment: vi.fn(),
   unlinkPayment: vi.fn(),
+  previewCorrection: vi.fn(),
+  addCorrection: vi.fn(),
+  previewCorrectionRemoval: vi.fn(),
+  removeCorrection: vi.fn(),
 }));
 
 const CRELAN = { id: 1, name: "Crelan", account_type: "checking", tier: "everyday", current_balance_cents: 500000 };
@@ -329,5 +333,249 @@ describe("The schedule table", () => {
     renderPage("/transactions/1/schedule");
     expect(await screen.findByText("Only a loan account has a repayment schedule.")).toBeInTheDocument();
     expect(loansApi.getLoan).not.toHaveBeenCalled();
+  });
+});
+
+// A schedule corrected to 170,000.00 on 12 November 2026: 944.22 up to
+// installment 24, 849.91 from installment 25 (2 December 2026).
+const CORRECTION = {
+  id: 9,
+  date: "2026-11-12",
+  balance_cents: 17000000,
+  chosen_payment_cents: null,
+  payment_before_cents: 94422,
+  payment_after_cents: 84991,
+};
+
+function correctedLoan(extra = {}) {
+  const loan = makeLoan({
+    states: { 23: "posted", 24: "covered", 25: "due" },
+    payments: { 23: { id: 50, date: "2026-11-04", account_name: "Crelan", linked_by_hand: false } },
+  });
+  loan.installments = loan.installments.map((i) =>
+    i.number >= 25 ? { ...i, payment_cents: 84991, correction_id: 9 } : { ...i, correction_id: null },
+  );
+  return { ...loan, payment_cents: 84991, payment_since: "2026-12-02", corrections: [CORRECTION], ...extra };
+}
+
+const CORRECTION_PREVIEW = {
+  paid_off: false,
+  payment_cents: 84991,
+  previous_payment_cents: 94422,
+  first_installment: { number: 25, date: "2026-12-02" },
+  installments_left: 276,
+  last_payment_cents: 84839,
+  end_date: "2049-11-02",
+  schedule_balance_cents: 18886423,
+  difference_cents: -1886423,
+  found_payments: [{ id: 21, date: "2026-11-02", payee: "BNP", amount_cents: -84991 }],
+  near_payment: null,
+  repost: { installments: 0, no_longer_matching: 0 },
+};
+
+describe("Correcting the balance", () => {
+  beforeEach(() => {
+    loansApi.getLoan.mockResolvedValue(makeLoan({ states: { 23: "posted", 24: "due" }, payments: { 23: { id: 50, date: "2026-11-04", account_name: "Crelan", linked_by_hand: false } } }));
+    loansApi.previewCorrection.mockResolvedValue(CORRECTION_PREVIEW);
+  });
+
+  async function openForm(user) {
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "Correct balance" }));
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
+  }
+
+  it("checks a correction before saving, then saves it", async () => {
+    const user = userEvent.setup();
+    loansApi.addCorrection.mockResolvedValue(correctedLoan());
+    await openForm(user);
+    expect(screen.getByLabelText("On")).toHaveValue("2026-11-12");
+    await user.type(screen.getByLabelText("Owed per the bank"), "170000");
+
+    const check = await screen.findByTestId("correction-check");
+    await waitFor(() =>
+      expect(loansApi.previewCorrection).toHaveBeenLastCalledWith(4, {
+        date: "2026-11-12",
+        balance_cents: 17000000,
+        payment_cents: null,
+      }),
+    );
+    expect(check).toHaveTextContent(`${formatMoney(84991)}a month from ${formatShortDate("2026-12-02")} · was ${formatMoney(94422)}`);
+    expect(check).toHaveTextContent("276 installments left, ends Nov 2049");
+    expect(check).toHaveTextContent(`${formatMoney(1886423)} less than the schedule`);
+    expect(check).toHaveTextContent(`Found in Crelan: ${formatShortDate("2026-11-02")}`);
+
+    await user.click(screen.getByRole("button", { name: "Save correction" }));
+    await waitFor(() => expect(loansApi.addCorrection).toHaveBeenCalledWith(4, expect.objectContaining({ balance_cents: 17000000 })));
+    expect(await screen.findByText("Balance corrected.")).toBeInTheDocument();
+    expect(screen.queryByTestId("correction-check")).toBeNull();
+  });
+
+  it("lets the user pay a different amount", async () => {
+    const user = userEvent.setup();
+    await openForm(user);
+    await user.type(screen.getByLabelText("Owed per the bank"), "170000");
+    await user.click(await screen.findByRole("button", { name: "Pay a different amount?" }));
+    const payment = screen.getByLabelText("Monthly payment");
+    expect(payment).toHaveValue(849.91);
+    await user.clear(payment);
+    await user.type(payment, "849.90");
+    await waitFor(() =>
+      expect(loansApi.previewCorrection).toHaveBeenLastCalledWith(4, expect.objectContaining({ payment_cents: 84990 })),
+    );
+  });
+
+  it("offers the amount the bank paid when it is a cent off", async () => {
+    const user = userEvent.setup();
+    loansApi.previewCorrection.mockResolvedValue({
+      ...CORRECTION_PREVIEW,
+      found_payments: [],
+      near_payment: { id: 22, date: "2026-10-28", payee: "BNP", amount_cents: -84990 },
+    });
+    await openForm(user);
+    await user.type(screen.getByLabelText("Owed per the bank"), "170000");
+    const check = await screen.findByTestId("correction-check");
+    await waitFor(() => expect(check).toHaveTextContent(`Crelan paid ${formatMoney(84990)} on ${formatShortDate("2026-10-28")}.`));
+    await user.click(screen.getByRole("button", { name: `Use ${formatMoney(84990)}` }));
+    await waitFor(() =>
+      expect(loansApi.previewCorrection).toHaveBeenLastCalledWith(4, expect.objectContaining({ payment_cents: 84990 })),
+    );
+  });
+
+  it("says when the loan would be paid off", async () => {
+    const user = userEvent.setup();
+    loansApi.previewCorrection.mockResolvedValue({ ...CORRECTION_PREVIEW, paid_off: true, payment_cents: null });
+    await openForm(user);
+    await user.type(screen.getByLabelText("Owed per the bank"), "0");
+    expect(await screen.findByText("Paid off. No more installments.")).toBeInTheDocument();
+  });
+});
+
+describe("A corrected schedule", () => {
+  it("says since when the payment applies", async () => {
+    loansApi.getLoan.mockResolvedValue(correctedLoan());
+    renderPage();
+    expect(
+      await screen.findByText(
+        `€200,000 at 3.00% over 25 years · ${formatMoney(84991)} a month from Crelan since Dec 2026 · ends Nov 2049`,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("reads as paid off", async () => {
+    loansApi.getLoan.mockResolvedValue(correctedLoan({ paid_off_on: "2026-11-12" }));
+    renderPage();
+    const date = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+    expect(await screen.findByText(`Paid off ${date.format(new Date("2026-11-12T00:00:00Z"))}`)).toBeInTheDocument();
+  });
+
+  it("shows the correction as a row between the installments it falls between", async () => {
+    loansApi.getLoan.mockResolvedValue(correctedLoan());
+    renderPage();
+    await screen.findByText("Repayment schedule");
+    const correction = document.querySelector('[data-correction="9"]');
+    expect(correction).toHaveTextContent("Balance corrected");
+    expect(correction).toHaveTextContent(`${formatMoney(94422)} → ${formatMoney(84991)} a month`);
+    expect(correction).toHaveTextContent(formatMoney(17000000));
+    expect(row(24).nextElementSibling).toBe(correction);
+    expect(correction.nextElementSibling).toBe(row(25));
+    expect(row(25)).toHaveTextContent(`payment ${formatMoney(84991)}`);
+    expect(row(26)).not.toHaveTextContent("payment");
+    // A covered installment shows no state.
+    expect(row(24)).not.toHaveTextContent(/Missed|Due|Link payment/);
+  });
+
+  it("removes a correction after confirming", async () => {
+    const user = userEvent.setup();
+    loansApi.getLoan.mockResolvedValue(correctedLoan());
+    loansApi.previewCorrectionRemoval.mockResolvedValue({
+      payment_cents: 94422,
+      first_installment: { number: 25, date: "2026-12-02" },
+      repost: { installments: 1, no_longer_matching: 1 },
+    });
+    loansApi.removeCorrection.mockResolvedValue(makeLoan());
+    renderPage();
+    await screen.findByText("Repayment schedule");
+    await user.click(within(document.querySelector('[data-correction="9"]')).getByRole("button", { name: "Remove" }));
+    const dialog = await screen.findByRole("dialog");
+    await waitFor(() =>
+      expect(dialog).toHaveTextContent(
+        `The schedule goes back to ${formatMoney(94422)} a month from ${formatShortDate("2026-12-02")}. 1 installment will be reposted; 1 payment will no longer match.`,
+      ),
+    );
+    await user.click(within(dialog).getByRole("button", { name: "Remove" }));
+    await waitFor(() => expect(loansApi.removeCorrection).toHaveBeenCalledWith(4, 9));
+    expect(await screen.findByText("Correction removed.")).toBeInTheDocument();
+    expect(document.querySelector('[data-correction="9"]')).toBeNull();
+  });
+});
+
+describe("The missed-payments banner", () => {
+  it("names the amount the paying account paid, and opens the form with it", async () => {
+    const user = userEvent.setup();
+    loansApi.getLoan.mockResolvedValue({
+      ...makeLoan({ states: { 23: "missed", 24: "missed", 25: "missed" } }),
+      suggestion: { missed_count: 3, amount_cents: 69303 },
+    });
+    loansApi.previewCorrection.mockResolvedValue(CORRECTION_PREVIEW);
+    renderPage();
+    const banner = await screen.findByTestId("suggestion");
+    expect(banner).toHaveTextContent(
+      `The last 3 installments were missed. Crelan paid ${formatMoney(69303)} around each date. Did the bank change the payment?`,
+    );
+    await user.click(within(banner).getByRole("button", { name: "Correct balance" }));
+    await user.type(screen.getByLabelText("Owed per the bank"), "104870.35");
+    expect(await screen.findByLabelText("Monthly payment")).toHaveValue(693.03);
+  });
+
+  it("suggests a correction without an amount", async () => {
+    loansApi.getLoan.mockResolvedValue({
+      ...makeLoan({ states: { 23: "missed", 24: "missed" } }),
+      suggestion: { missed_count: 2, amount_cents: null },
+    });
+    renderPage();
+    expect(await screen.findByTestId("suggestion")).toHaveTextContent(
+      "The last 2 installments were missed. If you repaid extra and the bank changed the payment, correct the balance.",
+    );
+  });
+
+  it("isn't shown without a suggestion", async () => {
+    loansApi.getLoan.mockResolvedValue({ ...makeLoan({ states: { 24: "missed" } }), suggestion: null });
+    renderPage();
+    await screen.findByText("Repayment schedule");
+    expect(screen.queryByTestId("suggestion")).toBeNull();
+  });
+});
+
+describe("Setting up with the bank's balance", () => {
+  beforeEach(() => {
+    accountsApi.getAccount.mockResolvedValue({ ...MORTGAGE, has_loan: false, current_balance_cents: 0 });
+    loansApi.getLoan.mockRejectedValue(notFound());
+  });
+
+  it("checks the payment the bank's balance gives", async () => {
+    const user = userEvent.setup();
+    loansApi.previewLoan.mockResolvedValue({ ...PREVIEW, payment_cents: 69303, schedule_payment_cents: 73799 });
+    renderPage();
+    await screen.findByText("No repayment schedule yet");
+    await fillTerms(user);
+    await user.click(await screen.findByRole("button", { name: "The bank says something else" }));
+    await user.type(screen.getByLabelText("Owed per the bank today"), "104870.35");
+    await waitFor(() =>
+      expect(loansApi.previewLoan).toHaveBeenLastCalledWith(4, expect.objectContaining({ bank_balance_cents: 10487035 })),
+    );
+    expect(screen.getByTestId("terms-check")).toHaveTextContent(
+      `${formatMoney(69303)} a month · ${formatMoney(73799)} per the terms`,
+    );
+  });
+
+  it("is offered when no payment was found", async () => {
+    const user = userEvent.setup();
+    loansApi.previewLoan.mockResolvedValue({ ...PREVIEW, found_payments: [] });
+    renderPage();
+    await screen.findByText("No repayment schedule yet");
+    await fillTerms(user);
+    await user.click(await screen.findByRole("button", { name: "enter what it says you owe" }));
+    expect(screen.getByLabelText("Owed per the bank today")).toBeInTheDocument();
   });
 });

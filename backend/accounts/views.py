@@ -28,9 +28,18 @@ class LoanTermsSerializer(serializers.Serializer):
     payment_category = serializers.PrimaryKeyRelatedField(
         queryset=Category.objects.all(), allow_null=True, required=False, default=None
     )
+    # What the bank says is owed today; a new setup only, saved as a
+    # correction on the setup day.
+    bank_balance_cents = serializers.IntegerField(allow_null=True, required=False, default=None)
 
     def validate_payment_category(self, category):
         return check_assignable(category)
+
+
+class CorrectionSerializer(serializers.Serializer):
+    date = serializers.DateField()
+    balance_cents = serializers.IntegerField()
+    payment_cents = serializers.IntegerField(allow_null=True, required=False, default=None)
 
 
 class LinkSerializer(serializers.Serializer):
@@ -48,6 +57,37 @@ def _payment_info(payment):
     }
 
 
+def _corrections_body(loan, installments):
+    """Each correction with the payment before and after it, for its row."""
+    body = []
+    for correction in loan.corrections.all():
+        before = [i for i in installments if i.date <= correction.date]
+        after = next((i for i in installments if i.date > correction.date), None)
+        body.append(
+            {
+                "id": correction.id,
+                "date": correction.date,
+                "balance_cents": correction.balance_cents,
+                "chosen_payment_cents": correction.payment_cents,
+                "payment_before_cents": before[-1].payment_cents if before else None,
+                "payment_after_cents": after.payment_cents if after else None,
+            }
+        )
+    return body
+
+
+def _payment_in_force(loan, installments, today):
+    """The payment of the next installment, or of the last one when the
+    loan has ended, and since when it applies after a correction."""
+    if not installments:
+        return None, None
+    current = next((i for i in installments if i.date >= today), installments[-1])
+    if current.correction_id is None:
+        return current.payment_cents, None
+    since = next(i for i in installments if i.correction_id == current.correction_id)
+    return current.payment_cents, since.date
+
+
 def _schedule_body(loan, today):
     """A loan's terms and its schedule with each installment's state - see
     openspec/specs/loan-schedules."""
@@ -55,6 +95,8 @@ def _schedule_body(loan, today):
     account.refresh_from_db()
     rows = loans.installment_states(loan, today)
     installments = [installment for installment, _, _ in rows]
+    payment, since = _payment_in_force(loan, installments, today)
+    latest = loan.corrections.order_by("-date").first()
     return {
         "account": account.id,
         "principal_cents": loan.principal_cents,
@@ -65,9 +107,13 @@ def _schedule_body(loan, today):
         "paid_from_name": loan.paid_from.name,
         "payment_category": loan.payment_category_id,
         "setup_date": loan.setup_date,
-        "payment_cents": installments[0].payment_cents,
-        "end_date": installments[-1].date,
+        "payment_cents": payment,
+        "payment_since": since,
+        "paid_off_on": latest.date if latest is not None and latest.balance_cents == 0 else None,
+        "end_date": installments[-1].date if installments else None,
         "current_balance_cents": account.current_balance_cents,
+        "corrections": _corrections_body(loan, installments),
+        "suggestion": loans.suggest_correction(loan, today),
         "installments": [
             {
                 "number": installment.number,
@@ -76,6 +122,7 @@ def _schedule_body(loan, today):
                 "interest_cents": installment.interest_cents,
                 "principal_cents": installment.principal_cents,
                 "balance_after_cents": installment.balance_after_cents,
+                "correction_id": installment.correction_id,
                 "state": state,
                 "payment": (
                     {**_payment_info(adjustment.loan_payment), "linked_by_hand": adjustment.loan_linked_by_hand}
@@ -168,6 +215,7 @@ class AccountViewSet(
             try:
                 terms = self._terms(request, account)
                 if hasattr(account, "loan"):
+                    terms.pop("bank_balance_cents")
                     loan = loans.edit_loan(account.loan, today, **terms)
                     code = status.HTTP_200_OK
                 else:
@@ -196,7 +244,68 @@ class AccountViewSet(
             return Response({"detail": str(e)}, status=400)
         # A missing reverse one-to-one raises an AttributeError subclass.
         existing = getattr(account, "loan", None)
-        return Response(loans.preview(account, timezone.localdate(), loan=existing, **terms))
+        try:
+            return Response(loans.preview(account, timezone.localdate(), loan=existing, **terms))
+        except loans.LoanError as e:
+            return Response({"detail": str(e)}, status=400)
+
+    def _correction(self, request):
+        body = CorrectionSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        return data["date"], data["balance_cents"], data["payment_cents"]
+
+    @action(detail=True, methods=["post"], url_path="loan/corrections")
+    def loan_corrections(self, request, pk=None):
+        """POST {"date", "balance_cents", "payment_cents"?} records what the
+        bank says is owed, and returns the schedule."""
+        loan, error = self._loan_or_error(self.get_object())
+        if error:
+            return error
+        today = timezone.localdate()
+        try:
+            loans.add_correction(loan, today, *self._correction(request))
+        except loans.LoanError as e:
+            return Response({"detail": str(e)}, status=400)
+        return Response(_schedule_body(loan, today), status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"], url_path="loan/corrections/preview")
+    def loan_correction_preview(self, request, pk=None):
+        """POST a correction to see what it would give, saving nothing."""
+        loan, error = self._loan_or_error(self.get_object())
+        if error:
+            return error
+        try:
+            return Response(loans.preview_correction(loan, timezone.localdate(), *self._correction(request)))
+        except loans.LoanError as e:
+            return Response({"detail": str(e)}, status=400)
+
+    def _get_correction(self, loan, correction_id):
+        return loan.corrections.filter(pk=correction_id).first()
+
+    @action(detail=True, methods=["delete"], url_path=r"loan/corrections/(?P<correction_id>\d+)")
+    def loan_correction(self, request, pk=None, correction_id=None):
+        """DELETE removes a correction and returns the schedule."""
+        loan, error = self._loan_or_error(self.get_object())
+        if error:
+            return error
+        correction = self._get_correction(loan, correction_id)
+        if correction is None:
+            return Response({"detail": "This loan has no such correction."}, status=404)
+        today = timezone.localdate()
+        loans.remove_correction(loan, correction, today)
+        return Response(_schedule_body(loan, today))
+
+    @action(detail=True, methods=["get"], url_path=r"loan/corrections/(?P<correction_id>\d+)/removal")
+    def loan_correction_removal(self, request, pk=None, correction_id=None):
+        """What removing this correction would do, for the confirmation."""
+        loan, error = self._loan_or_error(self.get_object())
+        if error:
+            return error
+        correction = self._get_correction(loan, correction_id)
+        if correction is None:
+            return Response({"detail": "This loan has no such correction."}, status=404)
+        return Response(loans.preview_removal(loan, correction))
 
     @action(detail=True, methods=["get"], url_path=r"loan/installments/(?P<number>\d+)/candidates")
     def loan_candidates(self, request, pk=None, number=None):
