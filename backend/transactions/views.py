@@ -12,6 +12,7 @@ from budgets.tabs import TAB_GROUP_ERROR
 from . import tabs
 from .ai import get_guesser
 from .categorize import categorize, needs_review, review_groups, uncategorized
+from .loans import sync_loans
 from .models import Transaction
 from .serializers import SplitLineSerializer, TransactionSerializer
 from .splits import SplitError, delete_transaction, save_split, unsplit
@@ -60,6 +61,12 @@ class TransactionViewSet(viewsets.ModelViewSet):
             ).distinct()
 
         return queryset
+
+    def list(self, request, *args, **kwargs):
+        # Any ledger may show a loan installment or its payment; see the
+        # loan-schedules spec's "Matching needs no background job".
+        sync_loans(timezone.localdate())
+        return super().list(request, *args, **kwargs)
 
     def destroy(self, request, *args, **kwargs):
         txn = self.get_object()

@@ -1,4 +1,5 @@
 from datetime import date, timedelta
+from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -6,9 +7,11 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from accounts.models import Account
+from transactions.loans import set_up_loan
 from transactions.models import Transaction
 
 from .models import RecurringTransaction
+from .utils import generate_forecast
 
 
 class RecurringTransactionTests(TestCase):
@@ -175,3 +178,49 @@ class ForecastTests(TestCase):
         # matching/removal against the actual ledger transaction.
         occurrence_dates = [o["date"] for o in forecast["occurrences"]]
         self.assertIn(due_date.isoformat(), occurrence_dates)
+
+
+class LoanForecastTests(TestCase):
+    """The forecasting spec's "A loan is projected along its schedule"."""
+
+    def setUp(self):
+        self.crelan = Account.objects.create(name="Crelan", account_type="checking", starting_balance_cents=0)
+        self.mortgage = Account.objects.create(name="Mortgage", account_type="loan", starting_balance_cents=0)
+        self.set_up = lambda **terms: set_up_loan(  # noqa: E731
+            self.mortgage,
+            date(2026, 11, 12),
+            principal_cents=20000000,
+            annual_rate=Decimal("3.00"),
+            paid_from=self.crelan,
+            payment_category=None,
+            **terms,
+        )
+
+    def balances(self, forecast):
+        return {p["date"]: p["balance_cents"] for p in forecast["points"]}
+
+    def test_the_mortgage_over_the_next_months(self):
+        # Set up after the first installment, so it stands at -199,549.03.
+        self.set_up(term_months=300, first_payment_date=date(2026, 11, 2))
+        forecast = generate_forecast(self.mortgage, 90, today=date(2026, 11, 12))
+        balances = self.balances(forecast)
+        self.assertEqual(balances["2026-11-12"], -19954903)
+        self.assertEqual(balances["2026-12-01"], -19954903)
+        self.assertEqual(balances["2026-12-02"], -19909695)
+        self.assertEqual(balances["2027-01-02"], -19864376)
+        self.assertEqual(
+            [o["payee"] for o in forecast["occurrences"]], ["Installment 2 of 300", "Installment 3 of 300", "Installment 4 of 300"]
+        )
+
+    def test_after_the_last_installment(self):
+        self.set_up(term_months=2, first_payment_date=date(2026, 11, 2))
+        balances = self.balances(generate_forecast(self.mortgage, 90, today=date(2026, 11, 12)))
+        self.assertEqual(balances["2026-12-02"], 0)
+        self.assertEqual(balances["2027-02-09"], 0)
+
+    def test_a_loan_without_a_setup(self):
+        RecurringTransaction.objects.create(
+            account=self.mortgage, amount_cents=50000, payee="Extra", frequency="monthly", start_date=date(2026, 12, 1)
+        )
+        balances = self.balances(generate_forecast(self.mortgage, 30, today=date(2026, 11, 12)))
+        self.assertEqual(balances["2026-12-01"], 50000)

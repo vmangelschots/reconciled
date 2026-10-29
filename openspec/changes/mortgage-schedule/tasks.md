@@ -79,7 +79,7 @@
 
 ## 3. API and call sites
 
-- [ ] 3.1 Add `GET/PUT/DELETE /api/accounts/{id}/loan/`,
+- [x] 3.1 Add `GET/PUT/DELETE /api/accounts/{id}/loan/`,
   `POST …/loan/preview/` and the installment `candidates/` and `link/`
   endpoints, with validation and installment states, and with GET
   syncing first. Verify with API tests for:
@@ -92,7 +92,7 @@
   - the repost counts in an edit preview
   - "States in the table" / "A missed installment"
   - 404 for a loan without a setup
-- [ ] 3.2 Call `sync_loans` from the overview view,
+- [x] 3.2 Call `sync_loans` from the overview view,
   `TransactionViewSet.list` and the end of the import commit, and add
   `missed_loans` to the overview's attention data. Verify with tests for:
   - "After an import" (the commit brings in the payment, and the loan
@@ -101,11 +101,11 @@
   - "Still within the window"
   - "A later payment matched"
   - "A loan without a setup" (never listed)
-- [ ] 3.3 Make `generate_forecast` follow the schedule for a loan with a
+- [x] 3.3 Make `generate_forecast` follow the schedule for a loan with a
   setup, using "Installment N of M" as the payee. Verify with
   `forecasting` tests for "The mortgage over the next months", "After
   the last installment" and "A loan without a setup".
-- [ ] 3.4 Verify with a `backup` test for "A loan schedule survives": a
+- [x] 3.4 Verify with a `backup` test for "A loan schedule survives": a
   round trip keeps the terms, the links and the hand-link flags, and a
   sync after the restore posts nothing new.
 

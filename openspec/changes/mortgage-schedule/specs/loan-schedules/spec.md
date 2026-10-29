@@ -46,9 +46,9 @@ first installment from the repayment table.
 #### Scenario: Terms that match the bank
 - **WHEN** on 12 November 2026 the user enters 200,000.00 at 3.00% over
   300 months from 2 December 2024, paid from "Crelan", which has -944.22
-  on 2 October, 2 September and 2 August
+  on 2 November, 2 October and 2 September
 - **THEN** the form shows "€944.22 a month", "300 months (25 years)",
-  the next installment 24 of 300 on 2 December 2026, the schedule's
+  the next installment 25 of 300 on 2 December 2026, the schedule's
   balance today next to "Mortgage"'s balance, and the three payments
   found in "Crelan"
 

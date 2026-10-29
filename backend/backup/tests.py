@@ -10,11 +10,14 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from accounts.models import Account
+from decimal import Decimal
+
+from accounts.models import Account, Loan
 from budgets.models import BudgetSettings, Category, CategoryLimit, YearlyBudget
 from forecasting.models import RecurringTransaction
 from imports.models import AccountImportSettings, ImportSession
 from transactions.adjustments import set_value
+from transactions.loans import link_payment, set_up_loan, sync_loan
 from transactions.models import Transaction
 from transactions.splits import SplitLine, save_split
 from transactions.transfers import link_transfer
@@ -338,3 +341,33 @@ class BackupApiTests(BackupTestCase):
         response = self.upload(content, client=APIClient())
         self.assertEqual(response.status_code, 401)
         self.assertTrue(Category.objects.filter(name="Kept").exists())
+
+
+class LoanBackupTests(BackupTestCase):
+    """The data-backup spec's "A loan schedule survives"."""
+
+    def test_a_loan_schedule_survives(self):
+        mortgage = Account.objects.create(name="Mortgage", account_type="loan", starting_balance_cents=0)
+        loan = set_up_loan(
+            mortgage, date(2026, 10, 20), principal_cents=20000000, annual_rate=Decimal("3.00"), term_months=300,
+            first_payment_date=date(2026, 11, 2), paid_from=self.crelan, payment_category=self.household,
+        )
+        Transaction.objects.create(account=self.crelan, date=date(2026, 11, 3), amount_cents=-94422, payee="BNP")
+        late = Transaction.objects.create(account=self.crelan, date=date(2026, 12, 9), amount_cents=-94422, payee="BNP")
+        sync_loan(loan, date(2026, 12, 12))
+        link_payment(loan, 2, late)
+        before = snapshot()
+        content = self.file_content()
+        self.mess_up()
+
+        restore_backup(read_backup(content))
+
+        self.assertEqual(snapshot(), before)
+        restored = Loan.objects.get()
+        sync_loan(restored, date(2026, 12, 12))
+        self.assertEqual(snapshot(), before)
+        posted = {
+            t.loan_installment: (t.loan_payment.date if t.loan_payment else None, t.loan_linked_by_hand)
+            for t in Transaction.objects.filter(loan=restored).select_related("loan_payment")
+        }
+        self.assertEqual(posted, {0: (None, False), 1: (date(2026, 11, 3), False), 2: (date(2026, 12, 9), True)})

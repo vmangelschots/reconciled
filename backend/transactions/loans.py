@@ -362,3 +362,102 @@ def unlink_payment(loan, number):
     if adjustment is None:
         raise LoanError("Only a payment linked by hand can be unlinked.")
     adjustment.delete()
+
+
+# An installment's state on the schedule page; see the spec's "Schedule
+# table".
+BEFORE_SETUP, POSTED, DUE, MISSED, UPCOMING = "before_setup", "posted", "due", "missed", "upcoming"
+
+
+def is_missed(installment, today):
+    return (today - installment.date).days > MATCH_DAYS
+
+
+def installment_states(loan, today):
+    """[(installment, state, adjustment or None)] for the whole schedule.
+    Only the first unposted installment that isn't missed is due."""
+    adjustments = {
+        a.loan_installment: a for a in loan.adjustments.select_related("loan_payment__account")
+    }
+    rows = []
+    due_found = False
+    for installment in schedule(loan):
+        adjustment = adjustments.get(installment.number)
+        if installment.date < loan.setup_date:
+            state = BEFORE_SETUP
+        elif adjustment is not None:
+            state = POSTED
+        elif is_missed(installment, today):
+            state = MISSED
+        elif not due_found:
+            state, due_found = DUE, True
+        else:
+            state = UPCOMING
+        rows.append((installment, state, adjustment))
+    return rows
+
+
+def missed_installment(loan, today):
+    """The installment to flag in Needs attention: the latest one more than
+    MATCH_DAYS past its date and on or after setup, if it has no payment.
+    A later match clears an earlier miss."""
+    latest = None
+    for installment in schedule(loan):
+        if installment.date < loan.setup_date:
+            continue
+        if not is_missed(installment, today):
+            break
+        latest = installment
+    if latest is None or loan.adjustments.filter(loan_installment=latest.number).exists():
+        return None
+    return latest
+
+
+def preview(account, today, loan=None, **terms):
+    """What these terms would give, saving nothing: the monthly payment, the
+    next installment, the schedule's balance today, recent payments of that
+    amount in the paying account, and for an existing setup, what an edit
+    would repost."""
+    installments = compute_schedule(
+        terms["principal_cents"], terms["annual_rate"], terms["term_months"], terms["first_payment_date"]
+    )
+    payment_cents = installments[0].payment_cents
+    found = (
+        payment_rows()
+        .filter(
+            account=terms["paid_from"],
+            amount_cents=-payment_cents,
+            date__gt=today - timedelta(days=90),
+            date__lte=today,
+        )
+        .order_by("-date", "-id")[:3]
+    )
+    next_installment = next((i for i in installments if i.date >= today), None)
+    result = {
+        "payment_cents": payment_cents,
+        "last_payment_cents": installments[-1].payment_cents,
+        "end_date": installments[-1].date,
+        "next_installment": (
+            {"number": next_installment.number, "date": next_installment.date} if next_installment else None
+        ),
+        "schedule_balance_today_cents": lineup_value(installments, terms["principal_cents"], today),
+        "current_balance_cents": account.current_balance_cents,
+        "found_payments": [{"id": t.id, "date": t.date, "payee": t.payee, "amount_cents": t.amount_cents} for t in found],
+        "repost": None,
+    }
+    if loan is not None and changes_schedule(loan, terms):
+        by_number = {i.number: i for i in installments}
+        matched = loan.adjustments.filter(loan_payment__isnull=False).select_related("loan_payment")
+        result["repost"] = {
+            "installments": matched.count(),
+            "no_longer_matching": sum(
+                1
+                for a in matched
+                if not a.loan_linked_by_hand
+                and (
+                    a.loan_installment not in by_number
+                    or a.loan_payment.amount_cents != -by_number[a.loan_installment].payment_cents
+                )
+            ),
+        }
+    return result
