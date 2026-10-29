@@ -200,15 +200,44 @@ describe('Accounts in the sidebar', () => {
     expect(screen.queryByRole('link', { name: /Joint/ })).toBeNull()
   })
 
+  const SEVEN = Array.from({ length: 7 }, (_, i) => ({
+    id: i + 1,
+    name: `Account ${i + 1}`,
+    current_balance_cents: 100,
+    archived: false,
+  }))
+
   it('lists five accounts and "+N more" beyond that', async () => {
-    accountsApi.listAccounts.mockResolvedValue(
-      Array.from({ length: 7 }, (_, i) => ({ id: i + 1, name: `Account ${i + 1}`, current_balance_cents: 100, archived: false })),
-    )
+    accountsApi.listAccounts.mockResolvedValue(SEVEN)
     mockViewport(true)
     renderLayout()
 
-    expect(await screen.findByRole('link', { name: '+2 more' })).toHaveAttribute('href', '/accounts')
+    expect(await screen.findByRole('button', { name: '+2 more' })).toBeInTheDocument()
     expect(screen.getAllByRole('link', { name: /^Account \d/ })).toHaveLength(5)
+  })
+
+  it('shows the rest on "+N more", and five again on "Show fewer"', async () => {
+    const user = userEvent.setup()
+    accountsApi.listAccounts.mockResolvedValue(SEVEN)
+    mockViewport(true)
+    renderLayout()
+
+    await user.click(await screen.findByRole('button', { name: '+2 more' }))
+    const links = screen.getAllByRole('link', { name: /^Account \d/ })
+    expect(links).toHaveLength(7)
+    expect(links[6]).toHaveAttribute('href', '/transactions/7')
+    await user.click(screen.getByRole('button', { name: 'Show fewer' }))
+    expect(screen.getAllByRole('link', { name: /^Account \d/ })).toHaveLength(5)
+  })
+
+  it('starts expanded when the open account is one of the rest', async () => {
+    accountsApi.listAccounts.mockResolvedValue(SEVEN)
+    mockViewport(true)
+    renderLayout('/transactions/7')
+
+    expect(await screen.findByRole('link', { name: /^Account 7/ })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getAllByRole('link', { name: /^Account \d/ })).toHaveLength(7)
+    expect(screen.getByRole('button', { name: 'Show fewer' })).toBeInTheDocument()
   })
 
   it('leaves archived accounts out of the list and the total', async () => {

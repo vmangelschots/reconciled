@@ -1,6 +1,7 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
+import { MemoryRouter } from "react-router-dom";
 import { AccountsPage } from "./AccountsPage";
 import { ToastProvider } from "../components/ui/Toast";
 import * as accountsApi from "../api/accounts";
@@ -23,9 +24,11 @@ const ACCOUNTS = [
 
 function renderPage() {
   return render(
-    <ToastProvider>
-      <AccountsPage />
-    </ToastProvider>,
+    <MemoryRouter>
+      <ToastProvider>
+        <AccountsPage />
+      </ToastProvider>
+    </MemoryRouter>,
   );
 }
 
@@ -126,6 +129,13 @@ describe("AccountsPage", () => {
       ["Loan"],
     ]);
     expect(within(groups[0]).getByText("Everyday")).toBeInTheDocument();
+  });
+
+  it("opens an account's transactions from its name", async () => {
+    accountsApi.listAccounts.mockResolvedValue(ACCOUNTS);
+    renderPage();
+    const tbl = await findTable();
+    expect(tbl.getByRole("link", { name: "Side Savings" })).toHaveAttribute("href", "/transactions/2");
   });
 
   it("shows each account's tier", async () => {
