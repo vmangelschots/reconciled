@@ -94,7 +94,7 @@
 
 ## 5. Checks
 
-- [ ] 5.1 Run `npm test`, `npm run lint` and `npm run build` in
+- [x] 5.1 Run `npm test`, `npm run lint` and `npm run build` in
   `frontend/`, and `python manage.py test` in `backend/`, and verify all
   pass. Then set up the household mortgage (160,000.00 from November
   2014, 300 months) with today's bank balance on a dev copy, and verify
