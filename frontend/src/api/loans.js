@@ -36,3 +36,22 @@ export function linkPayment(accountId, number, transactionId) {
 export function unlinkPayment(accountId, number) {
   return apiFetch(`/api/accounts/${accountId}/loan/installments/${number}/link/`, { method: "DELETE" });
 }
+
+// Balance corrections: what the bank says is owed on a date. Adding and
+// removing one return the schedule.
+export function previewCorrection(accountId, correction) {
+  return apiFetch(`/api/accounts/${accountId}/loan/corrections/preview/`, { method: "POST", body: correction });
+}
+
+export function addCorrection(accountId, correction) {
+  return apiFetch(`/api/accounts/${accountId}/loan/corrections/`, { method: "POST", body: correction });
+}
+
+// What removing a correction would do, for its confirmation.
+export function previewCorrectionRemoval(accountId, correctionId) {
+  return apiFetch(`/api/accounts/${accountId}/loan/corrections/${correctionId}/removal/`);
+}
+
+export function removeCorrection(accountId, correctionId) {
+  return apiFetch(`/api/accounts/${accountId}/loan/corrections/${correctionId}/`, { method: "DELETE" });
+}

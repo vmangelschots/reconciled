@@ -71,7 +71,7 @@
 
 ## 4. Schedule page
 
-- [ ] 4.1 Add the API functions in `frontend/src/api/loans.js`. On
+- [x] 4.1 Add the API functions in `frontend/src/api/loans.js`. On
   `LoanSchedulePage`, add:
   - the `[Correct balance] [Edit]` header group
   - the header line with "since" and "Paid off"
@@ -81,14 +81,14 @@
   Verify with `LoanSchedulePage.test.jsx` cases for "After a
   correction", "Paid off", the form preview, the override and "A cent
   off".
-- [ ] 4.2 Add the correction row (desktop and phone), the "payment €X"
+- [x] 4.2 Add the correction row (desktop and phone), the "payment €X"
   line on the first installment after a correction, no state on covered
   installments, the remove dialog, the banner, and `scheduleWindow`
   keeping the latest correction in view. Verify with tests for "A
   correction row", "Removing a correction", the three banner scenarios
   and `lib/loans.test.js` for the window. Check the page at 390px for "A
   correction row on a phone".
-- [ ] 4.3 The setup form's "The bank says something else" field, and the
+- [x] 4.3 The setup form's "The bank says something else" field, and the
   link to it from the no-payment warning. Verify with a test for
   "Setting up with the bank's balance".
 

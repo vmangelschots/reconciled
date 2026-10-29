@@ -13,18 +13,20 @@ const SHOWN_BEFORE = 2;
 const SHOWN_AFTER = 12;
 
 // The installment the schedule opens on: the one due, else the first not
-// yet posted, else the last.
+// yet posted (or covered by a correction), else the last.
 export function currentIndex(installments) {
   const due = installments.findIndex((i) => i.state === "due");
   if (due >= 0) return due;
-  const open = installments.findIndex((i) => i.state !== "before_setup" && i.state !== "posted");
+  const open = installments.findIndex((i) => !["before_setup", "posted", "covered"].includes(i.state));
   return open >= 0 ? open : installments.length - 1;
 }
 
 // Which installments show before "Show earlier" / "Show all": the last
 // two posted ones, the current one and the next twelve. `focus` is an
 // installment number that must be in view (from a Needs attention link).
-export function scheduleWindow(installments, focus = null) {
+// `keepDate` is the latest correction's date: the installment after it,
+// which its row sits above, stays in view too.
+export function scheduleWindow(installments, focus = null, keepDate = null) {
   let current = currentIndex(installments);
   const focusIndex = focus == null ? -1 : installments.findIndex((i) => i.number === focus);
   if (focusIndex >= 0 && (focusIndex < current - SHOWN_BEFORE || focusIndex > current + SHOWN_AFTER)) {
@@ -32,7 +34,11 @@ export function scheduleWindow(installments, focus = null) {
   }
   const firstAfterSetup = installments.findIndex((i) => i.state !== "before_setup");
   const floor = firstAfterSetup >= 0 && firstAfterSetup <= current ? firstAfterSetup : 0;
-  const start = Math.max(floor, current - SHOWN_BEFORE);
+  let start = Math.max(floor, current - SHOWN_BEFORE);
   const end = Math.min(installments.length, current + SHOWN_AFTER + 1);
+  if (keepDate != null) {
+    const after = installments.findIndex((i) => i.date > keepDate);
+    start = Math.min(start, after >= 0 ? after : installments.length - 1);
+  }
   return { start, end };
 }

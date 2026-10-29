@@ -1,14 +1,18 @@
-import { AlertTriangle, Check, ChevronLeft, Clock, Landmark } from "lucide-react";
+import { AlertTriangle, Check, ChevronLeft, Clock, Landmark, Scale } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useAccounts } from "../accounts/AccountsContext";
 import { getAccount } from "../api/accounts";
 import { listCategories } from "../api/categories";
 import {
+  addCorrection,
   getLoan,
   linkPayment,
   listPaymentCandidates,
+  previewCorrection,
+  previewCorrectionRemoval,
   previewLoan,
+  removeCorrection,
   removeLoan,
   saveLoan,
   unlinkPayment,
@@ -32,6 +36,67 @@ function formatMonthYear(isoDate) {
   return monthYear.format(new Date(`${isoDate}T00:00:00Z`));
 }
 
+const fullDate = new Intl.DateTimeFormat(undefined, { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+
+function formatFullDate(isoDate) {
+  return fullDate.format(new Date(`${isoDate}T00:00:00Z`));
+}
+
+// Today as "YYYY-MM-DD" in the browser's time zone, for date inputs.
+function todayIso() {
+  const now = new Date();
+  return new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())).toISOString().slice(0, 10);
+}
+
+// "693.03" -> 69303, or null when it isn't an amount.
+function toCents(value) {
+  const amount = parseFloat(value);
+  return Number.isFinite(amount) ? Math.round(amount * 100) : null;
+}
+
+function plural(n, word) {
+  return `${n} ${word}${n === 1 ? "" : "s"}`;
+}
+
+// "Saving reposts 2 installments; 2 payments will no longer match." - the
+// warning colour only when a payment stops matching.
+function RepostLine({ repost, verb = "Saving reposts" }) {
+  return (
+    <p className={cn(repost.no_longer_matching > 0 ? "text-warning" : "text-ink-muted")}>
+      {verb} {plural(repost.installments, "installment")}
+      {repost.no_longer_matching > 0 && `; ${plural(repost.no_longer_matching, "payment")} will no longer match`}.
+    </p>
+  );
+}
+
+// The muted panel under a form that shows what saving would give.
+function CheckPanel({ children, ...props }) {
+  return (
+    <div className="flex flex-col gap-1.5 rounded-lg bg-surface-2 px-4 py-3 text-sm" {...props}>
+      {children}
+    </div>
+  );
+}
+
+function FoundLine({ found, payerName, paymentCents, children }) {
+  if (found.length > 0) {
+    return (
+      <p className="flex items-start gap-1.5 text-ink-secondary">
+        <Check className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+        Found in {payerName}: {found.map((p) => formatShortDate(p.date)).join(", ")}
+      </p>
+    );
+  }
+  return (
+    <p className="flex items-start gap-1.5 text-warning">
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+      <span>
+        No payment of {formatMoney(paymentCents)} in {payerName} in the last 90 days.{children}
+      </span>
+    </p>
+  );
+}
+
 function formatRate(rate) {
   return `${Number(rate).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}%`;
 }
@@ -46,14 +111,24 @@ function errorMessage(e) {
   return e.data ? Object.values(e.data).flat().join(" ") : e.message;
 }
 
-// "€200,000 at 3.00% over 25 years · €944.22 a month from Crelan · ends Nov 2049"
+// "€200,000 at 3.00% over 25 years · €944.22 a month from Crelan · ends Nov 2049",
+// with "since Dec 2026" when a correction changed the payment.
 function termsLine(loan) {
   const over = loan.term_months % 12 === 0 ? `${loan.term_months / 12} years` : `${loan.term_months} months`;
+  const since = loan.payment_since ? ` since ${formatMonthYear(loan.payment_since)}` : "";
   return [
     `${formatMoneyWhole(loan.principal_cents)} at ${formatRate(loan.annual_rate)} over ${over}`,
-    `${formatMoney(loan.payment_cents)} a month from ${loan.paid_from_name}`,
-    `ends ${formatMonthYear(loan.end_date)}`,
-  ].join(" · ");
+    !loan.paid_off_on && loan.payment_cents != null && `${formatMoney(loan.payment_cents)} a month from ${loan.paid_from_name}${since}`,
+    !loan.paid_off_on && loan.end_date && `ends ${formatMonthYear(loan.end_date)}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+// The payment before the latest correction, for the header's hover text.
+function latestBefore(loan) {
+  const corrections = loan.corrections ?? [];
+  return corrections[corrections.length - 1]?.payment_before_cents ?? null;
 }
 
 // The form's fields as API terms, or null while any is missing.
@@ -69,19 +144,25 @@ function toTerms(fields) {
     first_payment_date: fields.first,
     paid_from: Number(fields.paidFrom),
     payment_category: fields.category,
+    // What the bank says is owed today; a new setup only.
+    ...(fields.bank !== undefined && toCents(fields.bank) !== null && { bank_balance_cents: toCents(fields.bank) }),
   };
 }
 
 // What the entered terms give, before anything is saved - so a cent's
 // difference with the bank shows here, not as a missed payment weeks later.
-function TermsCheck({ preview, account, payerName }) {
+// For a new setup, `bank` is what the bank says is owed today (undefined
+// until the user opens it); the payment checked is then the one it gives.
+function TermsCheck({ preview, account, payerName, bank, onBank }) {
   if (!preview) return null;
   if (preview.error) return <p className="text-sm text-ink-muted">{preview.error}</p>;
   const found = preview.found_payments;
+  const corrected = preview.schedule_payment_cents != null && preview.schedule_payment_cents !== preview.payment_cents;
   return (
-    <div className="flex flex-col gap-1.5 rounded-lg bg-surface-2 px-4 py-3 text-sm" data-testid="terms-check">
+    <CheckPanel data-testid="terms-check">
       <p className="text-ink-primary">
         <span className="num font-semibold">{formatMoney(preview.payment_cents)}</span> a month
+        {corrected && <span className="text-ink-muted"> · {formatMoney(preview.schedule_payment_cents)} per the terms</span>}
         {preview.last_payment_cents !== preview.payment_cents && (
           <span className="text-ink-muted"> · last one {formatMoney(preview.last_payment_cents)}</span>
         )}
@@ -95,28 +176,52 @@ function TermsCheck({ preview, account, payerName }) {
         Owed today per schedule <span className="num">{formatMoney(owed(preview.schedule_balance_today_cents))}</span>
         {" · "}
         {account.name} shows <span className="num">{formatMoney(owed(preview.current_balance_cents))}</span>
+        {onBank && bank === undefined && (
+          <>
+            {" · "}
+            <button type="button" onClick={() => onBank("")} className="text-ink-secondary underline-offset-2 hover:underline">
+              The bank says something else
+            </button>
+          </>
+        )}
       </p>
-      {found.length > 0 ? (
-        <p className="flex items-start gap-1.5 text-ink-secondary">
-          <Check className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-          Found in {payerName}: {found.map((p) => formatShortDate(p.date)).join(", ")}
-        </p>
-      ) : (
-        <p className="flex items-start gap-1.5 text-warning">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-          No payment of {formatMoney(preview.payment_cents)} in {payerName} in the last 90 days. Check the terms against
-          your bank's repayment table.
-        </p>
+      {onBank && bank !== undefined && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Label htmlFor="loan-bank">Owed per the bank today</Label>
+          <div className="relative">
+            <Input
+              id="loan-bank"
+              type="number"
+              step="0.01"
+              min="0"
+              value={bank}
+              onChange={(e) => onBank(e.target.value)}
+              className="h-8 w-36 pr-7 num"
+              autoFocus
+            />
+            <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-ink-muted">€</span>
+          </div>
+          <button type="button" onClick={() => onBank(undefined)} className="text-xs text-ink-muted hover:text-ink-secondary">
+            Use the schedule's
+          </button>
+        </div>
       )}
-      {preview.repost && (
-        <p className={cn(preview.repost.no_longer_matching > 0 ? "text-warning" : "text-ink-muted")}>
-          Saving reposts {preview.repost.installments} installment{preview.repost.installments === 1 ? "" : "s"}
-          {preview.repost.no_longer_matching > 0 &&
-            `; ${preview.repost.no_longer_matching} payment${preview.repost.no_longer_matching === 1 ? "" : "s"} will no longer match`}
-          .
-        </p>
-      )}
-    </div>
+      <FoundLine found={found} payerName={payerName} paymentCents={preview.payment_cents}>
+        {" "}Check the terms against your bank's repayment table
+        {onBank && bank === undefined ? (
+          <>
+            , or, if the bank changed the payment,{" "}
+            <button type="button" onClick={() => onBank("")} className="underline underline-offset-2">
+              enter what it says you owe
+            </button>
+            .
+          </>
+        ) : (
+          "."
+        )}
+      </FoundLine>
+      {preview.repost && <RepostLine repost={preview.repost} />}
+    </CheckPanel>
   );
 }
 
@@ -135,6 +240,249 @@ function RemoveDialog({ open, onOpenChange, onConfirm }) {
             Cancel
           </Button>
           <Button type="button" variant="destructive" onClick={onConfirm}>
+            Remove
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * What the bank says is owed on a date, with a live check of the payment
+ * it gives from the next installment on. The payment can be replaced with
+ * what the bank actually takes. See the loan-schedules spec's "Correct a
+ * loan's balance" and "Check a correction before saving".
+ */
+function CorrectionForm({ loan, payerName, initialPayment, onSaved, onCancel }) {
+  const toast = useToast();
+  const [on, setOn] = useState(todayIso);
+  const [amount, setAmount] = useState("");
+  // The payment the user chose, in euros; null means the computed one.
+  const [payment, setPayment] = useState(initialPayment != null ? (initialPayment / 100).toFixed(2) : null);
+  const [preview, setPreview] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const latest = useRef(0);
+  const balanceCents = toCents(amount);
+  const correction =
+    on && balanceCents !== null
+      ? { date: on, balance_cents: balanceCents, payment_cents: payment === null ? null : toCents(payment) }
+      : null;
+  const key = JSON.stringify(correction);
+
+  useEffect(() => {
+    if (!correction) {
+      setPreview(null);
+      return undefined;
+    }
+    const request = ++latest.current;
+    const timer = setTimeout(() => {
+      previewCorrection(loan.account, correction)
+        .then((result) => request === latest.current && setPreview(result))
+        .catch((e) => request === latest.current && setPreview({ error: errorMessage(e) }));
+    }, 300);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, loan.account]);
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    if (!correction) {
+      toast.error("Enter what you owe.");
+      return;
+    }
+    setSaving(true);
+    try {
+      onSaved(await addCorrection(loan.account, correction));
+      toast.success("Balance corrected.");
+    } catch (e) {
+      toast.error(errorMessage(e));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <p className="text-sm text-ink-secondary">
+        Enter what the bank says you owe. From the next installment, the schedule restarts from that amount at{" "}
+        {formatRate(loan.annual_rate)}
+        {loan.end_date && `, still ending ${formatMonthYear(loan.end_date)}`}.
+      </p>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="correction-date">On</Label>
+          <Input id="correction-date" type="date" value={on} max={todayIso()} onChange={(e) => setOn(e.target.value)} required />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="correction-owed">Owed per the bank</Label>
+          <div className="relative">
+            <Input
+              id="correction-owed"
+              type="number"
+              step="0.01"
+              min="0"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="pr-8"
+              required
+            />
+            <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-ink-muted">€</span>
+          </div>
+        </div>
+        <p className="text-xs text-ink-muted sm:col-span-2">Use the balance on your statement, after that day's payment.</p>
+      </div>
+
+      <CorrectionCheck preview={preview} payerName={payerName} payment={payment} onPayment={setPayment} />
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="submit" disabled={saving}>
+          Save correction
+        </Button>
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+function CorrectionCheck({ preview, payerName, payment, onPayment }) {
+  if (!preview) return null;
+  if (preview.error) return <p className="text-sm text-ink-muted">{preview.error}</p>;
+  if (preview.paid_off) {
+    return (
+      <CheckPanel data-testid="correction-check">
+        <p className="font-semibold text-ink-primary">Paid off. No more installments.</p>
+        {preview.repost.installments > 0 && <RepostLine repost={preview.repost} />}
+      </CheckPanel>
+    );
+  }
+  const difference = preview.difference_cents;
+  const near = preview.near_payment;
+  return (
+    <CheckPanel data-testid="correction-check">
+      <p className="flex flex-wrap items-center gap-x-1 text-ink-primary">
+        {payment === null ? (
+          <span className="num font-semibold">{formatMoney(preview.payment_cents)}</span>
+        ) : (
+          <Input
+            aria-label="Monthly payment"
+            type="number"
+            step="0.01"
+            min="0"
+            value={payment}
+            onChange={(e) => onPayment(e.target.value)}
+            className="h-8 w-28 num"
+          />
+        )}
+        <span>
+          a month from {formatShortDate(preview.first_installment.date)}
+          {preview.previous_payment_cents != null && preview.previous_payment_cents !== preview.payment_cents && (
+            <span className="text-ink-muted"> · was {formatMoney(preview.previous_payment_cents)}</span>
+          )}
+        </span>
+        {payment === null ? (
+          <button
+            type="button"
+            onClick={() => onPayment((preview.payment_cents / 100).toFixed(2))}
+            className="ml-auto text-xs text-ink-muted underline-offset-2 hover:text-ink-secondary hover:underline"
+          >
+            Pay a different amount?
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => onPayment(null)}
+            className="ml-auto text-xs text-ink-muted underline-offset-2 hover:text-ink-secondary hover:underline"
+          >
+            Use the computed payment
+          </button>
+        )}
+      </p>
+      <p className="text-ink-secondary">
+        {plural(preview.installments_left, "installment")} left, ends {formatMonthYear(preview.end_date)}
+        {preview.last_payment_cents !== preview.payment_cents && (
+          <span className="text-ink-muted"> · last one {formatMoney(preview.last_payment_cents)}</span>
+        )}
+      </p>
+      <p className="text-ink-secondary">
+        {difference === 0
+          ? "The same as the schedule"
+          : `${formatMoney(Math.abs(difference))} ${difference < 0 ? "less" : "more"} than the schedule`}
+      </p>
+      <FoundLine found={preview.found_payments} payerName={payerName} paymentCents={preview.payment_cents}>
+        {near && (
+          <>
+            {" "}
+            {payerName} paid {formatMoney(-near.amount_cents)} on {formatShortDate(near.date)}.{" "}
+            <button
+              type="button"
+              onClick={() => onPayment((-near.amount_cents / 100).toFixed(2))}
+              className="font-medium underline underline-offset-2"
+            >
+              Use {formatMoney(-near.amount_cents)}
+            </button>
+          </>
+        )}
+      </FoundLine>
+      {preview.repost.installments > 0 && <RepostLine repost={preview.repost} />}
+    </CheckPanel>
+  );
+}
+
+// Asks before removing a correction, saying what the payment goes back to
+// and what removing reposts.
+function RemoveCorrectionDialog({ loan, correction, onOpenChange, onRemoved }) {
+  const toast = useToast();
+  const [effect, setEffect] = useState(null);
+
+  useEffect(() => {
+    if (!correction) return;
+    setEffect(null);
+    previewCorrectionRemoval(loan.account, correction.id)
+      .then(setEffect)
+      .catch((e) => toast.error(errorMessage(e)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [correction?.id, loan.account]);
+
+  async function handleRemove() {
+    try {
+      const updated = await removeCorrection(loan.account, correction.id);
+      onOpenChange(false);
+      toast.success("Correction removed.");
+      onRemoved(updated);
+    } catch (e) {
+      toast.error(errorMessage(e));
+    }
+  }
+
+  return (
+    <Dialog open={correction != null} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Remove this correction?</DialogTitle>
+          <DialogDescription>
+            {effect === null
+              ? "Checking what changes…"
+              : [
+                  effect.first_installment &&
+                    `The schedule goes back to ${formatMoney(effect.payment_cents)} a month from ${formatShortDate(effect.first_installment.date)}.`,
+                  effect.repost.installments > 0 &&
+                    `${plural(effect.repost.installments, "installment")} will be reposted` +
+                      (effect.repost.no_longer_matching > 0
+                        ? `; ${plural(effect.repost.no_longer_matching, "payment")} will no longer match.`
+                        : "."),
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button type="button" variant="destructive" onClick={handleRemove}>
             Remove
           </Button>
         </DialogFooter>
@@ -276,7 +624,13 @@ function LoanForm({ account, loan, categories, payers, onSaved, onCancel, onRemo
         </div>
       </div>
 
-      <TermsCheck preview={preview} account={account} payerName={payerName} />
+      <TermsCheck
+        preview={preview}
+        account={account}
+        payerName={payerName}
+        bank={fields.bank}
+        onBank={loan ? undefined : (value) => setFields((f) => ({ ...f, bank: value }))}
+      />
 
       <div className="flex flex-wrap items-center gap-2">
         <Button type="submit" disabled={saving}>
@@ -390,6 +744,76 @@ function SetupDivider({ date }) {
   );
 }
 
+// A balance correction as a row of the schedule, at its date: the amount
+// owed in the balance column and the payment before and after it. See the
+// loan-schedules spec's "Schedule table".
+function CorrectionRow({ correction, onRemove }) {
+  const after = correction.payment_after_cents;
+  const before = correction.payment_before_cents;
+  const change =
+    after === null ? "Paid off" : before !== null && before !== after ? (
+      <>
+        <span className="num">{formatMoney(before)}</span> →{" "}
+        <span className="num font-medium text-ink-primary">{formatMoney(after)}</span> a month
+      </>
+    ) : (
+      <>
+        <span className="num font-medium text-ink-primary">{formatMoney(after)}</span> a month
+      </>
+    );
+  return (
+    <li
+      data-correction={correction.id}
+      className={cn(ROW_GRID, "-mx-5 border-t border-border bg-accent/5 px-5 py-2.5")}
+    >
+      <span className="flex items-center gap-1.5 whitespace-nowrap text-ink-primary [grid-area:date]">
+        <Scale className="h-4 w-4 text-accent" aria-hidden="true" />
+        <span className="num">{formatShortDate(correction.date)}</span>
+        <span className="text-ink-muted sm:hidden">· Corrected</span>
+      </span>
+      <span className="flex flex-col items-end text-xs text-ink-muted [grid-area:split] sm:items-start sm:text-sm sm:[grid-area:1/2/2/4]">
+        <span className="hidden text-xs sm:inline">Balance corrected</span>
+        <span className="whitespace-nowrap">{change}</span>
+      </span>
+      <span className="num text-right font-medium text-ink-primary [grid-area:balance]">
+        {formatMoney(correction.balance_cents)}
+      </span>
+      <span className="[grid-area:state]">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-6 px-2 text-ink-muted hover:text-critical"
+          onClick={() => onRemove(correction)}
+        >
+          Remove
+        </Button>
+      </span>
+    </li>
+  );
+}
+
+// Shown when the latest installments were missed: maybe the bank changed
+// the payment. See the loan-schedules spec's "Suggest a correction when
+// payments are missed".
+function SuggestionBanner({ suggestion, payerName, onCorrect }) {
+  const count = suggestion.missed_count;
+  return (
+    <div className="mx-5 mb-3 flex flex-wrap items-center gap-3 rounded-lg bg-warning/10 px-4 py-3 text-sm" data-testid="suggestion">
+      <AlertTriangle className="h-4 w-4 shrink-0 text-warning" aria-hidden="true" />
+      <p className="min-w-0 flex-1 text-ink-primary">
+        The last {count} installments were missed.{" "}
+        {suggestion.amount_cents != null
+          ? `${payerName} paid ${formatMoney(suggestion.amount_cents)} around each date. Did the bank change the payment?`
+          : "If you repaid extra and the bank changed the payment, correct the balance."}
+      </p>
+      <Button type="button" variant="outline" size="sm" onClick={() => onCorrect(suggestion.amount_cents)}>
+        Correct balance
+      </Button>
+    </div>
+  );
+}
+
 const ROW_GRID =
   "grid grid-cols-[1fr_auto] gap-x-4 gap-y-0.5 [grid-template-areas:'date_balance'_'state_split'] " +
   "sm:grid-cols-[9rem_1fr_1fr_1fr_12rem] sm:items-center sm:[grid-template-areas:'date_interest_principal_balance_state']";
@@ -400,14 +824,17 @@ const ROW_GRID =
  * "Show earlier" and "Show all". See the loan-schedules spec's "Schedule
  * table" and "The schedule opens on what matters now".
  */
-function ScheduleTable({ loan, focus, onChange }) {
+function ScheduleTable({ loan, focus, onChange, onCorrect }) {
   const toast = useToast();
   const [showEarlier, setShowEarlier] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [linking, setLinking] = useState(null);
+  const [removing, setRemoving] = useState(null);
   const focusRef = useRef(null);
   const installments = loan.installments;
-  const range = scheduleWindow(installments, focus);
+  const corrections = loan.corrections ?? [];
+  const latestCorrection = corrections[corrections.length - 1];
+  const range = scheduleWindow(installments, focus, latestCorrection?.date);
   const start = showEarlier ? 0 : range.start;
   const end = showAll ? installments.length : range.end;
   const shown = installments.slice(start, end);
@@ -429,8 +856,26 @@ function ScheduleTable({ loan, focus, onChange }) {
     }
   }
 
+  // The corrections whose row goes right above `installment`: dated since
+  // the installment before it.
+  function correctionsBefore(index) {
+    const previous = installments[index - 1];
+    return corrections.filter(
+      (c) => c.date < installments[index].date && (previous === undefined || c.date >= previous.date),
+    );
+  }
+  const correctionsAfterLast = last ? corrections.filter((c) => c.date >= last.date) : corrections;
+  const correctionRow = (c) => <CorrectionRow key={`correction-${c.id}`} correction={c} onRemove={setRemoving} />;
+
   return (
     <Panel title="Repayment schedule" flush>
+      {loan.suggestion && <SuggestionBanner suggestion={loan.suggestion} payerName={loan.paid_from_name} onCorrect={onCorrect} />}
+      <RemoveCorrectionDialog
+        loan={loan}
+        correction={removing}
+        onOpenChange={(open) => !open && setRemoving(null)}
+        onRemoved={onChange}
+      />
       <ul className="flex flex-col px-5 pb-2 text-sm">
         <li className={cn(ROW_GRID, "hidden pb-2 text-xs font-medium text-ink-muted sm:grid")} aria-hidden="true">
           <span className="[grid-area:date]">Date</span>
@@ -450,12 +895,16 @@ function ScheduleTable({ loan, focus, onChange }) {
             </button>
           </li>
         )}
-        {shown.map((installment) => {
+        {shown.map((installment, offset) => {
+          const index = start + offset;
           const divider = hasBeforeSetup && installment === firstAfterSetup;
           const isCurrent = installment === current && installment.state !== "posted";
-          const muted = installment.state === "before_setup";
+          const muted = installment.state === "before_setup" || installment.state === "covered";
+          const restarted =
+            installment.correction_id != null && installment.correction_id !== installments[index - 1]?.correction_id;
           return [
             divider && <SetupDivider key="setup" date={loan.setup_date} />,
+            ...correctionsBefore(index).map(correctionRow),
             <li
               key={installment.number}
               ref={installment.number === focus ? focusRef : undefined}
@@ -472,8 +921,12 @@ function ScheduleTable({ loan, focus, onChange }) {
                   {formatShortDate(installment.date)}
                   <span className="hidden text-ink-muted sm:inline"> · {installment.number}</span>
                 </span>
-                {installment === last && (
+                {installment === last ? (
                   <span className="text-xs text-ink-muted">last payment {formatMoney(installment.payment_cents)}</span>
+                ) : (
+                  restarted && (
+                    <span className="whitespace-nowrap text-xs text-ink-muted">payment {formatMoney(installment.payment_cents)}</span>
+                  )
                 )}
               </span>
               <span className="flex justify-end gap-1 whitespace-nowrap text-xs text-ink-muted [grid-area:split] sm:contents sm:text-sm">
@@ -510,6 +963,7 @@ function ScheduleTable({ loan, focus, onChange }) {
             </li>,
           ];
         })}
+        {end === installments.length && correctionsAfterLast.map(correctionRow)}
       </ul>
       {end < installments.length && (
         <button
@@ -540,7 +994,12 @@ export function LoanSchedulePage() {
   // undefined while loading, null when the loan isn't set up.
   const [loan, setLoan] = useState(undefined);
   const [categories, setCategories] = useState([]);
-  const [editing, setEditing] = useState(false);
+  // null, "edit", or "correct"; the two forms are never open together.
+  const [mode, setMode] = useState(null);
+  // The payment the correction form opens with, from the banner.
+  const [correctPayment, setCorrectPayment] = useState(null);
+  const editing = mode === "edit";
+  const setEditing = (on) => setMode(on ? "edit" : null);
 
   function load() {
     return getLoan(id)
@@ -569,8 +1028,13 @@ export function LoanSchedulePage() {
 
   function handleChanged(updated) {
     setLoan(updated);
-    setEditing(false);
+    setMode(null);
     refreshAccounts();
+  }
+
+  function startCorrecting(paymentCents = null) {
+    setCorrectPayment(paymentCents);
+    setMode("correct");
   }
 
   const back = (
@@ -618,19 +1082,36 @@ export function LoanSchedulePage() {
           </h1>
           {loan ? (
             <>
-              <p className="text-2xl font-semibold text-ink-primary">
-                <span className="num">{formatMoneyWhole(owed(loan.current_balance_cents))}</span> still owed
+              {loan.paid_off_on ? (
+                <p className="text-2xl font-semibold text-ink-primary">Paid off {formatFullDate(loan.paid_off_on)}</p>
+              ) : (
+                <p className="text-2xl font-semibold text-ink-primary">
+                  <span className="num">{formatMoneyWhole(owed(loan.current_balance_cents))}</span> still owed
+                </p>
+              )}
+              <p
+                className="text-sm text-ink-muted"
+                title={
+                  loan.payment_since && latestBefore(loan) != null ? `Was ${formatMoney(latestBefore(loan))} a month` : undefined
+                }
+              >
+                {termsLine(loan)}
               </p>
-              <p className="text-sm text-ink-muted">{termsLine(loan)}</p>
             </>
           ) : (
             <p className="text-2xl font-semibold text-ink-primary">No repayment schedule yet</p>
           )}
         </div>
-        {loan && !editing && (
-          <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
-            Edit
-          </Button>
+        {loan && mode === null && (
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => startCorrecting()}>
+              <Scale className="h-4 w-4" aria-hidden="true" />
+              Correct balance
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+              Edit
+            </Button>
+          </div>
         )}
       </header>
 
@@ -644,7 +1125,18 @@ export function LoanSchedulePage() {
         </Panel>
       )}
       {loan && editing && <Panel title="Edit the schedule">{form}</Panel>}
-      {loan && <ScheduleTable loan={loan} focus={focus} onChange={handleChanged} />}
+      {loan && mode === "correct" && (
+        <Panel title="Correct the balance">
+          <CorrectionForm
+            loan={loan}
+            payerName={loan.paid_from_name}
+            initialPayment={correctPayment}
+            onSaved={handleChanged}
+            onCancel={() => setMode(null)}
+          />
+        </Panel>
+      )}
+      {loan && <ScheduleTable loan={loan} focus={focus} onChange={handleChanged} onCorrect={startCorrecting} />}
     </>,
   );
 }
