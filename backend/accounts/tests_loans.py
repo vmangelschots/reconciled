@@ -330,3 +330,13 @@ class SetUpWithBankBalanceApiTests(LoanApiTestCase):
         self.assertEqual(body["current_balance_cents"], euros(-170000))
         # An edit ignores it and keeps the correction.
         self.assertEqual(self.put(bank_balance_cents=euros(1)).json()["current_balance_cents"], euros(-170000))
+
+    def test_setting_up_with_the_banks_figure_from_before_an_installment(self):
+        refused = self.client.post(
+            reverse("account-loan-preview", args=[self.mortgage.id]),
+            self.terms(bank_balance_cents=euros(170000), bank_balance_date="2026-09-01"),
+            format="json",
+        )
+        self.assertEqual(refused.status_code, 400)
+        body = self.put(bank_balance_cents=euros(170000), bank_balance_date="2026-10-30").json()
+        self.assertEqual([c["date"] for c in body["corrections"]], ["2026-10-30"])

@@ -2,7 +2,7 @@
 
 ## 1. Backend
 
-- [ ] 1.1 In `transactions/loans.py`:
+- [x] 1.1 In `transactions/loans.py`:
   - allow correction dates from one month before the setup day
   - skip `_post_correction` for corrections before setup
   - pass corrections to `lineup_value` from `_post_lineup`, `preview`
@@ -14,7 +14,7 @@
   setup day" (line-up -91,303.56, payment 693.03), "A correction the day
   before setup", and "Dates that are refused" (more than a month before),
   and that the existing loan tests still pass.
-- [ ] 1.2 Accept an optional `bank_balance_date` on setup and its preview
+- [x] 1.2 Accept an optional `bank_balance_date` on setup and its preview
   in `accounts/views.py`. Verify with an API test for "Setting up with the
   bank's figure from before an installment".
 

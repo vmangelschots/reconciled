@@ -31,6 +31,8 @@ class LoanTermsSerializer(serializers.Serializer):
     # What the bank says is owed today; a new setup only, saved as a
     # correction on the setup day.
     bank_balance_cents = serializers.IntegerField(allow_null=True, required=False, default=None)
+    # The day of that figure, today when left out; up to a month back.
+    bank_balance_date = serializers.DateField(allow_null=True, required=False, default=None)
 
     def validate_payment_category(self, category):
         return check_assignable(category)
@@ -216,6 +218,7 @@ class AccountViewSet(
                 terms = self._terms(request, account)
                 if hasattr(account, "loan"):
                     terms.pop("bank_balance_cents")
+                    terms.pop("bank_balance_date")
                     loan = loans.edit_loan(account.loan, today, **terms)
                     code = status.HTTP_200_OK
                 else:
