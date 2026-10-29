@@ -10,6 +10,8 @@ from datetime import timedelta
 
 from django.db import transaction as db_transaction
 
+from accounts.models import Loan
+
 from .models import Transaction
 
 # How far apart (in days, either way) the two sides may be dated and
@@ -88,6 +90,12 @@ def link_transfer(txn, target_account):
         raise TransferError("A split transaction can't be a transfer. Unsplit it first.")
     if txn.is_adjustment:
         raise TransferError("A value adjustment can't be a transfer.")
+    # The schedule already posts the principal; a transfer would count it
+    # twice. See openspec/specs/loan-schedules.
+    if Loan.objects.filter(account=target_account, paid_from_id=txn.account_id).exists():
+        raise TransferError(
+            f"{target_account.name} follows its loan schedule, which already posts what this account pays."
+        )
 
     if txn.transfer_counterpart_id is not None:
         if txn.transfer_counterpart.account_id == target_account.pk:

@@ -23,7 +23,7 @@ class TransactionViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         queryset = Transaction.objects.select_related(
-            "account", "category", "transfer_counterpart__account"
+            "account", "category", "transfer_counterpart__account", "loan", "loan_adjustment__account"
         ).prefetch_related(
             Prefetch(
                 "parts",
@@ -62,8 +62,14 @@ class TransactionViewSet(viewsets.ModelViewSet):
         return queryset
 
     def destroy(self, request, *args, **kwargs):
+        txn = self.get_object()
+        if txn.loan_id is not None:
+            return Response(
+                {"detail": "This adjustment belongs to the loan schedule. Change the loan's terms instead."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         try:
-            delete_transaction(self.get_object())
+            delete_transaction(txn)
         except SplitError as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(status=status.HTTP_204_NO_CONTENT)

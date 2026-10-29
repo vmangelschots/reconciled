@@ -23,7 +23,7 @@
 
 ## 2. Setup, matching and posting
 
-- [ ] 2.1 Add setup, edit (category or paying account only vs. repost)
+- [x] 2.1 Add setup, edit (category or paying account only vs. repost)
   and remove in `loans.py`, with the line-up adjustment (installment 0),
   as in design.md. Verify with tests for:
   - "A loan running for a while" (-668.29 on 15 Feb, the 31 Jan
@@ -35,7 +35,7 @@
   - "Changing the category" (no repost, matches kept)
   - "Removing the setup" (balance unchanged, adjustments ordinary and
     deletable)
-- [ ] 2.2 Add `sync_loan` and `sync_loans`: drop stale matches (with the
+- [x] 2.2 Add `sync_loan` and `sync_loans`: drop stale matches (with the
   hand-link exceptions), match due installments up to 5 days ahead, post
   adjustments, and apply the payment category. Verify with tests for:
   - "The payment is booked two days late"
@@ -48,10 +48,11 @@
   - "Net worth drops by the interest"
   - "An uncategorized payment" / "The user's own category stays"
   - "The payment is deleted", "An automatic match's amount changes", and
-    unmatching after a move to another account, a transfer and a split
+    unmatching after a transfer and a split (a transaction's account
+    can't be changed, so a move to another account can't happen)
   - "Shown twice" (idempotent, and the unique constraint holds when
     sync runs twice)
-- [ ] 2.3 Add link candidates, link and unlink in `loans.py`. Verify with
+- [x] 2.3 Add link candidates, link and unlink in `loans.py`. Verify with
   tests for:
   - "Booked a week late"
   - "Paid by hand from savings"
@@ -60,7 +61,7 @@
   - "Unlink a wrong choice"
   - a link being rejected for a posted installment, an installment before
     setup, or a non-candidate transaction
-- [ ] 2.4 Add the guards:
+- [x] 2.4 Add the guards:
   - `destroy` rejects scheduled adjustments
   - `set_value` rejects a date holding a scheduled adjustment
   - `link_transfer` rejects a scheduled loan as the target from its

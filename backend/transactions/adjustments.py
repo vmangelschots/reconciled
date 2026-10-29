@@ -14,7 +14,7 @@ from django.db.models import Sum
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
-from accounts.models import VALUED_TYPES, Account
+from accounts.models import VALUED_TYPES, Account, Loan
 
 from .models import Transaction
 
@@ -59,6 +59,9 @@ def set_value(account, date, value_cents):
         raise AdjustmentError("Only investment, property and loan accounts have a value to set.")
     if account.archived:
         raise AdjustmentError("An archived account's value can't be set.")
+    # A value set by hand would be overwritten by the next installment.
+    if Loan.objects.filter(account=account).exists():
+        raise AdjustmentError("This loan follows its schedule. Change the loan's terms instead.")
     Transaction.objects.filter(account=account, is_adjustment=True, date=date).delete()
     adjustment = Transaction.objects.create(
         account=account,

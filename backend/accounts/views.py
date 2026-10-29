@@ -29,7 +29,7 @@ class AccountViewSet(
     def get_queryset(self):
         # By tier, then name - see the accounts spec's "Accounts are
         # listed by tier".
-        queryset = Account.objects.order_by(tier_position(), "name", "id")
+        queryset = Account.objects.select_related("loan").order_by(tier_position(), "name", "id")
         if self.action == "list":
             # Archived accounts are excluded from the default list but
             # remain reachable by id (retrieve/update/archive), so their
