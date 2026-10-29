@@ -28,10 +28,11 @@ Only a signed-in user SHALL be able to download one.
 A backup SHALL hold every account; every transaction, with its splits,
 transfer links, value adjustments, notes and category guesses; categories
 and tabs; monthly limits; yearly budgets; the budget settings; recurring
-transactions; loan setups, with the links between scheduled adjustments
-and their installments and payments; the remembered import mappings; and
-when each account was last imported into. Rows SHALL keep their ids and
-their created and updated times.
+transactions; loan setups and their balance corrections, with the links
+between scheduled adjustments and their installments, corrections and
+payments; the remembered import mappings; and when each account was last
+imported into. Rows SHALL keep their ids and their created and updated
+times.
 
 #### Scenario: A transfer and a split survive a round trip
 - **WHEN** the data holds a transfer from Crelan to Revolut and a
@@ -57,6 +58,13 @@ their created and updated times.
 - **THEN** the setup has the same terms, the adjustment is still that
   installment's and linked to the same payment, and no adjustment is
   posted twice
+
+#### Scenario: A correction survives
+- **WHEN** "Mortgage" has a balance correction with a chosen payment, and
+  a backup of it is restored
+- **THEN** the correction has the same date, amount and payment, its
+  adjustment is still linked to it, and the schedule is the same as
+  before
 
 ### Requirement: What a backup leaves out
 A backup SHALL NOT hold login users or their passwords. It SHALL NOT hold
