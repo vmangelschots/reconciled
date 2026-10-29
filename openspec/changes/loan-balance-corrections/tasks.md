@@ -102,4 +102,4 @@
 
 ## Workflow follow-up
 
-- Archive the change on its branch, then open the PR.
+- Archive the change on its branch, then open the PR with `Fixes #32`.

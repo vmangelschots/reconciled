@@ -1,5 +1,7 @@
 # Proposal
 
+Issue: #32
+
 ## Why
 
 A loan's schedule is computed once from its terms, so it can only follow

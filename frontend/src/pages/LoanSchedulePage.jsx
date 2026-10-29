@@ -330,7 +330,9 @@ function CorrectionForm({ loan, payerName, initialPayment, onSaved, onCancel }) 
             <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-sm text-ink-muted">€</span>
           </div>
         </div>
-        <p className="text-xs text-ink-muted sm:col-span-2">Use the balance on your statement, after that day's payment.</p>
+        <p className="text-xs text-ink-muted sm:col-span-2">
+          Date it on the day of that balance. If the bank hasn't deducted the latest installment yet, pick a day before it.
+        </p>
       </div>
 
       <CorrectionCheck preview={preview} payerName={payerName} payment={payment} onPayment={setPayment} />

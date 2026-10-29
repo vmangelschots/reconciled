@@ -158,8 +158,8 @@ remove endpoints:
 - **Form:** an inline Panel titled "Correct the balance", in the place
   where the edit form renders.
   - Date (default today) and "Owed per the bank" with a `€` adornment.
-  - The hint: "Use the balance on your statement, after that day's
-    payment."
+  - The hint: "Date it on the day of that balance. If the bank hasn't
+    deducted the latest installment yet, pick a day before it."
   - The check panel reuses the `TermsCheck` shell. A shared `CheckPanel`
     wrapper is extracted for both forms.
   - The override is a quiet "Pay a different amount?" link. It turns the
