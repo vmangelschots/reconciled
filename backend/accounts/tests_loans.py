@@ -231,3 +231,10 @@ class LoanSyncTests(LoanApiTests):
 
     def test_a_loan_without_a_setup_never_shows(self):
         self.assertEqual(self.missed(date(2026, 11, 12)), [])
+
+    def test_covered_by_a_correction(self):
+        from transactions.loans import add_correction
+
+        self.set_up_on(date(2026, 10, 20), "2026-11-02")
+        add_correction(Loan.objects.get(), date(2026, 11, 10), date(2026, 11, 10), euros(190000))
+        self.assertEqual(self.missed(date(2026, 11, 12)), [])

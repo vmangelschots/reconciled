@@ -17,13 +17,21 @@ from .adjustments import set_value
 from .loans import (
     LoanError,
     _post_installment,
+    add_correction,
     compute_schedule,
     edit_loan,
+    installment_states,
     link_candidates,
     link_payment,
+    missed_installment,
+    preview,
+    preview_correction,
+    preview_removal,
+    remove_correction,
     remove_loan,
     schedule,
     set_up_loan,
+    suggest_correction,
     sync_loan,
     unlink_payment,
 )
@@ -544,3 +552,205 @@ class GuardTests(LoanTestCase):
                          (True, self.crelan.id))
         self.assertEqual((accounts[self.crelan.id]["has_loan"], accounts[self.crelan.id]["loan_paid_from"]),
                          (False, None))
+
+
+class CorrectionTests(LoanTestCase):
+    """The loan-schedules spec's balance corrections: "Correct a loan's
+    balance", "A correction sets the loan's balance", "A correction covers
+    what came before", "Remove a correction" and "Edit a loan setup"."""
+
+    def setUp(self):
+        super().setUp()
+        # Installment 24 falls on 2 November 2026, leaving 188,864.23.
+        self.loan = self.set_up(first=date(2024, 12, 2))
+
+    def correct(self, on, owed, today=None, payment=None):
+        return add_correction(
+            self.loan, today or on, on, euros(owed), None if payment is None else euros(payment)
+        )
+
+    def correction_adjustment(self):
+        return Transaction.objects.get(loan_correction__isnull=False)
+
+    def test_the_balance_follows_the_bank(self):
+        self.pay(date(2026, 11, 4), -944.22)
+        sync_loan(self.loan, date(2026, 11, 12))
+        self.assertEqual(self.balance(self.mortgage), euros(-188864.23))
+
+        self.correct(date(2026, 11, 12), 170000)
+
+        adjustment = self.correction_adjustment()
+        self.assertEqual((adjustment.date, adjustment.adjustment_value_cents), (date(2026, 11, 12), euros(-170000)))
+        self.assertEqual(self.balance(self.mortgage), euros(-170000))
+        self.assertIn(24, self.posted(self.loan))
+        self.assertEqual(schedule(self.loan)[24].payment_cents, euros(849.91))
+
+    def test_a_correction_before_posted_installments(self):
+        self.pay(date(2026, 12, 2), -944.22)
+        sync_loan(self.loan, date(2026, 12, 12))
+        self.assertIn(25, self.posted(self.loan))
+
+        preview = preview_correction(self.loan, date(2026, 12, 12), date(2026, 12, 1), euros(170000))
+        self.assertEqual(preview["repost"], {"installments": 1, "no_longer_matching": 1})
+
+        self.correct(date(2026, 12, 1), 170000, today=date(2026, 12, 12))
+        self.assertNotIn(25, self.posted(self.loan))
+
+    def test_removing_a_correction(self):
+        correction = self.correct(date(2026, 11, 12), 170000)
+        removal = preview_removal(self.loan, correction)
+        self.assertEqual(removal["payment_cents"], euros(944.22))
+        self.assertEqual(removal["first_installment"], {"number": 25, "date": date(2026, 12, 2)})
+
+        remove_correction(self.loan, correction, date(2026, 11, 12))
+
+        self.assertFalse(Transaction.objects.filter(loan=self.loan, loan_installment__isnull=True).exists())
+        self.assertEqual(schedule(self.loan)[24].payment_cents, euros(944.22))
+
+    def test_a_correction_survives_an_edit(self):
+        self.correct(date(2026, 11, 12), 170000)
+
+        edit_loan(self.loan, date(2026, 11, 12), annual_rate=Decimal("2.90"))
+        self.loan.refresh_from_db()
+
+        adjustment = self.correction_adjustment()
+        self.assertEqual((adjustment.date, adjustment.adjustment_value_cents), (date(2026, 11, 12), euros(-170000)))
+        self.assertEqual(self.balance(self.mortgage), euros(-170000))
+        payment = schedule(self.loan)[24].payment_cents
+        self.assertNotIn(payment, (euros(849.91), euros(944.22)))
+
+    def test_dates_that_are_refused(self):
+        self.correct(date(2026, 11, 12), 170000)
+        for on, today in (
+            (date(2026, 11, 13), date(2026, 11, 12)),
+            (date(2026, 10, 19), date(2026, 11, 12)),
+            (date(2026, 11, 12), date(2026, 11, 12)),
+        ):
+            with self.subTest(on=on), self.assertRaises(LoanError):
+                self.correct(on, 160000, today=today)
+        self.assertEqual(self.loan.corrections.count(), 1)
+
+    def test_a_negative_amount_is_refused(self):
+        with self.assertRaises(LoanError):
+            self.correct(date(2026, 11, 12), -1)
+
+    def test_a_payment_that_never_repays(self):
+        # 170,000.00 at 3.00% has 419.27 interest in its first month.
+        with self.assertRaisesMessage(LoanError, "at least €419.28"):
+            self.correct(date(2026, 11, 12), 170000, payment=400)
+        self.assertFalse(self.loan.corrections.exists())
+
+    def test_removing_the_setup_keeps_the_corrected_balance(self):
+        self.correct(date(2026, 11, 12), 170000)
+
+        remove_loan(self.loan)
+
+        adjustment = Transaction.objects.get(account=self.mortgage, date=date(2026, 11, 12))
+        self.assertEqual((adjustment.loan_id, adjustment.loan_correction_id), (None, None))
+        self.assertEqual(self.balance(self.mortgage), euros(-170000))
+
+    def test_a_late_payment_for_a_covered_installment(self):
+        self.correct(date(2026, 11, 3), 170000)
+        self.pay(date(2026, 11, 4), -944.22)
+
+        sync_loan(self.loan, date(2026, 11, 12))
+
+        posted = self.posted(self.loan)
+        self.assertEqual(posted[24][0], date(2026, 11, 3))
+        self.assertEqual(self.balance(self.mortgage), euros(-170000))
+
+    def test_an_installment_after_a_correction_paid_on_its_day(self):
+        self.correct(date(2026, 11, 30), 170000)
+        installment = schedule(self.loan)[24]
+        self.pay(date(2026, 11, 30), -installment.payment_cents / 100)
+
+        sync_loan(self.loan, date(2026, 11, 30))
+
+        self.assertEqual(self.posted(self.loan)[25][0], date(2026, 12, 1))
+        self.assertEqual(self.balance(self.mortgage), -installment.balance_after_cents)
+
+    def test_months_of_missed_payments(self):
+        today = date(2027, 4, 12)
+        self.assertEqual(missed_installment(self.loan, today).number, 29)
+
+        self.correct(date(2027, 4, 3), 170000, today=today)
+
+        states = {i.number: state for i, state, _ in installment_states(self.loan, today)}
+        self.assertEqual({states[n] for n in range(24, 30)}, {"covered"})
+        self.assertIsNone(missed_installment(self.loan, today))
+
+
+class SuggestCorrectionTests(LoanTestCase):
+    """The loan-schedules spec's "Suggest a correction when payments are
+    missed"."""
+
+    def setUp(self):
+        super().setUp()
+        # Installments of 944.22 on 2 November 2026, 2 December, 2 January...
+        self.loan = self.set_up(first=date(2024, 12, 2))
+
+    def test_the_bank_changed_the_payment(self):
+        for on in (date(2026, 11, 2), date(2026, 12, 3), date(2027, 1, 2)):
+            self.pay(on, -849.91)
+        self.pay(date(2026, 12, 1), -50)
+        self.assertEqual(
+            suggest_correction(self.loan, date(2027, 2, 12)), {"missed_count": 4, "amount_cents": euros(849.91)}
+        )
+
+    def test_no_other_amount_found(self):
+        self.pay(date(2026, 12, 1), -50)
+        self.assertEqual(
+            suggest_correction(self.loan, date(2026, 12, 12)), {"missed_count": 2, "amount_cents": None}
+        )
+
+    def test_one_miss_isnt_a_pattern(self):
+        self.assertIsNone(suggest_correction(self.loan, date(2026, 11, 12)))
+
+    def test_a_posted_installment_ends_the_run(self):
+        self.pay(date(2027, 1, 2), -944.22)
+        sync_loan(self.loan, date(2027, 1, 12))
+        self.assertIsNone(suggest_correction(self.loan, date(2027, 1, 12)))
+
+
+class SetUpWithBankBalanceTests(LoanTestCase):
+    """The loan-schedules spec's "Set up with the bank's balance" and
+    "Setting up with the bank's balance"."""
+
+    terms = {
+        "principal_cents": euros(160000),
+        "annual_rate": Decimal("2.78"),
+        "term_months": 300,
+        "first_payment_date": date(2014, 12, 28),
+    }
+
+    def test_set_up_with_the_banks_balance(self):
+        loan = set_up_loan(
+            self.mortgage, date(2026, 10, 29), bank_balance_cents=euros(104870.35), paid_from=self.crelan, **self.terms
+        )
+
+        adjustments = Transaction.objects.filter(account=self.mortgage, date=date(2026, 10, 29))
+        self.assertEqual([a.adjustment_value_cents for a in adjustments], [euros(-104870.35)])
+        self.assertEqual(self.balance(self.mortgage), euros(-104870.35))
+
+        remove_correction(loan, loan.corrections.get(), date(2026, 10, 29))
+
+        lineup = Transaction.objects.get(account=self.mortgage, date=date(2026, 10, 29))
+        self.assertEqual(lineup.loan_installment, 0)
+        self.assertNotEqual(lineup.adjustment_value_cents, euros(-104870.35))
+
+    def test_the_preview_checks_the_corrected_payment(self):
+        today = date(2026, 10, 29)
+        corrected = compute_schedule(
+            *self.terms.values(), [type("C", (), {"date": today, "balance_cents": euros(104870.35),
+                                                  "payment_cents": None, "pk": 1})()]
+        )
+        payment = next(i for i in corrected if i.date > today).payment_cents
+        self.pay(date(2026, 9, 28), -payment / 100)
+
+        result = preview(
+            self.mortgage, today, bank_balance_cents=euros(104870.35), paid_from=self.crelan, **self.terms
+        )
+
+        self.assertEqual(result["payment_cents"], payment)
+        self.assertNotEqual(result["schedule_payment_cents"], payment)
+        self.assertEqual([p["date"] for p in result["found_payments"]], [date(2026, 9, 28)])

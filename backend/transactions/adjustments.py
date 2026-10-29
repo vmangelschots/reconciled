@@ -10,7 +10,7 @@ writes in bulk (imports) calls recompute_adjustments itself.
 """
 
 from django.db import transaction as db_transaction
-from django.db.models import Sum
+from django.db.models import F, Sum
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
@@ -29,8 +29,12 @@ def recompute_adjustments(account_id):
     """Set every adjustment's amount in the account so the balance at the
     end of its date is its value. Writes with update() so it triggers no
     signals of its own."""
+    # A loan's balance correction is the last adjustment on its date: it
+    # is what the bank says is owed at the end of that day.
     adjustments = list(
-        Transaction.objects.filter(account_id=account_id, is_adjustment=True).order_by("date", "id")
+        Transaction.objects.filter(account_id=account_id, is_adjustment=True).order_by(
+            "date", F("loan_correction").asc(nulls_first=True), "id"
+        )
     )
     if not adjustments:
         return

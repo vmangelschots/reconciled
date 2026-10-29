@@ -25,13 +25,13 @@
 
 ## 2. Posting, covering and reposting
 
-- [ ] 2.1 Make correction adjustments last on their date in
+- [x] 2.1 Make correction adjustments last on their date in
   `recompute_adjustments`, and clamp `_posting_date` per stretch. Verify
   with tests for "A late payment for a covered installment" (balance
   stays -170,000.00), and an installment after a correction paid on the
   correction's date (posted the next day). Also verify that the existing
   `tests_adjustments.py` pass unchanged.
-- [ ] 2.2 Extract `_repost(loan, today)` from `edit_loan` (line-up unless
+- [x] 2.2 Extract `_repost(loan, today)` from `edit_loan` (line-up unless
   replaced, corrections, hand links, sync) and a `repost_effect` helper.
   Add `add_correction`, `remove_correction` and `preview_correction`, and
   have `remove_loan` clear `loan_correction`. Verify with tests for:
@@ -45,14 +45,14 @@
   - removing the setup keeping the correction's adjustment as an
     ordinary one
   - the existing edit and remove tests passing
-- [ ] 2.3 Add a `COVERED` state to `installment_states`, skip covered
+- [x] 2.3 Add a `COVERED` state to `installment_states`, skip covered
   installments in `missed_installment`, and add
   `suggest_correction(loan, today)`. Verify with tests for:
   - "Months of missed payments"
   - "Covered by a correction" in `reports/tests_overview.py`
   - the banner amount: 693.03 found around 3 misses; none found; a single
     miss gives no suggestion
-- [ ] 2.4 Setup with the bank's balance: `set_up_loan` takes an optional
+- [x] 2.4 Setup with the bank's balance: `set_up_loan` takes an optional
   bank balance and creates a correction on the setup day, and
   `_post_lineup` skips the line-up when one exists. The setup preview
   checks the corrected payment. Verify with tests for "Set up with the
