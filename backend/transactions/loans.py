@@ -32,10 +32,18 @@ class Installment:
     interest_cents: int
     principal_cents: int
     balance_after_cents: int
+    # The balance correction this installment's stretch runs from, if any.
+    correction_id: int | None = None
 
 
 def _cents(value):
     return int(value.quantize(Decimal(1), rounding=ROUND_HALF_UP))
+
+
+def _annuity(balance_cents, rate, installments):
+    if rate == 0:
+        return _cents(Decimal(balance_cents) / installments)
+    return _cents(balance_cents * rate / (1 - (1 + rate) ** -installments))
 
 
 def monthly_rate(annual_rate):
@@ -50,35 +58,65 @@ def installment_date(first_payment_date, number):
     return first_payment_date + relativedelta(months=number - 1)
 
 
-def compute_schedule(principal_cents, annual_rate, term_months, first_payment_date):
+def compute_schedule(principal_cents, annual_rate, term_months, first_payment_date, corrections=()):
     """Every installment of an annuity loan, rounded to the cent half up;
-    the last one repays what rounding left."""
+    the last one repays what rounding left.
+
+    A correction (anything with date, balance_cents, payment_cents and pk)
+    restarts the schedule at the first installment dated after it: from
+    its balance, with its payment or the annuity over the installments
+    left. One of 0.00 ends the loan there, and a payment generous enough
+    to repay early ends it at the installment that reaches 0.00."""
     rate = monthly_rate(annual_rate)
-    if rate == 0:
-        payment = _cents(Decimal(principal_cents) / term_months)
-    else:
-        payment = _cents(principal_cents * rate / (1 - (1 + rate) ** -term_months))
+    payment = _annuity(principal_cents, rate, term_months)
     balance = principal_cents
+    pending = sorted(corrections, key=lambda c: c.date)
+    correction_id = None
     installments = []
     for number in range(1, term_months + 1):
+        on = installment_date(first_payment_date, number)
+        # An installment on a correction's date counts as before it; of
+        # several corrections since the last installment, the latest wins.
+        restart = None
+        while pending and pending[0].date < on:
+            restart = pending.pop(0)
+        if restart is not None:
+            balance = restart.balance_cents
+            correction_id = restart.pk
+            if balance > 0:
+                payment = (
+                    restart.payment_cents
+                    if restart.payment_cents is not None
+                    else _annuity(balance, rate, term_months - number + 1)
+                )
+        if balance <= 0:
+            break
         interest = _cents(balance * rate)
-        principal = balance if number == term_months else payment - interest
+        principal = balance if number == term_months else min(payment - interest, balance)
         balance -= principal
         installments.append(
             Installment(
                 number=number,
-                date=installment_date(first_payment_date, number),
+                date=on,
                 payment_cents=interest + principal,
                 interest_cents=interest,
                 principal_cents=principal,
                 balance_after_cents=balance,
+                correction_id=correction_id,
             )
         )
     return installments
 
 
 def schedule(loan):
-    return compute_schedule(loan.principal_cents, loan.annual_rate, loan.term_months, loan.first_payment_date)
+    return compute_schedule(
+        loan.principal_cents,
+        loan.annual_rate,
+        loan.term_months,
+        loan.first_payment_date,
+        # An unsaved loan (a preview) has no corrections yet.
+        list(loan.corrections.all()) if loan.pk else [],
+    )
 
 
 # How far, in days either way, a payment may be booked from its

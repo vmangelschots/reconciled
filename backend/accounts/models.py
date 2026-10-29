@@ -86,3 +86,26 @@ class Loan(models.Model):
 
     def __str__(self):
         return f"Loan for {self.account}"
+
+
+class LoanCorrection(models.Model):
+    """What the bank says is owed at the end of `date`. The schedule
+    restarts from it at the next installment, with `payment_cents` or the
+    annuity over the installments left; see transactions/loans.py and
+    openspec/specs/loan-schedules."""
+
+    loan = models.ForeignKey(Loan, on_delete=models.CASCADE, related_name="corrections")
+    date = models.DateField()
+    balance_cents = models.BigIntegerField()
+    # The payment the bank takes from the next installment on; null means
+    # the computed annuity.
+    payment_cents = models.BigIntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["date", "id"]
+        constraints = [models.UniqueConstraint(fields=["loan", "date"], name="one_correction_per_date")]
+
+    def __str__(self):
+        return f"{self.loan} corrected on {self.date}"

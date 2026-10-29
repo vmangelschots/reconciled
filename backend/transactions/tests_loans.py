@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
@@ -70,6 +71,71 @@ class ScheduleTests(SimpleTestCase):
     def test_month_ends(self):
         installments = compute_schedule(euros(1000), "6.00", 3, date(2027, 1, 31))
         self.assertEqual([i.date for i in installments], [date(2027, 1, 31), date(2027, 2, 28), date(2027, 3, 31)])
+
+
+@dataclass
+class Correction:
+    date: date
+    balance_cents: int
+    payment_cents: int | None = None
+    pk: int = 1
+
+
+class CorrectionScheduleTests(SimpleTestCase):
+    """The loan-schedules spec's "The schedule restarts from a correction"
+    and "Choose the payment after a correction"."""
+
+    def mortgage(self, *corrections):
+        return compute_schedule(euros(200000), "3.00", 300, date(2024, 12, 2), corrections)
+
+    def test_a_lower_payment_over_the_same_term(self):
+        installments = self.mortgage(Correction(date(2026, 11, 12), euros(170000)))
+        self.assertEqual(len(installments), 300)
+        self.assertEqual({i.payment_cents for i in installments[:24]}, {euros(944.22)})
+        self.assertEqual({i.payment_cents for i in installments[24:-1]}, {euros(849.91)})
+        self.assertEqual((installments[24].number, installments[24].date), (25, date(2026, 12, 2)))
+        self.assertEqual((installments[-1].date, installments[-1].payment_cents), (date(2049, 11, 2), euros(848.39)))
+        self.assertEqual(installments[-1].balance_after_cents, 0)
+        self.assertEqual([i.correction_id for i in installments[23:25]], [None, 1])
+
+    def test_paid_off_early(self):
+        installments = self.mortgage(Correction(date(2026, 11, 12), 0))
+        self.assertEqual(len(installments), 24)
+        self.assertEqual(installments[-1].date, date(2026, 11, 2))
+
+    def test_two_corrections(self):
+        first = Correction(date(2026, 11, 12), euros(170000), pk=1)
+        second = Correction(date(2028, 3, 3), euros(150000), pk=2)
+        installments = self.mortgage(second, first)
+        rate = Decimal("1.03") ** (Decimal(1) / 12) - 1
+        # Installment 40 falls on 2 March 2028, before the second correction.
+        self.assertEqual(installments[39].correction_id, 1)
+        self.assertEqual(installments[40].correction_id, 2)
+        self.assertEqual(installments[40].interest_cents, round(euros(150000) * rate))
+        self.assertEqual(installments[-1].balance_after_cents, 0)
+
+    def test_the_bank_rounds_differently(self):
+        installments = self.mortgage(Correction(date(2026, 11, 12), euros(170000), payment_cents=euros(849.90)))
+        self.assertEqual({i.payment_cents for i in installments[24:-1]}, {euros(849.90)})
+        self.assertEqual(len(installments), 300)
+        self.assertEqual(installments[-1].balance_after_cents, 0)
+
+    def test_a_generous_payment_ends_the_loan_early(self):
+        installments = compute_schedule(
+            euros(1000), "6.00", 3, date(2027, 1, 31), [Correction(date(2027, 2, 15), euros(668.29), euros(700))]
+        )
+        self.assertEqual(
+            [(i.payment_cents, i.balance_after_cents) for i in installments],
+            [(euros(336.58), euros(668.29)), (euros(671.54), 0)],
+        )
+
+    def test_an_installment_on_the_correction_date_counts_before_it(self):
+        installments = compute_schedule(
+            euros(1000), "6.00", 3, date(2027, 1, 31), [Correction(date(2027, 2, 28), euros(500))]
+        )
+        self.assertEqual(installments[1].balance_after_cents, euros(334.96))
+        self.assertEqual(installments[1].correction_id, None)
+        self.assertEqual((installments[2].correction_id, installments[2].principal_cents), (1, euros(500)))
 
 
 class LoanTestCase(TestCase):

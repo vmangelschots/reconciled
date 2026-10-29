@@ -2,7 +2,7 @@
 
 ## 1. Corrections in the model and the schedule
 
-- [ ] 1.1 Add `accounts.LoanCorrection` (loan, date, balance_cents,
+- [x] 1.1 Add `accounts.LoanCorrection` (loan, date, balance_cents,
   nullable payment_cents, timestamps, unique `(loan, date)`) and
   `Transaction.loan_correction` (nullable FK, SET_NULL), with their
   migrations. Add `"accounts.LoanCorrection"` to `BACKED_UP_MODELS`.
@@ -10,7 +10,7 @@
   - `python manage.py makemigrations --check` is clean
   - the backup tests pass, including "every model is listed"
   - a new round-trip test covers "A correction survives"
-- [ ] 1.2 Teach `compute_schedule` and `schedule(loan)` the corrections,
+- [x] 1.2 Teach `compute_schedule` and `schedule(loan)` the corrections,
   and add `Installment.correction_id`, as in design.md. Verify with tests
   in `transactions/tests_loans.py` for:
   - "A lower payment over the same term" (849.91 from installment 25,
