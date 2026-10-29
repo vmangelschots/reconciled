@@ -93,6 +93,16 @@ class RecognizeExportTests(BankExportTestCase):
         session = self.upload(CRELAN_EXPORT)
         self.assertEqual(self.map(session["id"]).status_code, 400)
 
+    @override_settings(OPENAI_API_KEY="")
+    def test_a_reimported_crelan_line_with_a_counterparty(self):
+        first = self.upload(CRELAN_EXPORT)
+        self.commit(first["id"], [c["index"] for c in first["candidates"]])
+
+        ethias, fees = self.upload(CRELAN_EXPORT)["candidates"]
+
+        self.assertTrue(ethias["is_duplicate"])
+        self.assertTrue(fees["is_duplicate"])
+
 
 class RevolutProductTests(BankExportTestCase):
     def test_several_products_ask_before_the_preview(self):
