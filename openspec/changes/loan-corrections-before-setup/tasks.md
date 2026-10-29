@@ -20,7 +20,7 @@
 
 ## 2. Frontend
 
-- [ ] 2.1 On `LoanSchedulePage`, add a date beside the setup form's "Owed
+- [x] 2.1 On `LoanSchedulePage`, add a date beside the setup form's "Owed
   per the bank" (default today, earliest one month back), and set the
   correction form's earliest date to one month before the setup day.
   Verify with page tests that the date is sent to the preview and to
@@ -28,7 +28,7 @@
 
 ## 3. Checks
 
-- [ ] 3.1 Run `npm test`, `npm run lint` and `npm run build` in
+- [x] 3.1 Run `npm test`, `npm run lint` and `npm run build` in
   `frontend/`, and `python manage.py test` in `backend/`, and verify all
   pass.
 
