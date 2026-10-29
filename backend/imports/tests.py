@@ -467,6 +467,33 @@ class DuplicateDetectionTests(TestCase):
         self.assertTrue(first["is_duplicate"])
         self.assertFalse(second["is_duplicate"])
 
+    def test_a_reimported_csv_line_with_a_mapped_payee(self):
+        Transaction.objects.create(
+            account=self.account, date="2026-02-02", amount_cents=-4250, payee="Delhaize", notes="Weekly shop"
+        )
+        upload = self.client.post(
+            reverse("importsession-list"),
+            {
+                "account": self.account.id,
+                "file": csv_file("Posted Date,Amount,Payee,Description\n2026-02-02,-42.50,Delhaize,Weekly shop\n"),
+            },
+            format="multipart",
+        )
+        response = self.client.post(
+            reverse("importsession-map", args=[upload.json()["id"]]),
+            {
+                "date": "Posted Date",
+                "date_format": "YYYY-MM-DD",
+                "amount": "Amount",
+                "payee": "Payee",
+                "description": "Description",
+            },
+            format="json",
+        )
+
+        [candidate] = response.json()["candidates"]
+        self.assertTrue(candidate["is_duplicate"])
+
     def test_both_identical_payments_reimported(self):
         for _ in range(2):
             Transaction.objects.create(account=self.account, date="2026-10-11", amount_cents=-780, payee="LAGO Mons")

@@ -184,7 +184,9 @@ def _is_similar(a, b, threshold=DUPLICATE_SIMILARITY_THRESHOLD):
 def flag_duplicates(account, candidates):
     """Attach is_duplicate + index to each candidate, comparing against
     existing transactions on the same account by exact date + exact
-    amount + a fuzzy-matched description/payee. Each existing transaction
+    amount + a fuzzy-matched payee. Payee against payee: a line's
+    description is often a bank's generic type ("Kaartbetaling"), which
+    would match unrelated lines of the same amount. Each existing transaction
     is claimed by the first matching candidate in file order, so two
     identical payments on one day aren't both hidden by a single earlier
     one.
@@ -205,7 +207,7 @@ def flag_duplicates(account, candidates):
             (
                 existing
                 for existing in by_date_amount.get(key, [])
-                if existing.pk not in claimed and _is_similar(candidate["description"], existing.payee)
+                if existing.pk not in claimed and _is_similar(candidate["payee"], existing.payee)
             ),
             None,
         )

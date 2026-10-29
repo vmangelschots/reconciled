@@ -96,7 +96,7 @@ written to the ledger.
 ### Requirement: Detect likely duplicate transactions
 The system SHALL mark a candidate transaction as a likely duplicate when
 an existing transaction on the candidate's account has the same date,
-the same amount, and a matching or highly similar description. Each
+the same amount, and a matching or highly similar payee. Each
 existing transaction SHALL mark at most one candidate of an import, the
 first matching one in file order. Parts of a split transaction SHALL NOT
 be compared; the split transaction itself SHALL be. An import SHALL
@@ -107,6 +107,18 @@ never change a split transaction or its parts.
   already imported into the target account
 - **THEN** the system marks the matching candidate as a likely duplicate
   and excludes it from the default commit selection
+
+#### Scenario: A re-imported Crelan line with a counterparty
+- **WHEN** a Crelan line of 1 October 2026, -21.85, with Tegenpartij
+  "Ethias" and Mededeling "Verzekeringstaks" was imported, and an export
+  containing the same line is imported again
+- **THEN** that line is marked as a likely duplicate
+
+#### Scenario: A re-imported CSV line with a mapped payee
+- **WHEN** a CSV line of -42.50 with payee "Delhaize" and description
+  "Weekly shop" was imported with a payee column mapped, and the same
+  file is imported again with the same mapping
+- **THEN** that line is marked as a likely duplicate
 
 #### Scenario: User can override a duplicate flag
 - **WHEN** the user explicitly re-includes a candidate marked as a likely
