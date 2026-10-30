@@ -2,10 +2,10 @@
 
 ## 1. Forecast corrections
 
-- [ ] 1.1 In `forecasting/utils.py`, expand occurrences from tomorrow and
+- [x] 1.1 In `forecasting/utils.py`, expand occurrences from tomorrow and
   update the tests in `forecasting/tests.py` that assume today counts.
   Verify with a test for "An occurrence due today is left out".
-- [ ] 1.2 Add loan installments to the paying account's forecast, skipping
+- [x] 1.2 Add loan installments to the paying account's forecast, skipping
   those covered by a recurring transaction. Verify with tests for
   "Installment on the paying account" and "A recurring transaction already
   covers it", plus one matching on `payment_category`.
