@@ -299,6 +299,28 @@ class OverviewTests(TestCase):
         self.assertEqual(self.get(month="2026-13").status_code, 400)
         self.assertEqual(self.client.get(reverse("report-overview")).status_code, 400)
 
+    # --- net worth change ---
+
+    def test_net_worth_change_this_month(self):
+        self.txn(500000, 1, month=9)
+        self.txn(124000, 3)
+        self.assertEqual(self.body()["net_worth_change_cents"], 124000)
+
+    def test_net_worth_change_in_a_past_month(self):
+        self.txn(500000, 1, month=8)
+        self.txn(-30000, 3, month=9)
+        self.txn(90000, 3)
+        self.assertEqual(self.body(month="2026-09")["net_worth_change_cents"], -30000)
+
+    def test_net_worth_change_counts_a_transfer_as_nothing(self):
+        self.txn(500000, 1, month=9)
+        link_transfer(self.txn(-1000, 3), self.savings)
+        self.assertEqual(self.body()["net_worth_change_cents"], 0)
+
+    def test_no_net_worth_change_without_an_earlier_month_end(self):
+        self.txn(500000, 1)
+        self.assertIsNone(self.body()["net_worth_change_cents"])
+
 
 @patch("reports.views._today", lambda: TODAY)
 class YearlyOverviewTests(TestCase):
