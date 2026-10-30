@@ -9,3 +9,12 @@ export function getCashFlow(end) {
 export function getCategorySpending(month) {
   return apiFetch(`/api/reports/category-spending/?month=${encodeURIComponent(month)}`);
 }
+
+// month: "YYYY-MM"
+export function getEverydayBalance(month) {
+  return apiFetch(`/api/reports/everyday-balance/?month=${encodeURIComponent(month)}`);
+}
+
+export function getNetWorth() {
+  return apiFetch("/api/reports/net-worth/");
+}

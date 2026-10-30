@@ -73,8 +73,8 @@ series share today's point so they join. The tooltip chrome is extracted
 from `InOutTooltip`. The Everyday chart forces zero into its domain,
 whereas net worth uses `auto` with padding so one property step doesn't
 flatten the line. The Everyday domain also spans the projection. Below
-zero the projection is drawn in `--critical` by splitting the series at
-zero. New token: `--chart-area`,
+zero the projection is drawn in `--critical`, through a gradient on the
+line with a hard stop at zero. New token: `--chart-area`,
 `color-mix(in srgb, var(--chart-series-1) 8%, transparent)`, 12% in dark.
 Tooltips show whole euros, so the shared chrome takes a formatter;
 copying `InOutTooltip` as it stands would bring cents.
@@ -82,8 +82,8 @@ copying `InOutTooltip` as it stands would bring cents.
 **Text on the charts.** Today gets a `chart-end-dot` and a
 `chart-end-label` anchored `textAnchor="end"`. "To 30 Sep", the stale note
 and the Forecast link use the caption style above the chart, with the
-stale note in `text-warning`. A stale check reuses the Overview's
-`staleImportItem` wording, so it moves to a shared helper.
+stale note in `text-warning`. The Overview's stale-import wording moves
+to `lib/importFreshness.js`, so both say the same.
 
 **Net worth sizing in the side column.** The chart is 195-312px wide
 there: height 200, Y width 44, at most 4 X ticks, an end dot and label.

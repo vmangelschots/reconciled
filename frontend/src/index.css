@@ -48,6 +48,7 @@
   --chart-cat-5: #c4623d;
   --chart-cat-6: #b5577f;
   --chart-other: var(--chart-series-2);
+  --chart-area: color-mix(in srgb, var(--chart-series-1) 8%, transparent);
 }
 
 .dark {
@@ -77,6 +78,7 @@
   --chart-cat-5: #e07f58;
   --chart-cat-6: #d47aa0;
   --chart-other: var(--chart-series-2);
+  --chart-area: color-mix(in srgb, var(--chart-series-1) 12%, transparent);
 }
 
 @theme {
@@ -147,6 +149,15 @@
   fill: var(--ink-primary);
   font-size: 12px;
   font-weight: 600;
+}
+
+.chart-low-label {
+  fill: var(--ink-secondary);
+  font-size: 11px;
+}
+
+.chart-low-label-critical {
+  fill: var(--critical);
 }
 
 .chart-crosshair {

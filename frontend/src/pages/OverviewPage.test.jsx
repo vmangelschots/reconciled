@@ -14,7 +14,12 @@ import { formatDayMonth } from "../lib/yearlyBudgets";
 
 vi.mock("../api/accounts", () => ({ listAccounts: vi.fn() }));
 vi.mock("../api/overview", () => ({ getOverview: vi.fn() }));
-vi.mock("../api/reports", () => ({ getCashFlow: vi.fn(), getCategorySpending: vi.fn() }));
+vi.mock("../api/reports", () => ({
+  getCashFlow: vi.fn(),
+  getCategorySpending: vi.fn(),
+  getEverydayBalance: vi.fn(),
+  getNetWorth: vi.fn(),
+}));
 vi.mock("../api/tabs", () => ({ listTabs: vi.fn() }));
 
 const JOINT = { id: 1, name: "Joint", current_balance_cents: 348217, archived: false };
@@ -98,6 +103,15 @@ beforeEach(() => {
   accountsApi.listAccounts.mockResolvedValue([JOINT]);
   overviewApi.getOverview.mockResolvedValue(overview());
   reportsApi.getCashFlow.mockResolvedValue(CASH_FLOW);
+  reportsApi.getEverydayBalance.mockResolvedValue({
+    tier: "everyday",
+    current: false,
+    end: "2026-09-30",
+    points: [],
+    projection: null,
+    lowest: null,
+  });
+  reportsApi.getNetWorth.mockResolvedValue({ months: [] });
   reportsApi.getCategorySpending.mockImplementation((month) => Promise.resolve(spending(month)));
   tabsApi.listTabs.mockResolvedValue([]);
 });
@@ -170,7 +184,7 @@ describe("Accounts tile", () => {
 describe("Balance tile", () => {
   it("shows the balance and this month's change", async () => {
     renderPage();
-    const tile = await screen.findByRole("region", { name: "Balance" });
+    const tile = await screen.findByRole("region", { name: "Balance summary" });
 
     await waitFor(() => expect(tile).toHaveTextContent(eur(348200)));
     expect(within(tile).getByText(/this month/)).toHaveTextContent(`+${eur(121000)} this month`);
@@ -186,7 +200,7 @@ describe("Balance tile", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Previous month" }));
 
-    const tile = panel("Balance");
+    const tile = panel("Balance summary");
     expect(await within(tile).findByText(/in September/)).toHaveTextContent(`+${eur(30000)} in September`);
     expect(within(tile).getByText("· Today")).toBeInTheDocument();
   });
@@ -211,7 +225,7 @@ describe("Everyday money and net worth", () => {
       ]),
     );
     renderPage();
-    const tile = await screen.findByRole("region", { name: "Balance" });
+    const tile = await screen.findByRole("region", { name: "Balance summary" });
 
     await waitFor(() => expect(within(tile).getByText("Everyday")).toBeInTheDocument());
     expect(within(tile).getByText(eur(120000))).toHaveClass("text-2xl");
@@ -232,7 +246,7 @@ describe("Everyday money and net worth", () => {
       ]),
     );
     renderPage();
-    const tile = await screen.findByRole("region", { name: "Balance" });
+    const tile = await screen.findByRole("region", { name: "Balance summary" });
 
     const loans = await within(tile).findByText("Loans");
     expect(loans.nextElementSibling).toHaveTextContent(eur(-18734000));
@@ -246,7 +260,7 @@ describe("Everyday money and net worth", () => {
   it("stays a plain balance with only everyday accounts", async () => {
     overviewApi.getOverview.mockResolvedValue(tiered([{ tier: "everyday", balance_cents: 348200 }]));
     renderPage();
-    const tile = await screen.findByRole("region", { name: "Balance" });
+    const tile = await screen.findByRole("region", { name: "Balance summary" });
 
     await waitFor(() => expect(tile).toHaveTextContent(eur(348200)));
     expect(within(tile).getByText("Balance")).toBeInTheDocument();
@@ -713,5 +727,76 @@ describe("Charts and tabs", () => {
 
     await screen.findByText("Groceries 2026-10");
     expect(within(panel("In vs out")).getByTestId("panel-loading")).toBeInTheDocument();
+  });
+});
+
+describe("OverviewPage balance history", () => {
+  const TIERS = [
+    { tier: "everyday", balance_cents: 120000 },
+    { tier: "savings", balance_cents: 228200 },
+  ];
+
+  function matchWide(wide) {
+    window.matchMedia = (query) => ({
+      matches: wide && query.includes("1024"),
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    });
+  }
+
+  afterEach(() => {
+    delete window.matchMedia;
+  });
+
+  it("shows the net worth change under the figure", async () => {
+    overviewApi.getOverview.mockResolvedValue(
+      overview({ tiers: TIERS, everyday_cents: 120000, net_worth_change_cents: 124000 }),
+    );
+    renderPage();
+    expect(await screen.findByText("+€1,240 this month")).toHaveClass("text-positive");
+  });
+
+  it("names a past month and doesn't alarm on a fall", async () => {
+    overviewApi.getOverview.mockResolvedValue(
+      overview({ tiers: TIERS, everyday_cents: 120000, net_worth_change_cents: -30000 }),
+    );
+    renderPage();
+    await userEvent.click(await screen.findByRole("button", { name: "Previous month" }));
+    const change = await screen.findByText(/^-€300 in /);
+    expect(change).toHaveClass("text-ink-secondary");
+  });
+
+  it("shows no change without an earlier month end", async () => {
+    overviewApi.getOverview.mockResolvedValue(
+      overview({ tiers: TIERS, everyday_cents: 120000, net_worth_change_cents: null }),
+    );
+    renderPage();
+    await screen.findByText("Net worth");
+    expect(screen.queryByText(/this month$/, { selector: ".num" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the other panels when the net worth chart fails", async () => {
+    reportsApi.getNetWorth.mockRejectedValue(new Error("boom"));
+    renderPage();
+    expect(await screen.findByText("Couldn't load net worth.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Balance" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Spending by category" })).toBeInTheDocument();
+  });
+
+  it("puts net worth after attention on a wide screen with no tabs", async () => {
+    matchWide(true);
+    renderPage();
+    const attention = await screen.findByRole("heading", { name: "Needs attention" });
+    const worth = await screen.findByRole("heading", { name: "Net worth" });
+    expect(attention.closest("section").parentElement).toBe(worth.closest("section").parentElement);
+  });
+
+  it("puts net worth after recent transactions on a phone", async () => {
+    matchWide(false);
+    renderPage();
+    const recent = await screen.findByRole("heading", { name: "Recent transactions" });
+    const worth = await screen.findByRole("heading", { name: "Net worth" });
+    expect(recent.compareDocumentPosition(worth) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(recent.closest("section").parentElement).toBe(worth.closest("section").parentElement);
   });
 });
