@@ -13,12 +13,11 @@ import {
 import { Fragment, useState } from "react";
 import { Link } from "react-router-dom";
 import { getOverview } from "../api/overview";
-import { getCashFlow, getCategorySpending, getEverydayBalance, getNetWorth } from "../api/reports";
+import { getCategorySpending, getEverydayBalance, getNetWorth } from "../api/reports";
 import { listTabs } from "../api/tabs";
 import { CategorySpendingChart } from "../components/CategorySpendingChart";
 import { CategorySpendingPie } from "../components/CategorySpendingPie";
 import { EverydayMoneyChart } from "../components/EverydayMoneyChart";
-import { InOutChart } from "../components/InOutChart";
 import { NetWorthPanel } from "../components/NetWorthChart";
 import { OpenTabsCard } from "../components/OpenTabsCard";
 import { Amount } from "../components/ui/Amount";
@@ -389,12 +388,10 @@ export function OverviewPage() {
   const { accounts, loaded } = useAccounts();
   const [categoryTable, setCategoryTable] = useState(false);
   const [categoryView, setCategoryView] = useState(getStoredCategoryChart);
-  const [inOutTable, setInOutTable] = useState(false);
   const [everydayTable, setEverydayTable] = useState(false);
 
   const overview = useReport(() => getOverview(month), loaded && accounts.length > 0 ? month : null);
   const spending = useReport(() => getCategorySpending(month), month);
-  const cashFlow = useReport(() => getCashFlow(month), month);
   const everyday = useReport(() => getEverydayBalance(month), month);
   const netWorth = useReport(getNetWorth, "net-worth");
   const tabs = useReport(listTabs, "tabs");
@@ -555,18 +552,6 @@ export function OverviewPage() {
           {!isLarge && netWorthPanel}
         </div>
       </div>
-
-      <Panel
-        title="In vs out"
-        loading={cashFlow.loading && !cashFlow.data}
-        error={cashFlow.error ? loadError("money in vs out") : null}
-        actions={cashFlow.data && <TableToggle shown={inOutTable} onToggle={() => setInOutTable((v) => !v)} />}
-      >
-        <p className="-mt-2 mb-3 text-xs text-ink-muted">
-          12 months to {monthLabel(month)} · All active accounts · Excludes transfers and tabs
-        </p>
-        {cashFlow.data && <InOutChart months={cashFlow.data.months} showTable={inOutTable} />}
-      </Panel>
     </section>
   );
 }

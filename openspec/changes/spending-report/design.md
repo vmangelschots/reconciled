@@ -41,15 +41,22 @@ Its figures move into this response.
 
 **Drill-down shares the filter.**
 `GET /api/reports/spending/transactions/?month=YYYY-MM&category=<id>`, with
-`category=uncategorized` or `direct=1`, is built on the same queryset, so
-parents include subcategories and Uncategorized counts outflows only.
+`category=uncategorized`, `direct=1` or `income=1`, is built on the same
+queryset, so parents include subcategories and uncategorized rows go by
+direction. `income=1` turns the figure's sign and the order round.
 Rejected: extending the ledger API, which would mix report rules into
 what must stay the bank's lines.
 
-**Income is defined so the columns add up.** Income = Net + total
-spending. It differs from Money in by refunds, so it's labelled "Income
-after refunds" in the table. Rejected: Money in as Income, which would
-make Income - Spending differ from Net by every refund.
+**Income is told apart by the period's total.** Categories have no income
+flag, so a top-level category with a net inflow over the period is income;
+the rest is spending. Rows then add up: Total income (income categories plus
+uncategorized inflows) minus Total expenses is Net. It differs from Money in
+by refunds, which reduce their expense category. A category whose refunds
+beat its spending moves to Income for that period, and its section can
+change with the period. Rejected: an income flag, which needs a migration
+and setup; it can follow if a category is misjudged. Rejected: Money in as
+income, which would make income minus expenses differ from Net by every
+refund.
 
 **Colours go by rank over the period, in a new order.** Ranks 1-6 use
 `--chart-cat-1, 3, 4, 5, 2, 6`, because adjacent orange and rose in the
@@ -64,8 +71,8 @@ idea of counting it as zero, which would have left the two disagreeing.
 
 **Table is one component with two column orders.** `SpendingTable` takes
 the months and reverses them below 1024px, with Total and Avg first.
-It has a sticky first column and header, and a `tfoot` for Total plus the
-summary rows. Heat tinting is left out because it competes with the
+It has a sticky first column and header, section rows and totals in the
+body, and a `tfoot` for Net and Savings rate. Heat tinting is left out because it competes with the
 swatches.
 
 **Compact table styling.** Default `Table` sizing needs about 1130px for

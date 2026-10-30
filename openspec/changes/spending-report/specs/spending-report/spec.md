@@ -2,8 +2,9 @@
 
 ## Purpose
 
-Shows where the household's money went over a period: spending per month
-per category, income and savings, and the transactions behind each figure.
+A profit and loss report: what came in and what went out per month per
+category over a period, what was left, and the transactions behind each
+figure.
 
 ## ADDED Requirements
 
@@ -60,12 +61,35 @@ subcategories. "Uncategorized" SHALL count outflows only. A category with
 no non-zero month in the period SHALL be left out.
 
 #### Scenario: Refund bigger than spending
-- **WHEN** "Home" has -20.00 and a refund of +55.00 in March
-- **THEN** "Home" reports -35.00 for March
+- **WHEN** "Home" has -20.00 and a refund of +55.00 in March, and -100.00
+  in April
+- **THEN** "Home" reports -35.00 for March and 100.00 for April
+
+### Requirement: Income categories
+A top-level category whose total over the period is a net inflow SHALL
+count as income, with its subcategories, and SHALL NOT count as spending.
+Its figures SHALL show money in as positive. Which section a category is in
+SHALL depend only on the period's total.
+
+#### Scenario: Salary
+- **WHEN** "Income" has +3,200.00 each month
+- **THEN** it is listed as income with 3,200.00 a month, and not as spending
+
+#### Scenario: Refunds beat spending over the period
+- **WHEN** "Home" has -1,000.00 and refunds of +1,200.00 over the period
+- **THEN** it is listed as income with a total of 200.00
+
+### Requirement: Uncategorized money in
+Uncategorized inflows SHALL be listed under income as "Uncategorized
+income". Uncategorized outflows stay under spending as "Uncategorized".
+
+#### Scenario: Both directions
+- **WHEN** March has an uncategorized +500.00 and an uncategorized -40.00
+- **THEN** "Uncategorized income" reports 500.00 and "Uncategorized" 40.00
 
 ### Requirement: Spending chart
-The Reports page SHALL show one stacked bar per month, oldest on the left,
-of the 6 largest categories over the period plus Other and Uncategorized,
+The Reports page SHALL show one stacked bar per month of spending, oldest
+on the left, of the 6 largest spending categories plus Other and Uncategorized,
 each keeping one colour and one place in the stack in every month. A
 category's negative month SHALL show below zero.
 
@@ -94,17 +118,23 @@ categories, using the row's parent or Other when it has no segment.
 - **WHEN** the user hovers the "Supermarket" row under "Groceries"
 - **THEN** the chart dims everything except "Groceries"
 
-### Requirement: Spending table
-The Reports page SHALL show the same figures in a table: a row per
-category, largest total first and Uncategorized last, a column per month,
-then Total and Avg, and a Total row. Amounts SHALL be whole euros. A zero
-SHALL show as a muted dash and a negative as a minus amount in the normal
-text colour.
+### Requirement: Profit and loss table
+The Reports page SHALL show a table with an Income section, then an
+Expenses section: a row per category, largest total first, uncategorized
+last, a column per month, then Total and Avg, and a Total income or Total
+expenses row closing each. A section without rows SHALL be left out.
+Amounts SHALL be whole euros, a zero a muted dash, and a negative a minus
+amount in the normal text colour.
 
 #### Scenario: Totals add up
 - **WHEN** "Groceries" spent 412.00 in September and 388.00 in October in
   a two-month period
-- **THEN** its Total is €800, and the Total row sums each column
+- **THEN** its Total is €800, and Total expenses sums each column
+
+#### Scenario: Both sections
+- **WHEN** the period has salary and spending
+- **THEN** the table lists Income with Total income, then Expenses with
+  Total expenses, then Net and Savings rate
 
 ### Requirement: Subcategories in the table
 A parent with spending in subcategories SHALL expand into a row for each,
@@ -137,17 +167,17 @@ full months, Avg SHALL show a dash.
 - **WHEN** the period has one full month
 - **THEN** Avg shows a dash
 
-### Requirement: Income, net and savings rate
-Below the table the page SHALL show per month, and in Total and Avg: Net
-(money in minus money out), Income after refunds (Net plus total
-spending), and Savings rate (Net as a share of Income). The rate SHALL
-show a dash when Income isn't positive, and in the Avg column.
+### Requirement: Net and savings rate
+Closing the table the page SHALL show per month, and in Total and Avg: Net
+(Total income minus Total expenses) and Savings rate (Net as a share of
+Total income). The rate SHALL show a dash when Total income isn't
+positive, and in the Avg column.
 
 #### Scenario: A month's figures
-- **WHEN** a month has 3,000.00 in, of which 100.00 is a refund, and
-  2,000.00 out
-- **THEN** Spending is 1,900.00, Net 1,000.00, Income 2,900.00 and Savings
-  rate 34%
+- **WHEN** a month has 2,900.00 of salary, and 2,000.00 of "Home" with a
+  100.00 refund
+- **THEN** Total expenses is 1,900.00, Total income 2,900.00, Net 1,000.00
+  and Savings rate 34%
 
 ### Requirement: Period summary
 Under its title the page SHALL state the period and what it covers, then
@@ -167,10 +197,11 @@ SHALL say how much and link to Review.
 
 ### Requirement: Transactions behind a figure
 Selecting a non-zero month cell of a category row, or a chart segment,
-SHALL open a sheet of the rows behind it: outflows largest first, then
-refunds with a "+" in the positive colour. Its header SHALL show the
-category, month, the figure, count and accounts. The rows SHALL add up to
-the figure. A split SHALL list only the counted part and its full amount.
+SHALL open a sheet of the rows behind it: the figure's own direction
+largest first, then the opposite one. Money in SHALL show a "+" in the
+positive colour. Its header SHALL show the category, month, figure, count
+and accounts. The rows SHALL add up to the figure. A split SHALL list only
+the counted part and its full amount.
 
 #### Scenario: A parent's cell
 - **WHEN** the user selects "Groceries" for September
@@ -185,9 +216,14 @@ the figure. A split SHALL list only the counted part and its full amount.
 - **WHEN** the user selects the Other segment
 - **THEN** it isolates Other, and no sheet opens
 
+#### Scenario: An income cell
+- **WHEN** the user selects "Income" for September
+- **THEN** the sheet lists the money in, largest first, adding up to the
+  cell
+
 #### Scenario: Cells that open nothing
 - **WHEN** the user selects a zero cell, a Total or Avg cell, or a cell of
-  the Total or summary rows
+  a total, Net or Savings rate row
 - **THEN** no sheet opens
 
 #### Scenario: Touch on the chart
@@ -240,8 +276,8 @@ bottom on a phone and from the side on a wide screen.
 
 #### Scenario: Phone table
 - **WHEN** the page is shown 390px wide
-- **THEN** the first screen of the table shows category, Total, Avg and
-  the newest month, and the page itself doesn't scroll sideways
+- **THEN** the first screen of the table shows category, Total and Avg,
+  and the page itself doesn't scroll sideways
 
 ### Requirement: Reports with little or no data
 The page SHALL never pad a period with empty months. Without accounts it
