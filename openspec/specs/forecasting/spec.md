@@ -46,7 +46,8 @@ frequency, category, or end date, and to delete it.
 The system SHALL generate a forecast for an account that projects its
 balance forward over a user-selected horizon by applying the current
 balance plus every scheduled occurrence of its recurring transactions
-within that horizon, in date order.
+after today and within that horizon, in date order. An occurrence due
+today SHALL NOT be applied, since it may already be in the balance.
 
 #### Scenario: Forecast with a single recurring bill
 - **WHEN** an account has a current balance of 2000.00 and a single
@@ -60,6 +61,12 @@ within that horizon, in date order.
   income) with occurrences falling inside the forecast horizon
 - **THEN** the forecast applies every occurrence in date order and
   reflects their cumulative effect on the balance at each point
+
+#### Scenario: An occurrence due today is left out
+- **WHEN** an account has a balance of 2000.00 and a monthly recurring
+  transaction of -1500.00 due today
+- **THEN** the forecast stays at 2000.00 today and applies the next
+  occurrence next month
 
 ### Requirement: Forecast is a projection, not a reconciliation
 The system SHALL treat forecast occurrences as projected only. An actual
@@ -114,3 +121,19 @@ without a setup SHALL be forecast like any other account.
   +500.00 a month
 - **THEN** its forecast applies the recurring transaction as for any
   account
+
+### Requirement: A loan's installments leave its paying account
+The forecast of an account that pays a loan SHALL take each installment's
+payment on its date, after today and within the horizon. A recurring
+transaction on that account with the loan's payment category, or for
+exactly the payment's amount, SHALL count as that payment, so it is
+applied only once.
+
+#### Scenario: Installment on the paying account
+- **WHEN** "Checking" pays a loan with a 900.00 installment in 10 days and
+  has no recurring transaction for it
+- **THEN** its forecast drops by 900.00 on that date
+
+#### Scenario: A recurring transaction already covers it
+- **WHEN** "Checking" also has a monthly recurring transaction of -900.00
+- **THEN** its forecast drops by 900.00 once a month, not twice
