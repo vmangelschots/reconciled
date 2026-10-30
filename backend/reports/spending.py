@@ -7,17 +7,22 @@ from budgets.utils import month_range
 from transactions.models import Transaction
 
 
-def active_transactions():
+def counted_transactions(include_archived=False):
     # Transfers between the user's own accounts are neither income nor
     # spending, so no report counts them (they never have a category), and
     # neither are tab rows: money lent out or paid back, or value
     # adjustments. A split transaction counts through its parts.
-    return (
+    rows = (
         Transaction.objects.counted_rows()
         .outside_tabs()
         .excluding_adjustments()
-        .filter(account__archived=False, transfer_counterpart__isnull=True)
+        .filter(transfer_counterpart__isnull=True)
     )
+    return rows if include_archived else rows.filter(account__archived=False)
+
+
+def active_transactions():
+    return counted_transactions()
 
 
 def month_spending(month):

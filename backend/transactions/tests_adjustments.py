@@ -231,8 +231,8 @@ class AdjustmentsAreNotIncomeTests(AdjustmentTestCase):
         overview = self.client.get(reverse("report-overview"), {"month": "2026-10"}).json()
         self.assertEqual(overview["in_out"], {"in_cents": 0, "out_cents": 0})
         self.assertEqual(overview["budget"]["uncategorized_cents"], 0)
-        months = self.client.get(reverse("report-cash-flow"), {"end": "2026-10"}).json()["months"]
-        self.assertEqual(months[-1], {"month": "2026-10", "in_cents": 0, "out_cents": 0})
+        report = self.client.get(reverse("report-spending"), {"start": "2026-10", "end": "2026-10"}).json()
+        self.assertEqual(report["months"], [])
         summary = self.client.get(reverse("budget-summary"), {"month": "2026-10"}).json()
         self.assertEqual(summary["uncategorized_spent_cents"], 0)
 
@@ -241,8 +241,8 @@ class AdjustmentsAreNotIncomeTests(AdjustmentTestCase):
         set_value(funds, date(2026, 3, 10), euros(12000))
         checking = self.account("Revolut", "checking")
         Transaction.objects.create(account=checking, date=date(2026, 3, 5), amount_cents=euros(-50), payee="Shop")
-        months = self.client.get(reverse("report-cash-flow"), {"end": "2026-03"}).json()["months"]
-        self.assertEqual(months[-1], {"month": "2026-03", "in_cents": 0, "out_cents": euros(50)})
+        report = self.client.get(reverse("report-spending"), {"start": "2026-03", "end": "2026-03"}).json()
+        self.assertEqual(report["in_out"], [{"month": "2026-03", "in_cents": 0, "out_cents": euros(50)}])
         summary = self.client.get(reverse("budget-summary"), {"month": "2026-03"}).json()
         self.assertEqual(summary["uncategorized_spent_cents"], euros(50))
 

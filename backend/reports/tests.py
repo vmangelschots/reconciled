@@ -28,6 +28,10 @@ class ReportTestCase(TestCase):
             account=account or self.checking, date=on, amount_cents=amount_cents, payee="x", category=category
         )
 
+    def in_out(self, month):
+        response = self.client.get(reverse("report-spending"), {"start": month, "end": month})
+        return response.json()["in_out"]
+
 
 class TabRowsTests(ReportTestCase):
     def setUp(self):
@@ -40,7 +44,7 @@ class TabRowsTests(ReportTestCase):
         dinner = self.txn(-6000, date(2026, 3, 3))
         save_split(dinner, [SplitLine(-3000, category=self.restaurants), SplitLine(-3000, category=self.jan)])
 
-        months = self.client.get(reverse("report-cash-flow"), {"end": "2026-03"}).json()["months"]
+        months = self.in_out("2026-03")
         spending = self.client.get(reverse("report-category-spending"), {"month": "2026-03"}).json()
 
         self.assertEqual(months[-1], {"month": "2026-03", "in_cents": 0, "out_cents": 3000})
@@ -49,76 +53,18 @@ class TabRowsTests(ReportTestCase):
 
     def test_a_repayment_is_not_income(self):
         self.txn(3000, date(2026, 3, 12), category=self.jan)
+        self.txn(-100, date(2026, 3, 13))
 
-        months = self.client.get(reverse("report-cash-flow"), {"end": "2026-03"}).json()["months"]
+        months = self.in_out("2026-03")
 
-        self.assertEqual(months[-1], {"month": "2026-03", "in_cents": 0, "out_cents": 0})
+        self.assertEqual(months[-1], {"month": "2026-03", "in_cents": 0, "out_cents": 100})
 
     def test_uncategorized_rows_still_count(self):
         self.txn(-4000, date(2026, 3, 3))
 
-        months = self.client.get(reverse("report-cash-flow"), {"end": "2026-03"}).json()["months"]
+        months = self.in_out("2026-03")
 
         self.assertEqual(months[-1]["out_cents"], 4000)
-
-
-class CashFlowTests(ReportTestCase):
-    def get(self, end):
-        return self.client.get(reverse("report-cash-flow"), {"end": end})
-
-    def test_totals_in_and_out_separately_across_active_accounts(self):
-        self.txn(200000, date(2026, 3, 1))
-        self.txn(-150000, date(2026, 3, 15))
-        self.txn(-30000, date(2026, 3, 31), account=self.savings)
-
-        months = self.get("2026-03").json()["months"]
-
-        self.assertEqual(months[-1], {"month": "2026-03", "in_cents": 200000, "out_cents": 180000})
-
-    def test_returns_twelve_months_oldest_first_zero_filled(self):
-        self.txn(-500, date(2025, 4, 10))
-
-        months = self.get("2026-03").json()["months"]
-
-        self.assertEqual(len(months), 12)
-        self.assertEqual(months[0], {"month": "2025-04", "in_cents": 0, "out_cents": 500})
-        self.assertEqual(months[-1]["month"], "2026-03")
-        self.assertTrue(all(m["in_cents"] == 0 and m["out_cents"] == 0 for m in months[1:]))
-
-    def test_excludes_archived_accounts_and_out_of_range_dates(self):
-        self.txn(-999, date(2026, 3, 5), account=self.archived)
-        self.txn(-111, date(2025, 3, 31))  # month before the window
-        self.txn(-222, date(2026, 4, 1))  # month after the window
-
-        months = self.get("2026-03").json()["months"]
-
-        self.assertTrue(all(m["out_cents"] == 0 for m in months))
-
-    def test_window_crosses_a_year_boundary(self):
-        months = self.get("2026-01").json()["months"]
-        self.assertEqual([m["month"] for m in months[:2]], ["2025-02", "2025-03"])
-
-    def test_transfers_count_toward_neither_in_nor_out(self):
-        out = self.txn(-50000, date(2026, 3, 3))
-        link_transfer(out, self.savings)  # creates the +500.00 in Savings
-
-        months = self.get("2026-03").json()["months"]
-
-        self.assertEqual(months[-1], {"month": "2026-03", "in_cents": 0, "out_cents": 0})
-
-    def test_a_split_counts_once_without_its_transfer_part(self):
-        restaurants = Category.objects.create(name="Restaurants")
-        dinner = self.txn(-6000, date(2026, 3, 3))
-        save_split(dinner, [SplitLine(-3000, category=restaurants), SplitLine(-3000, transfer_account=self.savings)])
-
-        months = self.get("2026-03").json()["months"]
-
-        self.assertEqual(months[-1], {"month": "2026-03", "in_cents": 0, "out_cents": 3000})
-
-    def test_missing_or_malformed_end_is_rejected(self):
-        self.assertEqual(self.client.get(reverse("report-cash-flow")).status_code, 400)
-        self.assertEqual(self.get("2026-13").status_code, 400)
-        self.assertEqual(self.get("march").status_code, 400)
 
 
 class CategorySpendingTests(ReportTestCase):
