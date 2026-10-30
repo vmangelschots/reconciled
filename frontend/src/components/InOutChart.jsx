@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Button } from "./ui/Button";
+import { ChartTooltip } from "./ui/ChartTooltip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/Table";
 import { formatMoney, formatMoneyCompact } from "../lib/money";
 
@@ -29,8 +30,7 @@ export function InOutTooltip({ active, payload }) {
   if (!active || !payload?.length) return null;
   const row = payload[0].payload;
   return (
-    <div className="flex flex-col gap-0.5 rounded-md border border-border bg-surface px-2.5 py-1.5 text-sm shadow-sm">
-      <span className="text-xs text-ink-secondary">{longLabel(row.month)}</span>
+    <ChartTooltip title={longLabel(row.month)}>
       {SERIES.map((s) => (
         <span key={s.key} className="flex items-center gap-2 text-ink-primary">
           <span className="h-2.5 w-2.5 rounded-sm" style={{ background: s.color }} aria-hidden="true" />
@@ -38,7 +38,7 @@ export function InOutTooltip({ active, payload }) {
         </span>
       ))}
       <strong className="text-ink-primary">Difference: {formatMoney(row.in_cents - row.out_cents)}</strong>
-    </div>
+    </ChartTooltip>
   );
 }
 

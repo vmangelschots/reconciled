@@ -70,10 +70,44 @@ def _loan_occurrences(loan, starting_balance, today, window_end):
     return occurrences
 
 
+def _covers_installment(recurring, loan, installment):
+    """Whether this recurring transaction already stands for the
+    installment's payment, so the payment is applied only once."""
+    if recurring.start_date > installment.date:
+        return False
+    if recurring.end_date and recurring.end_date < installment.date:
+        return False
+    same_category = recurring.category_id is not None and recurring.category_id == loan.payment_category_id
+    return same_category or recurring.amount_cents == -installment.payment_cents
+
+
+def _loan_payment_occurrences(loan, recurring_transactions, today, window_end):
+    """What a loan takes from its paying account: each installment after
+    today, unless a recurring transaction covers it. See the forecasting
+    spec's "A loan's installments leave its paying account"."""
+    occurrences = []
+    for installment in schedule(loan):
+        if installment.date <= today:
+            continue
+        if installment.date > window_end:
+            break
+        if any(_covers_installment(r, loan, installment) for r in recurring_transactions):
+            continue
+        occurrences.append(
+            {
+                "date": installment.date,
+                "amount_cents": -installment.payment_cents,
+                "payee": f"{loan.account.name}: installment {installment.number} of {loan.term_months}",
+                "recurring_transaction_id": None,
+            }
+        )
+    return occurrences
+
+
 def generate_forecast(account, horizon_days, today):
     """Project account's balance forward from `today` out to
     `today + horizon_days`, applying every recurring transaction's
-    in-window occurrences on top of the account's current balance - a
+    occurrences after today on top of the account's current balance - a
     pure projection with nothing materialized or cached.
     """
     window_end = today + timedelta(days=horizon_days)
@@ -83,9 +117,12 @@ def generate_forecast(account, horizon_days, today):
     if loan is not None:
         occurrences = _loan_occurrences(loan, starting_balance, today, window_end)
     else:
+        recurring_transactions = list(account.recurring_transactions.all())
         occurrences = []
-        for recurring in account.recurring_transactions.all():
-            occurrences.extend(expand_occurrences(recurring, today, window_end))
+        for recurring in recurring_transactions:
+            occurrences.extend(expand_occurrences(recurring, today + timedelta(days=1), window_end))
+        for paid in account.loans_paid.filter(account__archived=False).select_related("account"):
+            occurrences.extend(_loan_payment_occurrences(paid, recurring_transactions, today, window_end))
         occurrences.sort(key=lambda o: o["date"])
 
     amount_by_date = {}

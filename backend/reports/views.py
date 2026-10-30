@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 
 from django.db.models import BigIntegerField, Case, Count, Max, Sum, When
 from django.db.models.functions import TruncMonth
@@ -11,11 +11,20 @@ from budgets.models import Category
 from budgets.summary import budget_rows
 from budgets.utils import month_range, parse_month
 from budgets.yearly import yearly_rows, yearly_spent_cents
+from forecasting.utils import generate_forecast
 from imports.models import ImportSession
 from transactions.categorize import needs_review, uncategorized
 from transactions.loans import missed_installment, sync_loans
 from transactions.models import Transaction
 
+from .balances import (
+    PROJECTION_DAYS,
+    daily_balances,
+    history_tier,
+    month_end_balances,
+    net_worth_change,
+    tier_balance,
+)
 from .spending import active_transactions, month_spending
 
 CASH_FLOW_MONTHS = 12
@@ -128,6 +137,62 @@ class CategorySpendingView(APIView):
 def _today():
     """Today's date; a function so tests can freeze it."""
     return timezone.localdate()
+
+
+def _projection(tier, today):
+    """The active accounts' forecasts added up, as (points, lowest), or
+    (None, None) with nothing scheduled. It starts from history's balance
+    today: an account's current balance also counts rows dated later."""
+    accounts = [a for a in Account.objects.filter(archived=False) if a.tier == tier]
+    forecasts = [generate_forecast(a, PROJECTION_DAYS, today) for a in accounts]
+    if not any(f["occurrences"] for f in forecasts):
+        return None, None
+    balance = tier_balance(tier, today)
+    points = [
+        {
+            "date": today + timedelta(days=offset),
+            "balance_cents": balance
+            + sum(f["points"][offset]["balance_cents"] - f["starting_balance_cents"] for f in forecasts),
+        }
+        for offset in range(PROJECTION_DAYS + 1)
+    ]
+    return points, min(points[1:], key=lambda p: p["balance_cents"])
+
+
+class EverydayBalanceView(APIView):
+    """The everyday balance per day up to the chosen month's end, or today
+    and the projection after it - see openspec/specs/balance-history."""
+
+    def get(self, request):
+        month, error = _month_param(request, "month")
+        if error:
+            return error
+        today = _today()
+        sync_loans(today)
+        current = month == today.replace(day=1)
+        end = min(month_range(month) - timedelta(days=1), today)
+        tier = history_tier()
+        points, lowest = _projection(tier, today) if current else (None, None)
+        return Response(
+            {
+                "tier": tier,
+                "current": current,
+                "end": end,
+                "points": daily_balances(tier, end),
+                "projection": points,
+                "lowest": lowest,
+            }
+        )
+
+
+class NetWorthView(APIView):
+    """Every account's balance per tier at each month's end - see
+    openspec/specs/balance-history."""
+
+    def get(self, request):
+        today = _today()
+        sync_loans(today)
+        return Response({"months": month_end_balances(today)})
 
 
 # A category this close to its limit is a warning once it is also ahead
@@ -338,6 +403,7 @@ class OverviewView(APIView):
                 "balance_cents": sum(a["balance_cents"] for a in account_rows),
                 "everyday_cents": tier_totals.get("everyday", 0),
                 "tiers": tiers,
+                "net_worth_change_cents": net_worth_change(month, today),
                 "accounts": account_rows,
                 "in_out": {
                     "in_cents": totals["money_in"] or 0,

@@ -13,11 +13,13 @@ import {
 import { Fragment, useState } from "react";
 import { Link } from "react-router-dom";
 import { getOverview } from "../api/overview";
-import { getCashFlow, getCategorySpending } from "../api/reports";
+import { getCashFlow, getCategorySpending, getEverydayBalance, getNetWorth } from "../api/reports";
 import { listTabs } from "../api/tabs";
 import { CategorySpendingChart } from "../components/CategorySpendingChart";
 import { CategorySpendingPie } from "../components/CategorySpendingPie";
+import { EverydayMoneyChart } from "../components/EverydayMoneyChart";
 import { InOutChart } from "../components/InOutChart";
+import { NetWorthPanel } from "../components/NetWorthChart";
 import { OpenTabsCard } from "../components/OpenTabsCard";
 import { Amount } from "../components/ui/Amount";
 import { Button, buttonVariants } from "../components/ui/Button";
@@ -26,21 +28,19 @@ import { ListRow } from "../components/ui/ListRow";
 import { MonthSwitcher } from "../components/ui/MonthSwitcher";
 import { PageHeader } from "../components/ui/PageHeader";
 import { Panel } from "../components/ui/Panel";
+import { PillSwitch } from "../components/ui/PillSwitch";
 import { ProgressBar } from "../components/ui/ProgressBar";
 import { Stat } from "../components/ui/Stat";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { useReport } from "../hooks/useReport";
 import { cn } from "../lib/cn";
 import { formatShortDate } from "../lib/dates";
+import { freshness, plural, staleImports } from "../lib/importFreshness";
 import { formatMoney, formatMoneyWhole } from "../lib/money";
 import { currentMonth, daysSince, monthLabel, monthName } from "../lib/months";
 import { formatDayMonth } from "../lib/yearlyBudgets";
 import { VALUED_TYPES, tierLabel } from "../lib/tiers";
 import { useAccounts } from "../accounts/AccountsContext";
-
-// The last import counts as stale after this many days - see the
-// overview spec's "Stale import reminder".
-const STALE_IMPORT_DAYS = 7;
 
 // Which view "Spending by category" opens in, remembered per browser.
 const CATEGORY_CHART_KEY = "reconciled-category-chart"; // "bars" | "pie"
@@ -63,9 +63,8 @@ function storeCategoryChart(view) {
 
 const whole = (cents) => formatMoneyWhole(cents);
 
-function plural(n, one, many) {
-  return `${n} ${n === 1 ? one : many}`;
-}
+// With accounts in more than one tier, the overview leads with Everyday.
+const spansTiers = (data) => (data.tiers ?? []).length > 1;
 
 function loadError(what) {
   return `Couldn't load ${what}.`;
@@ -78,7 +77,8 @@ function BalanceTile({ data, month, isCurrent }) {
   const change = data.in_out.in_cents - data.in_out.out_cents;
   const when = isCurrent ? "this month" : `in ${monthName(month)}`;
   const others = (data.tiers ?? []).filter((t) => t.tier !== "everyday");
-  const split = others.length > 0 && data.tiers.length > 1;
+  const split = spansTiers(data);
+  const worthChange = data.net_worth_change_cents;
   return (
     <div className="flex flex-col gap-3">
       <Stat
@@ -102,6 +102,11 @@ function BalanceTile({ data, month, isCurrent }) {
             <dt className="font-medium text-ink-primary">Net worth</dt>
             <dd className="num font-medium text-ink-primary">{whole(data.balance_cents)}</dd>
           </div>
+          {worthChange != null && worthChange !== 0 && (
+            <div className={cn("num text-right text-xs", worthChange > 0 ? "text-positive" : "text-ink-secondary")}>
+              {formatMoneyWhole(worthChange, { signed: true })} {when}
+            </div>
+          )}
         </dl>
       )}
     </div>
@@ -178,13 +183,6 @@ function accountFreshness(account) {
   return freshness(account.last_import_date);
 }
 
-function freshness(lastImportDate) {
-  if (!lastImportDate) return { text: "No imports yet", stale: true, days: Infinity };
-  const days = daysSince(lastImportDate);
-  const text = days <= 0 ? "imported today" : `imported ${plural(days, "day", "days")} ago`;
-  return { text, stale: days > STALE_IMPORT_DAYS, days };
-}
-
 function AccountsTile({ accounts }) {
   return (
     <ul className="-mx-5 -mb-2 flex flex-col">
@@ -204,23 +202,17 @@ function AccountsTile({ accounts }) {
   );
 }
 
-// One line for every stale account: named when there is one, counted when
-// there are several, opening Import on the stalest. See the overview spec.
+// One line for every stale account, opening Import on the stalest. See the
+// overview spec.
 function staleImportItem(accounts) {
-  const stale = accounts
-    .filter((a) => !VALUED_TYPES.has(a.account_type))
-    .map((a) => ({ ...a, fresh: freshness(a.last_import_date) }))
-    .filter((a) => a.fresh.stale)
-    .sort((a, b) => b.fresh.days - a.fresh.days);
-  if (stale.length === 0) return null;
-  const [stalest] = stale;
-  let primary = `${stale.length} accounts not imported this week`;
-  if (stale.length === 1) {
-    primary = stalest.last_import_date
-      ? `${stalest.name}: last import ${plural(stalest.fresh.days, "day", "days")} ago`
-      : `${stalest.name}: no imports yet`;
-  }
-  return { key: "import", to: `/import?account=${stalest.id}`, icon: <Upload className="h-4 w-4" />, primary };
+  const stale = staleImports(accounts);
+  if (!stale) return null;
+  return {
+    key: "import",
+    to: `/import?account=${stale.stalest.id}`,
+    icon: <Upload className="h-4 w-4" />,
+    primary: stale.text,
+  };
 }
 
 function attentionItems(data, month, isCurrent) {
@@ -384,29 +376,6 @@ const CATEGORY_VIEWS = [
   { value: "pie", label: "Pie", Icon: ChartPie },
 ];
 
-function ChartViewSwitch({ view, onChange }) {
-  return (
-    <div className="inline-flex rounded-lg bg-surface-2 p-0.5" role="group" aria-label="Chart view">
-      {CATEGORY_VIEWS.map(({ value, label, Icon }) => (
-        <button
-          key={value}
-          type="button"
-          aria-label={label}
-          aria-pressed={view === value}
-          title={label}
-          onClick={() => onChange(value)}
-          className={cn(
-            "flex h-7 w-8 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
-            view === value ? "bg-surface text-ink-primary shadow-sm" : "text-ink-muted hover:text-ink-primary",
-          )}
-        >
-          <Icon className="h-4 w-4" aria-hidden="true" />
-        </button>
-      ))}
-    </div>
-  );
-}
-
 /**
  * The home page: how all accounts together are doing in one month, and
  * what needs attention. Each panel loads and fails on its own. See specs/overview.
@@ -416,14 +385,18 @@ export function OverviewPage() {
   const [month, setMonth] = useState(thisMonth);
   const isCurrent = month === thisMonth;
   const isWide = useMediaQuery("(min-width: 640px)");
+  const isLarge = useMediaQuery("(min-width: 1024px)");
   const { accounts, loaded } = useAccounts();
   const [categoryTable, setCategoryTable] = useState(false);
   const [categoryView, setCategoryView] = useState(getStoredCategoryChart);
   const [inOutTable, setInOutTable] = useState(false);
+  const [everydayTable, setEverydayTable] = useState(false);
 
   const overview = useReport(() => getOverview(month), loaded && accounts.length > 0 ? month : null);
   const spending = useReport(() => getCategorySpending(month), month);
   const cashFlow = useReport(() => getCashFlow(month), month);
+  const everyday = useReport(() => getEverydayBalance(month), month);
+  const netWorth = useReport(getNetWorth, "net-worth");
   const tabs = useReport(listTabs, "tabs");
 
   const header = (
@@ -464,13 +437,22 @@ export function OverviewPage() {
   const overviewError = overview.error ? loadError("the overview") : null;
   const tileLoading = !data && !overviewError;
   const hasTabs = tabs.data && tabs.data.length > 0;
+  const netWorthPanel = (
+    <NetWorthPanel
+      months={netWorth.data?.months}
+      loading={netWorth.loading && !netWorth.data}
+      error={netWorth.error ? loadError("net worth") : null}
+      selectedMonth={month}
+      sideColumn={isLarge}
+    />
+  );
 
   return (
     <section className="flex flex-col gap-6">
       {header}
 
       <div className="grid gap-4 md:grid-cols-3">
-        <Panel aria-label="Balance" loading={tileLoading} error={overviewError}>
+        <Panel aria-label="Balance summary" loading={tileLoading} error={overviewError}>
           {data && <BalanceTile data={data} month={month} isCurrent={isCurrent} />}
         </Panel>
         <Panel aria-label="Budget" loading={tileLoading} error={overviewError}>
@@ -498,8 +480,27 @@ export function OverviewPage() {
               <OpenTabsCard tabs={tabs.data} compact />
             </Panel>
           )}
+          {isLarge && netWorthPanel}
         </div>
         <div className="flex flex-col gap-4 lg:col-span-2 lg:col-start-1 lg:row-start-1">
+          <Panel
+            title={data && !spansTiers(data) ? "Balance" : "Everyday"}
+            loading={everyday.loading && !everyday.data}
+            error={everyday.error ? loadError("the everyday balance") : null}
+            actions={
+              everyday.data && (
+                <TableToggle shown={everydayTable} onToggle={() => setEverydayTable((v) => !v)} short={!isWide} />
+              )
+            }
+          >
+            {everyday.data && (
+              <EverydayMoneyChart
+                data={everyday.data}
+                accounts={data?.accounts}
+                showTable={everydayTable}
+              />
+            )}
+          </Panel>
           <Panel
             title="Spending by category"
             loading={spending.loading && !spending.data}
@@ -507,8 +508,10 @@ export function OverviewPage() {
             actions={
               spending.data && (
                 <>
-                  <ChartViewSwitch
-                    view={categoryView}
+                  <PillSwitch
+                    label="Chart view"
+                    options={CATEGORY_VIEWS}
+                    value={categoryView}
                     onChange={(view) => {
                       setCategoryView(view);
                       storeCategoryChart(view);
@@ -549,6 +552,7 @@ export function OverviewPage() {
           >
             {data && <RecentTransactions rows={data.recent} showAccounts={data.accounts.length > 1} />}
           </Panel>
+          {!isLarge && netWorthPanel}
         </div>
       </div>
 

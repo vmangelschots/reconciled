@@ -6,7 +6,8 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from accounts.models import Account
+from accounts.models import Account, Loan
+from budgets.models import Category
 from transactions.loans import set_up_loan
 from transactions.models import Transaction
 
@@ -75,7 +76,7 @@ class RecurringTransactionTests(TestCase):
         self.assertEqual(past_rent_payment.amount_cents, -150000)
 
 
-class ForecastTests(TestCase):
+class ForecastCase(TestCase):
     def setUp(self):
         self.client = APIClient()
         user = get_user_model().objects.create_user(username="budgeter", password="x")
@@ -91,6 +92,9 @@ class ForecastTests(TestCase):
         )
         return response.json()
 
+
+
+class ForecastTests(ForecastCase):
     def test_single_recurring_bill(self):
         due_date = self.today + timedelta(days=10)
         RecurringTransaction.objects.create(
@@ -224,3 +228,93 @@ class LoanForecastTests(TestCase):
         )
         balances = self.balances(generate_forecast(self.mortgage, 30, today=date(2026, 11, 12)))
         self.assertEqual(balances["2026-12-01"], 50000)
+
+
+class OccurrencesAfterTodayTests(ForecastCase):
+    def test_an_occurrence_due_today_is_left_out(self):
+        RecurringTransaction.objects.create(
+            account=self.account,
+            amount_cents=-150000,
+            payee="Rent",
+            frequency="monthly",
+            start_date=self.today,
+        )
+        forecast = self._forecast(10)
+        self.assertEqual(forecast["occurrences"], [])
+        self.assertEqual(forecast["points"][0]["balance_cents"], 200000)
+        self.assertEqual(forecast["points"][-1]["balance_cents"], 200000)
+
+    def test_tomorrow_counts(self):
+        RecurringTransaction.objects.create(
+            account=self.account,
+            amount_cents=-5000,
+            payee="Bill",
+            frequency="monthly",
+            start_date=self.today + timedelta(days=1),
+        )
+        self.assertEqual(self._forecast(10)["points"][1]["balance_cents"], 195000)
+
+
+class LoanPaymentForecastTests(ForecastCase):
+    def setUp(self):
+        super().setUp()
+        self.mortgage = Category.objects.create(name="Mortgage")
+        self.loan_account = Account.objects.create(name="Loan", account_type="loan", starting_balance_cents=-9000000)
+        self.first_payment = self.today + timedelta(days=10)
+        self.loan = Loan.objects.create(
+            account=self.loan_account,
+            principal_cents=9000000,
+            annual_rate="0",
+            term_months=100,
+            first_payment_date=self.first_payment,
+            paid_from=self.account,
+            payment_category=self.mortgage,
+            setup_date=self.today,
+        )
+
+    def test_installment_leaves_the_paying_account(self):
+        points = {p["date"]: p["balance_cents"] for p in self._forecast(20)["points"]}
+        self.assertEqual(points[(self.first_payment - timedelta(days=1)).isoformat()], 200000)
+        self.assertEqual(points[self.first_payment.isoformat()], 110000)
+
+    def test_a_recurring_transaction_of_the_same_amount_covers_it(self):
+        RecurringTransaction.objects.create(
+            account=self.account,
+            amount_cents=-90000,
+            payee="Loan payment",
+            frequency="monthly",
+            start_date=self.first_payment,
+        )
+        forecast = self._forecast(20)
+        self.assertEqual(len(forecast["occurrences"]), 1)
+        self.assertEqual(forecast["points"][-1]["balance_cents"], 110000)
+
+    def test_a_recurring_transaction_in_the_payment_category_covers_it(self):
+        RecurringTransaction.objects.create(
+            account=self.account,
+            amount_cents=-88000,
+            payee="Loan payment",
+            category=self.mortgage,
+            frequency="monthly",
+            start_date=self.first_payment + timedelta(days=2),
+        )
+        # It only starts after this installment, so that one still counts.
+        self.assertEqual(len(self._forecast(20)["occurrences"]), 2)
+        self.loan.first_payment_date = self.first_payment + timedelta(days=2)
+        self.loan.save()
+        self.assertEqual(len(self._forecast(20)["occurrences"]), 1)
+
+    def test_an_ended_recurring_transaction_no_longer_covers_it(self):
+        RecurringTransaction.objects.create(
+            account=self.account,
+            amount_cents=-90000,
+            payee="Old payment",
+            frequency="monthly",
+            start_date=self.today - timedelta(days=60),
+            end_date=self.today - timedelta(days=1),
+        )
+        self.assertEqual(self._forecast(20)["points"][-1]["balance_cents"], 110000)
+
+    def test_a_loan_account_still_follows_its_schedule(self):
+        response = self.client.get(reverse("forecast"), {"account": self.loan_account.id, "horizon_days": 20})
+        self.assertEqual(response.json()["points"][-1]["balance_cents"], -8910000)
