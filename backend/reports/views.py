@@ -1,7 +1,6 @@
-from datetime import date, timedelta
+from datetime import timedelta
 
 from django.db.models import BigIntegerField, Case, Count, Max, Sum, When
-from django.db.models.functions import TruncMonth
 from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -25,9 +24,10 @@ from .balances import (
     net_worth_change,
     tier_balance,
 )
+from .report import months_in, spending_cell, spending_report
 from .spending import active_transactions, month_spending
 
-CASH_FLOW_MONTHS = 12
+UNCATEGORIZED = "uncategorized"
 
 
 def _month_param(request, name):
@@ -42,50 +42,6 @@ def _month_param(request, name):
     except ValueError:
         return None, Response({"detail": f"{name} must be in YYYY-MM format."}, status=400)
     return month, None
-
-
-def _shift_months(month, delta):
-    index = month.year * 12 + (month.month - 1) + delta
-    return date(index // 12, index % 12 + 1, 1)
-
-
-class CashFlowView(APIView):
-    """Money in vs money out per month, for the 12 months ending at `end`."""
-
-    def get(self, request):
-        end, error = _month_param(request, "end")
-        if error:
-            return error
-        start = _shift_months(end, -(CASH_FLOW_MONTHS - 1))
-
-        rows = (
-            active_transactions()
-            .filter(date__gte=start, date__lt=month_range(end))
-            .annotate(month=TruncMonth("date"))
-            .values("month")
-            .annotate(
-                money_in=Sum(
-                    Case(When(amount_cents__gt=0, then="amount_cents"), default=0, output_field=BigIntegerField())
-                ),
-                money_out=Sum(
-                    Case(When(amount_cents__lt=0, then="amount_cents"), default=0, output_field=BigIntegerField())
-                ),
-            )
-        )
-        totals = {row["month"]: row for row in rows}
-
-        months = []
-        for i in range(CASH_FLOW_MONTHS):
-            month = _shift_months(start, i)
-            row = totals.get(month, {})
-            months.append(
-                {
-                    "month": month.strftime("%Y-%m"),
-                    "in_cents": row.get("money_in") or 0,
-                    "out_cents": -(row.get("money_out") or 0),
-                }
-            )
-        return Response({"months": months})
 
 
 class CategorySpendingView(APIView):
@@ -193,6 +149,78 @@ class NetWorthView(APIView):
         today = _today()
         sync_loans(today)
         return Response({"months": month_end_balances(today)})
+
+
+MAX_REPORT_MONTHS = 24
+
+
+class SpendingReportView(APIView):
+    """A profit and loss per month per category for a period of whole
+    months - see openspec/specs/spending-report."""
+
+    def get(self, request):
+        start, error = _month_param(request, "start")
+        if error:
+            return error
+        end, error = _month_param(request, "end")
+        if error:
+            return error
+        today = _today()
+        if end < start or end > today.replace(day=1):
+            return Response({"detail": "The period must end on or after its start, and not past this month."}, status=400)
+        if len(months_in(start, end)) > MAX_REPORT_MONTHS:
+            return Response({"detail": f"A period can be at most {MAX_REPORT_MONTHS} months."}, status=400)
+        return Response(spending_report(start, end, today))
+
+
+class SpendingCellView(APIView):
+    """The rows behind one figure of the report: `category` (an id, or
+    "uncategorized") in `month`, with `direct=1` for a parent's own rows
+    and `income=1` for a figure of money in."""
+
+    def get(self, request):
+        month, error = _month_param(request, "month")
+        if error:
+            return error
+        value = request.query_params.get("category")
+        if not value:
+            return Response({"detail": "category query param is required."}, status=400)
+        direct = request.query_params.get("direct") == "1"
+        income = request.query_params.get("income") == "1"
+        category = None
+        name = "Uncategorized income" if income else "Uncategorized"
+        if value != UNCATEGORIZED:
+            try:
+                category = Category.objects.get(pk=value)
+            except (Category.DoesNotExist, ValueError):
+                return Response({"detail": "Category not found."}, status=404)
+            name = f"{category.name} (direct)" if direct else category.name
+
+        rows = list(spending_cell(month, category, direct, income))
+        total = sum(r.amount_cents for r in rows)
+        return Response(
+            {
+                "month": month.strftime("%Y-%m"),
+                "name": name,
+                "uncategorized": category is None,
+                "total_cents": total if income else -total,
+                "accounts": sorted({r.account.name for r in rows}),
+                "rows": [
+                    {
+                        "id": r.id,
+                        "date": r.date,
+                        "payee": r.payee,
+                        "amount_cents": r.amount_cents,
+                        "account_id": r.account_id,
+                        "account_name": r.account.name,
+                        "category": r.category_id,
+                        "category_label": _category_label(r.category),
+                        "split_amount_cents": r.split_parent.amount_cents if r.split_parent_id else None,
+                    }
+                    for r in rows
+                ],
+            }
+        )
 
 
 # A category this close to its limit is a warning once it is also ahead

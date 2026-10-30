@@ -1,6 +1,6 @@
 import { ChevronDown, Landmark, Scale, Split, Upload } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Link, Navigate, NavLink, useNavigate, useParams } from "react-router-dom";
+import { Link, Navigate, NavLink, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useAccounts } from "../accounts/AccountsContext";
 import { getAccount } from "../api/accounts";
 import { createCategory, listCategories } from "../api/categories";
@@ -90,6 +90,10 @@ function AccountPills({ accounts, current }) {
   );
 }
 
+function addressDate(value) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value ?? "") && !Number.isNaN(Date.parse(value)) ? value : "";
+}
+
 export function TransactionsPage() {
   const { accountId: accountParam } = useParams();
   const accountId = Number(accountParam);
@@ -99,7 +103,14 @@ export function TransactionsPage() {
   // An archived account isn't in the active list; it is fetched by id.
   const [archivedAccount, setArchivedAccount] = useState(null);
   const [transactions, setTransactions] = useState([]);
-  const [filters, setFilters] = useState({ dateFrom: "", dateTo: "", category: null, search: "" });
+  // A link can open the ledger on a date range - see specs/transactions.
+  const [searchParams] = useSearchParams();
+  const [filters, setFilters] = useState({
+    dateFrom: addressDate(searchParams.get("from")),
+    dateTo: addressDate(searchParams.get("to")),
+    category: null,
+    search: "",
+  });
   // At most one row is being edited: in the form or in the split editor.
   const [editing, setEditing] = useState(null); // { id, kind: "form" | "split" }
   const [loading, setLoading] = useState(true);

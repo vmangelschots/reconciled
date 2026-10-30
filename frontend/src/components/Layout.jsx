@@ -1,5 +1,6 @@
 import {
   ArrowLeftRight,
+  ChartColumnStacked,
   Ellipsis,
   Inbox,
   Landmark,
@@ -31,6 +32,7 @@ const NAV_ITEMS = [
   { to: '/review', label: 'Review', icon: Inbox, group: 'main', inTabBar: true, showsReviewCount: true },
   { to: '/budgets', label: 'Budgets', icon: PiggyBank, group: 'main', inTabBar: true },
   { to: '/forecast', label: 'Forecast', icon: TrendingUp, group: 'main' },
+  { to: '/reports', label: 'Reports', icon: ChartColumnStacked, group: 'main' },
   { to: '/import', label: 'Import', icon: Upload, group: 'more' },
   { to: '/accounts', label: 'Accounts', icon: Landmark, group: 'more' },
   { to: '/settings', label: 'Settings', icon: Settings, group: 'more' },

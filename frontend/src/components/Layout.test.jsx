@@ -71,6 +71,7 @@ describe('Layout navigation', () => {
       'Review',
       'Budgets',
       'Forecast',
+      'Reports',
       'Import',
       'Accounts',
       'Settings',
@@ -96,7 +97,7 @@ describe('Layout navigation', () => {
     await userEvent.click(within(tabBar).getByRole('button', { name: 'More' }))
 
     const more = screen.getByRole('navigation', { name: 'More' })
-    expect(within(more).getAllByRole('link').map((l) => l.textContent)).toEqual(['Forecast', 'Import', 'Accounts', 'Settings'])
+    expect(within(more).getAllByRole('link').map((l) => l.textContent)).toEqual(['Forecast', 'Reports', 'Import', 'Accounts', 'Settings'])
     expect(screen.getByRole('button', { name: /Switch to (dark|light) theme/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument()
   })

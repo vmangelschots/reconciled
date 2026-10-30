@@ -659,3 +659,29 @@ describe("ledger per account", () => {
     expect(link).toHaveAttribute("href", "/import?account=2");
   });
 });
+
+describe("Opening a ledger on a date range", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    accountsApi.listAccounts.mockResolvedValue([{ id: 1, name: "Joint", current_balance_cents: 0, archived: false }]);
+    categoriesApi.listCategories.mockResolvedValue([]);
+    transactionsApi.listTransactions.mockResolvedValue([]);
+  });
+
+  it("fills both date filters from the address", async () => {
+    renderPage("/transactions/1?from=2026-09-01&to=2026-09-30");
+    await waitFor(() =>
+      expect(transactionsApi.listTransactions).toHaveBeenCalledWith(
+        expect.objectContaining({ date_from: "2026-09-01", date_to: "2026-09-30" }),
+      ),
+    );
+    expect(await screen.findByLabelText("From")).toHaveValue("2026-09-01");
+    expect(screen.getByLabelText("To")).toHaveValue("2026-09-30");
+  });
+
+  it("leaves a malformed date empty", async () => {
+    renderPage("/transactions/1?from=september&to=2026-09-30");
+    expect(await screen.findByLabelText("From")).toHaveValue("");
+    expect(screen.getByLabelText("To")).toHaveValue("2026-09-30");
+  });
+});

@@ -15,7 +15,6 @@ import { formatDayMonth } from "../lib/yearlyBudgets";
 vi.mock("../api/accounts", () => ({ listAccounts: vi.fn() }));
 vi.mock("../api/overview", () => ({ getOverview: vi.fn() }));
 vi.mock("../api/reports", () => ({
-  getCashFlow: vi.fn(),
   getCategorySpending: vi.fn(),
   getEverydayBalance: vi.fn(),
   getNetWorth: vi.fn(),
@@ -54,14 +53,6 @@ function overview(overrides = {}) {
 
   };
 }
-
-const CASH_FLOW = {
-  months: Array.from({ length: 12 }, (_, i) => ({
-    month: `2026-${String(i + 1).padStart(2, "0")}`,
-    in_cents: 100000,
-    out_cents: 80000,
-  })),
-};
 
 function spending(month) {
   return {
@@ -102,7 +93,6 @@ beforeEach(() => {
   window.localStorage.clear();
   accountsApi.listAccounts.mockResolvedValue([JOINT]);
   overviewApi.getOverview.mockResolvedValue(overview());
-  reportsApi.getCashFlow.mockResolvedValue(CASH_FLOW);
   reportsApi.getEverydayBalance.mockResolvedValue({
     tier: "everyday",
     current: false,
@@ -127,7 +117,6 @@ describe("Overview month", () => {
 
     expect(await screen.findByText(/^Oct(ober)? 2026$/)).toBeInTheDocument();
     await waitFor(() => expect(overviewApi.getOverview).toHaveBeenCalledWith("2026-10"));
-    expect(reportsApi.getCashFlow).toHaveBeenCalledWith("2026-10");
     expect(reportsApi.getCategorySpending).toHaveBeenCalledWith("2026-10");
     expect(screen.getByRole("button", { name: "Next month" })).toBeDisabled();
     expect(screen.queryByRole("combobox", { name: "Account" })).toBeNull();
@@ -675,7 +664,7 @@ describe("Spending by category view", () => {
 });
 
 describe("Charts and tabs", () => {
-  it("both charts follow the page's month", async () => {
+  it("the charts follow the page's month", async () => {
     renderPage();
     expect(await screen.findByText("Groceries 2026-10")).toBeInTheDocument();
 
@@ -683,18 +672,13 @@ describe("Charts and tabs", () => {
 
     expect(await screen.findByText("Groceries 2026-09")).toBeInTheDocument();
     expect(reportsApi.getCategorySpending).toHaveBeenLastCalledWith("2026-09");
-    expect(reportsApi.getCashFlow).toHaveBeenLastCalledWith("2026-09");
-    expect(screen.getByText(/12 months to September 2026/)).toBeInTheDocument();
+    expect(reportsApi.getEverydayBalance).toHaveBeenLastCalledWith("2026-09");
   });
 
-  it("toggles the chart tables from the panel header", async () => {
+  it("leaves In vs out to Reports", async () => {
     renderPage();
-    const inOut = await screen.findByRole("region", { name: "In vs out" });
-
-    await userEvent.click(await within(inOut).findByRole("button", { name: "Show as table" }));
-
-    expect(within(inOut).getByRole("columnheader", { name: "Money in" })).toBeInTheDocument();
-    expect(within(inOut).getByText(/Excludes transfers and tabs/)).toBeInTheDocument();
+    await screen.findByText("Groceries 2026-10");
+    expect(screen.queryByRole("region", { name: "In vs out" })).toBeNull();
   });
 
   it("shows open tabs, and nothing when there are none", async () => {
@@ -717,16 +701,15 @@ describe("Charts and tabs", () => {
     renderPage();
 
     expect(await screen.findByText("Couldn't load spending per category.")).toBeInTheDocument();
-    expect(await screen.findByRole("img", { name: /Money in vs money out/ })).toBeInTheDocument();
     expect(await screen.findByText("Everything is in order.")).toBeInTheDocument();
   });
 
   it("shows a loading placeholder per panel", async () => {
-    reportsApi.getCashFlow.mockReturnValue(new Promise(() => {}));
+    reportsApi.getNetWorth.mockReturnValue(new Promise(() => {}));
     renderPage();
 
     await screen.findByText("Groceries 2026-10");
-    expect(within(panel("In vs out")).getByTestId("panel-loading")).toBeInTheDocument();
+    expect(within(panel("Net worth")).getByTestId("panel-loading")).toBeInTheDocument();
   });
 });
 

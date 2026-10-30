@@ -6,6 +6,7 @@ import { OTHER_KEY, UNCATEGORIZED_KEY, buildPieSlices, buildRows } from "../lib/
 import { cn } from "../lib/cn";
 import { formatMoney } from "../lib/money";
 import { Button } from "./ui/Button";
+import { HatchPattern } from "./ui/HatchPattern";
 import { CategorySpendingTable } from "./CategorySpendingChart";
 
 // A drilled-in donut shows its parent's colour stepped down by opacity.
@@ -19,20 +20,6 @@ function rankColor(slice, index) {
 
 function sharePercent(cents, total) {
   return total > 0 ? Math.round((cents / total) * 100) : 0;
-}
-
-// Stripes for Uncategorized, used by its slice and its legend swatch.
-function HatchPattern({ id }) {
-  return (
-    <svg width="0" height="0" className="absolute" aria-hidden="true">
-      <defs>
-        <pattern id={id} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-          <rect width="6" height="6" fill="var(--surface-2)" />
-          <rect width="3" height="6" fill="var(--chart-series-2)" />
-        </pattern>
-      </defs>
-    </svg>
-  );
 }
 
 function LegendRow({ slice, total, active, onActivate, onDeactivate, onDrill }) {
