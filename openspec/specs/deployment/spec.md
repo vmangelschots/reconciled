@@ -62,8 +62,8 @@ same-origin.
 The repository SHALL provide plain Kubernetes manifests that, after the
 hostname, image tag and secrets are filled in, run the whole app in one
 namespace with `kubectl apply -f k8s/`. They SHALL include PostgreSQL
-with persistent storage, the backend, the frontend, and one HTTPS
-hostname that serves both the frontend and the API.
+with persistent storage, the backend, the frontend, a scheduled bank sync,
+and one HTTPS hostname that serves both the frontend and the API.
 
 #### Scenario: Fresh install
 - **WHEN** a user fills in the example Secret and the Ingress hostname,
@@ -82,6 +82,14 @@ hostname that serves both the frontend and the API.
 - **THEN** app pages are served by the frontend, and API, admin and
   static-file requests by the backend
 
+#### Scenario: Scheduled sync without credentials
+- **WHEN** the manifests are applied without Enable Banking credentials
+- **THEN** the scheduled sync finishes successfully and does nothing
+
+#### Scenario: Syncs don't overlap
+- **WHEN** a scheduled sync is still running at the next scheduled time
+- **THEN** no second one starts
+
 ### Requirement: Backend prepares the database before serving
 Before serving traffic, the backend SHALL apply pending migrations and
 create the configured app user if it doesn't exist yet. It SHALL NOT
@@ -97,8 +105,8 @@ receive traffic until both have succeeded and it reports healthy.
 - **THEN** the user is left unchanged, and the pod becomes ready
 
 ### Requirement: No secrets in the repository or images
-Database credentials, the Django secret key and the app user's
-credentials SHALL come from a Kubernetes Secret at runtime. The
+Database credentials, the Django secret key, the app user's credentials
+and the Enable Banking application ID and private key SHALL come from a Kubernetes Secret at runtime. The
 repository SHALL ship only an example Secret with placeholder values,
 and no image SHALL contain real secrets.
 
