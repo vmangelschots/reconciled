@@ -2,6 +2,8 @@ annotated-types==0.8.0
 anyio==4.15.1
 asgiref==3.12.1
 beautifulsoup4==4.15.0
+cffi==2.1.1
+cryptography==50.0.2
 django-cors-headers==4.9.0
 Django==6.1.2
 djangorestframework==3.18.3
@@ -16,8 +18,10 @@ ofxparse==0.21
 openai==3.37.0
 psycopg-binary==3.3.6
 psycopg==3.3.6
+pycparser==3.12
 pydantic==2.14.1
 pydantic_core==2.50.1
+PyJWT==2.15.1
 python-dateutil==2.9.0.post0
 python-dotenv==1.2.4
 six==1.17.0

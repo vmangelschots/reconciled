@@ -181,26 +181,22 @@ def _is_similar(a, b, threshold=DUPLICATE_SIMILARITY_THRESHOLD):
     return SequenceMatcher(None, (a or "").lower(), (b or "").lower()).ratio() >= threshold
 
 
-def flag_duplicates(account, candidates):
-    """Attach is_duplicate + index to each candidate, comparing against
-    existing transactions on the same account by exact date + exact
-    amount + a fuzzy-matched payee. Payee against payee: a line's
-    description is often a bank's generic type ("Kaartbetaling"), which
-    would match unrelated lines of the same amount. Each existing transaction
-    is claimed by the first matching candidate in file order, so two
-    identical payments on one day aren't both hidden by a single earlier
-    one.
+def match_existing(existing_rows, candidates):
+    """Which existing transaction each candidate is already in the ledger
+    as, by exact date + exact amount + a fuzzy-matched payee. Payee against
+    payee: a line's description is often a bank's generic type
+    ("Kaartbetaling"), which would match unrelated lines of the same amount.
+    Each existing transaction is claimed by the first matching candidate in
+    order, so two identical payments on one day aren't both hidden by a
+    single earlier one. Returns {candidate key: transaction}, keyed by the
+    candidate's reference or else its position.
     """
-    from transactions.models import Transaction
-
     by_date_amount = {}
-    # The bank's lines only: a split transaction is compared, its parts
-    # never are, and neither is a value adjustment.
-    for txn in Transaction.objects.ledger_rows().excluding_adjustments().filter(account=account):
+    for txn in existing_rows:
         by_date_amount.setdefault((txn.date.isoformat(), txn.amount_cents), []).append(txn)
 
     claimed = set()
-    flagged = []
+    matches = {}
     for index, candidate in enumerate(candidates):
         key = (candidate["date"], candidate["amount_cents"])
         match = next(
@@ -213,9 +209,24 @@ def flag_duplicates(account, candidates):
         )
         if match is not None:
             claimed.add(match.pk)
-        # An index numbered across all of an import's accounts is kept.
-        flagged.append({"index": index, **candidate, "is_duplicate": match is not None})
-    return flagged
+            matches[candidate.get("reference", index)] = match
+    return matches
+
+
+def flag_duplicates(account, candidates):
+    """Attach is_duplicate + index to each candidate, comparing against
+    existing transactions on the same account with match_existing."""
+    from transactions.models import Transaction
+
+    # The bank's lines only: a split transaction is compared, its parts
+    # never are, and neither is a value adjustment.
+    existing = Transaction.objects.ledger_rows().excluding_adjustments().filter(account=account)
+    matches = match_existing(existing, candidates)
+    # An index numbered across all of an import's accounts is kept.
+    return [
+        {"index": index, **candidate, "is_duplicate": index in matches}
+        for index, candidate in enumerate(candidates)
+    ]
 
 
 def flag_transfer_matches(account, candidates):

@@ -1,0 +1,33 @@
+# Fetches new lines from linked banks. Twice a day stays well under the 4
+# background fetches a day many banks allow, and finishes at once when bank
+# sync isn't set up. Forbid: a run never starts while another is going.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: bank-sync
+  namespace: reconciled
+spec:
+  schedule: "30 6,18 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        spec:
+          restartPolicy: Never
+          # Needed only if the GHCR packages are private - see k8s/README.md.
+          # imagePullSecrets:
+          #   - name: ghcr-pull
+          containers:
+            - name: sync
+              image: ghcr.io/vmangelschots/reconciled-backend:latest
+              imagePullPolicy: Always
+              command: ["python", "manage.py", "sync_banks"]
+              envFrom:
+                - configMapRef: { name: reconciled-config }
+                - secretRef: { name: reconciled-secrets }
+              resources:
+                requests: { cpu: 50m, memory: 192Mi }
+                limits: { memory: 512Mi }

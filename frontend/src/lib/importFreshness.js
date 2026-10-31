@@ -9,10 +9,11 @@ export function plural(n, one, many) {
   return `${n} ${n === 1 ? one : many}`;
 }
 
-export function freshness(lastImportDate) {
-  if (!lastImportDate) return { text: "No imports yet", stale: true, days: Infinity };
+export function freshness(lastImportDate, linked = false) {
+  if (!lastImportDate) return { text: linked ? "Not synced yet" : "No imports yet", stale: true, days: Infinity };
   const days = daysSince(lastImportDate);
-  const text = days <= 0 ? "imported today" : `imported ${plural(days, "day", "days")} ago`;
+  const verb = linked ? "synced" : "imported";
+  const text = days <= 0 ? `${verb} today` : `${verb} ${plural(days, "day", "days")} ago`;
   return { text, stale: days > STALE_IMPORT_DAYS, days };
 }
 
@@ -20,8 +21,9 @@ export function freshness(lastImportDate) {
 // when there are several. Null when nothing is stale.
 export function staleImports(accounts) {
   const stale = accounts
-    .filter((a) => !VALUED_TYPES.has(a.account_type))
-    .map((a) => ({ ...a, fresh: freshness(a.last_import_date) }))
+    // The reconnect line covers a bank whose consent has ended.
+    .filter((a) => !VALUED_TYPES.has(a.account_type) && !a.bank_ended)
+    .map((a) => ({ ...a, fresh: freshness(a.last_import_date, a.bank_linked) }))
     .filter((a) => a.fresh.stale)
     .sort((a, b) => b.fresh.days - a.fresh.days);
   if (stale.length === 0) return null;
@@ -29,8 +31,8 @@ export function staleImports(accounts) {
   let text = `${stale.length} accounts not imported this week`;
   if (stale.length === 1) {
     text = stalest.last_import_date
-      ? `${stalest.name}: last import ${plural(stalest.fresh.days, "day", "days")} ago`
-      : `${stalest.name}: no imports yet`;
+      ? `${stalest.name}: last ${stalest.bank_linked ? "sync" : "import"} ${plural(stalest.fresh.days, "day", "days")} ago`
+      : `${stalest.name}: no ${stalest.bank_linked ? "syncs" : "imports"} yet`;
   }
   return { text, stalest };
 }

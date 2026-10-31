@@ -55,6 +55,20 @@ go in `10-config.yaml` if the defaults don't suit you:
 Restart the backend after changing any of them:
 `kubectl -n reconciled rollout restart deploy/backend`.
 
+### Optional: bank sync
+
+Register an application in the [Enable Banking](https://enablebanking.com/)
+Control Panel, with `https://<your hostname>/settings/banks` as a redirect
+URL, and activate it by linking your own accounts. That mode is for personal
+use. Add `ENABLE_BANKING_APP_ID` and `ENABLE_BANKING_PRIVATE_KEY` to
+`15-secret.yaml`, then restart the backend. Connect your banks under
+Settings. Transactions then pass through Enable Banking.
+
+`35-bank-sync.yaml` syncs at 06:30 and 18:30 UTC. Without the keys it finishes
+without doing anything. It uses the same image as the backend, so keep its
+tag in step when you pin one. Consent lasts about 180 days at most banks; the
+Overview says when to reconnect.
+
 `BUDGET_APP_USERNAME` / `BUDGET_APP_PASSWORD` is the account you log in
 with. It's created on the backend's first start and never changed
 afterwards. To change the password later, run

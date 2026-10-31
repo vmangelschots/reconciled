@@ -783,3 +783,57 @@ describe("OverviewPage balance history", () => {
     expect(recent.closest("section").parentElement).toBe(worth.closest("section").parentElement);
   });
 });
+
+describe("bank sync in needs attention", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"], now: new Date(2026, 9, 24, 12) });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function attentionLink(name) {
+    return (await screen.findByText(name)).closest("a");
+  }
+
+  it("warns before a consent ends and after", async () => {
+    overviewApi.getOverview.mockResolvedValue(
+      overview({
+        attention: {
+          ...overview().attention,
+          reconnect: [
+            { bank_name: "Crelan", days_left: 12, ended: false },
+            { bank_name: "Revolut", days_left: -3, ended: true },
+          ],
+        },
+      }),
+    );
+    renderPage();
+    expect(await attentionLink("Reconnect Crelan: 12 days left")).toHaveAttribute("href", "/settings");
+    expect(await screen.findByText("Reconnect Revolut: sync stopped 3 days ago")).toBeInTheDocument();
+  });
+
+  it("opens Settings for a linked account that stopped syncing", async () => {
+    overviewApi.getOverview.mockResolvedValue(
+      overview({
+        accounts: [{ id: 1, name: "Crelan", balance_cents: 0, last_import_date: "2026-10-12", bank_linked: true }],
+      }),
+    );
+    renderPage();
+    expect(await attentionLink("Crelan: last sync 12 days ago")).toHaveAttribute("href", "/settings");
+  });
+
+  it("leaves an ended connection to the reconnect line", async () => {
+    overviewApi.getOverview.mockResolvedValue(
+      overview({
+        accounts: [
+          { id: 1, name: "Crelan", balance_cents: 0, last_import_date: "2026-10-12", bank_linked: true, bank_ended: true },
+        ],
+      }),
+    );
+    renderPage();
+    await screen.findByText("Needs attention");
+    expect(screen.queryByText(/last sync/)).not.toBeInTheDocument();
+  });
+});

@@ -107,8 +107,10 @@ it is fixed, in this order: guesses to review (to Review), uncategorized
 transactions with this month's uncategorized spending (to Review),
 category warnings (to Budgets on the chosen month), yearly warnings (to
 Budgets on the chosen month), missed loan payments (to the loan's
-schedule), then a stale import (to Import). When nothing needs
-attention, the panel SHALL show one line saying everything is in order.
+schedule), bank connections to reconnect (to Settings), then a stale
+import (to Import, or to Settings for a linked account). When nothing
+needs attention, the panel SHALL show one line saying everything is in
+order.
 
 #### Scenario: Everything that needs attention
 - **WHEN** on 24 October 12 guesses wait for review, 4 transactions are
@@ -152,11 +154,12 @@ SHALL be rounded down.
 
 ### Requirement: Stale import reminder
 Needs attention SHALL show one stale-import line when any active account
-was last imported more than 7 days ago or never. Investment, property
-and loan accounts SHALL NOT count. With one such account
-the line SHALL name it and say how long ago; with several it SHALL say
-how many. The line SHALL open Import on that account, or on the stalest
-one.
+was last imported or synced more than 7 days ago or never. Investment,
+property and loan accounts SHALL NOT count, nor SHALL an account whose
+connection has ended, which the reconnect line covers. With one such
+account the line SHALL name it and say how long ago; with several it
+SHALL say how many. The line SHALL open Import on that account, or on the
+stalest one, or Settings when that account is linked to a bank.
 
 #### Scenario: A week without an import
 - **WHEN** today is 24 October, "Crelan" was last imported on 12 October
@@ -177,6 +180,35 @@ one.
 - **WHEN** every everyday account was imported 2 days ago and "House"
   (property) was never imported
 - **THEN** no import item is shown
+
+#### Scenario: A sync counts as an import
+- **WHEN** today is 24 October, "Crelan" was last imported from a file on
+  2 October and last synced on 23 October
+- **THEN** no import item is shown for "Crelan"
+
+#### Scenario: A sync that stopped working
+- **WHEN** today is 24 October, "Crelan" is linked to a bank, and its last
+  successful sync was on 12 October
+- **THEN** needs attention shows "Crelan: last sync 12 days ago", opening
+  Settings
+
+### Requirement: Bank reconnect reminder
+Needs attention SHALL show a line for each bank connection whose consent
+ends within 14 days or has ended, naming the bank and saying when. The line
+SHALL open the bank connections in Settings.
+
+#### Scenario: Consent ending soon
+- **WHEN** Crelan's consent ends in 12 days
+- **THEN** needs attention shows "Reconnect Crelan: 12 days left"
+
+#### Scenario: Consent has ended
+- **WHEN** Crelan's consent ended 3 days ago
+- **THEN** needs attention shows "Reconnect Crelan: sync stopped 3 days
+  ago" and no stale-import line for its accounts
+
+#### Scenario: Plenty of time left
+- **WHEN** Crelan's consent ends in 60 days
+- **THEN** no reconnect line is shown
 
 ### Requirement: Recent transactions
 The overview SHALL list the 8 most recent transactions across the active

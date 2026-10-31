@@ -30,8 +30,8 @@ transfer links, value adjustments, notes and category guesses; categories
 and tabs; monthly limits; yearly budgets; the budget settings; recurring
 transactions; loan setups and their balance corrections, with the links
 between scheduled adjustments and their installments, corrections and
-payments; the remembered import mappings; and when each account was last
-imported into. Rows SHALL keep their ids and their created and updated
+payments; the remembered import mappings; when each account was last
+imported into; and bank account links with their seen bank lines. Rows SHALL keep their ids and their created and updated
 times.
 
 #### Scenario: A transfer and a split survive a round trip
@@ -66,9 +66,15 @@ times.
   adjustment is still linked to it, and the schedule is the same as
   before
 
+#### Scenario: A deleted line stays deleted after a restore
+- **WHEN** a synced line was deleted before a backup was made, and that
+  backup is restored and the bank reports the line again
+- **THEN** it is not created again
+
 ### Requirement: What a backup leaves out
 A backup SHALL NOT hold login users or their passwords. It SHALL NOT hold
-imports that were never committed, or the content of any uploaded bank file.
+imports that were never committed, the content of any uploaded bank file,
+bank sessions or Enable Banking credentials.
 
 #### Scenario: No users in the file
 - **WHEN** the user downloads a backup
@@ -78,6 +84,11 @@ imports that were never committed, or the content of any uploaded bank file.
 - **WHEN** a CSV was uploaded but its import was never committed, and the
   user downloads a backup
 - **THEN** the backup has neither that import nor the file's lines
+
+#### Scenario: Reconnect after a restore
+- **WHEN** a backup with a link from "Crelan" to a bank account is restored
+- **THEN** the link is kept, shows as needing to reconnect, and reconnecting
+  that bank resumes it, so no bank access came from the file
 
 ### Requirement: Check a backup before restoring
 After the user picks a file to restore, the Settings page SHALL show what
