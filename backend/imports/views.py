@@ -9,13 +9,16 @@ from rest_framework.parsers import JSONParser, MultiPartParser
 from rest_framework.response import Response
 
 from accounts.models import Account
-from transactions.adjustments import recompute_if_valued
 from transactions.ai import get_guesser
-from transactions.categorize import categorize
-from transactions.loans import sync_loans
 from transactions.models import Transaction
 from transactions.transfers import link_pair
 
+from .ledger import (
+    confirm_transfer_counterpart,
+    new_transaction,
+    settle_accounts,
+    settle_new_transactions,
+)
 from .models import AccountImportSettings, ImportSession
 from .presets import PRESETS_BY_KEY, detect_preset, pair_pocket_moves, products_in
 from .serializers import ImportSessionSerializer
@@ -196,16 +199,10 @@ class ImportSessionViewSet(
             for c in to_create:
                 account = accounts[c["account_id"]]
                 notes = c["description"] if c["description"] != c["payee"] else ""
-                if self._confirm_transfer_counterpart(account, c, notes):
+                if confirm_transfer_counterpart(account, c, notes):
                     confirmed += 1
                     continue
-                new_rows[c["index"]] = Transaction(
-                    account=account,
-                    date=c["date"],
-                    amount_cents=c["amount_cents"],
-                    payee=c["payee"],
-                    notes=notes,
-                )
+                new_rows[c["index"]] = new_transaction(account, c)
             created = Transaction.objects.bulk_create(new_rows.values())
 
             # A pocket move whose two sides were both created becomes a
@@ -217,25 +214,18 @@ class ImportSessionViewSet(
                     link_pair(new_rows[c["index"]], new_rows[pair["index"]])
                     pocket_moves.update((c["index"], pair["index"]))
 
-            # bulk_create sends no signals, so value adjustments in the
-            # imported accounts are brought up to date here.
-            for account_id in {row.account_id for row in created}:
-                recompute_if_valued(account_id)
+            settle_accounts({row.account_id for row in created})
 
             session.status = ImportSession.Status.COMMITTED
             session.save(update_fields=["status"])
             session.imported_accounts.set(account_ids)
             self._remember_choices(session)
 
-        # Guessing runs after the import has committed, as a second save: a
-        # slow or failing AI step can never roll the import back, and the
-        # Review page's backfill can redo it. Only freshly created rows are
-        # guessed: a line that confirmed a transfer counterpart or became a
-        # pocket move stays a transfer.
-        categorized = categorize([t for index, t in new_rows.items() if index not in pocket_moves])
-        # After guessing, so a matched loan payment ends with the loan's
-        # category rather than a guess - see openspec/specs/loan-schedules.
-        sync_loans(timezone.localdate())
+        # Only freshly created rows are guessed: a line that confirmed a
+        # transfer counterpart or became a pocket move stays a transfer.
+        categorized = settle_new_transactions(
+            [t for index, t in new_rows.items() if index not in pocket_moves]
+        )
         return Response(
             {
                 "created_count": len(created),
@@ -244,33 +234,6 @@ class ImportSessionViewSet(
             },
             status=201,
         )
-
-    def _confirm_transfer_counterpart(self, account, candidate, notes):
-        """If the candidate matched a created transfer counterpart, overwrite
-        that counterpart with the bank's line (keeping the link) and return
-        True. If the counterpart is gone or no longer unconfirmed since the
-        preview, return False so the line is created normally."""
-        match = candidate.get("transfer_match")
-        if not match:
-            return False
-        txn = (
-            Transaction.objects.select_for_update()
-            .filter(
-                pk=match["transaction_id"],
-                account=account,
-                created_by_transfer=True,
-                transfer_counterpart__isnull=False,
-            )
-            .first()
-        )
-        if txn is None:
-            return False
-        txn.date = candidate["date"]
-        txn.payee = candidate["payee"]
-        txn.notes = notes
-        txn.created_by_transfer = False
-        txn.save(update_fields=["date", "payee", "notes", "created_by_transfer", "updated_at"])
-        return True
 
     def _parse_preset(self, session):
         reader = csv.DictReader(io.StringIO(session.raw_content), delimiter=session.delimiter)

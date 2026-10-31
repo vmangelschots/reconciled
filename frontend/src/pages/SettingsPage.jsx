@@ -2,6 +2,7 @@ import { Download, Loader2, RotateCcw, TriangleAlert } from "lucide-react";
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { downloadBackup, readBackupSummary, restoreBackup } from "../api/backup";
+import { BankConnections } from "../components/BankConnections";
 import { Button } from "../components/ui/Button";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
 import {
@@ -80,6 +81,8 @@ export function SettingsPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader title="Settings" />
+
+      <BankConnections />
 
       <Card>
         <CardHeader>

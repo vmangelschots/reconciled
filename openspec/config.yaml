@@ -23,10 +23,10 @@ context: |
   a PocketSmith-style cash-flow forecast projects future account balances
   forward from recurring transactions/bills and scheduled income.
 
-  Transaction entry for v1: CSV and OFX file import (upload a bank export,
-  map columns, dedupe against existing transactions). No live bank sync
-  (e.g. Plaid/SimpleFIN) in v1 - do not propose it as in-scope work unless
-  the user asks.
+  Transaction entry: CSV and OFX file import (upload a bank export, map
+  columns, dedupe against existing transactions) and bank sync through
+  Enable Banking (see openspec/specs/bank-sync). Other providers (e.g.
+  Plaid/SimpleFIN) are not in scope unless the user asks.
 
   Assume single-user / single-household use unless the user says otherwise -
   no multi-tenant account system needed for v1.

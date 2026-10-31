@@ -9,6 +9,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { OverviewPage } from "./pages/OverviewPage";
 import { ReportsPage } from "./pages/ReportsPage";
 import { ReviewPage } from "./pages/ReviewPage";
+import { BankRedirectPage } from "./pages/BankRedirectPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { LoanSchedulePage } from "./pages/LoanSchedulePage";
 import { TabPage } from "./pages/TabPage";
@@ -37,6 +38,7 @@ export default function App() {
         <Route path="forecast" element={<ForecastingPage />} />
         <Route path="reports" element={<ReportsPage />} />
         <Route path="settings" element={<SettingsPage />} />
+        <Route path="settings/banks" element={<BankRedirectPage />} />
         <Route path="tabs/:id" element={<TabPage />} />
       </Route>
     </Routes>

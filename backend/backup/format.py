@@ -44,9 +44,12 @@ BACKED_UP_MODELS = [
     "forecasting.RecurringTransaction",
     "imports.ImportSession",
     "imports.AccountImportSettings",
+    "banksync.BankAccountLink",
+    "banksync.SeenBankLine",
 ]
-EXCLUDED_MODELS = []
-DATA_APPS = ["accounts", "budgets", "transactions", "forecasting", "imports"]
+# Bank access: a restore clears it, and links wait to be reconnected.
+EXCLUDED_MODELS = ["banksync.BankConnection"]
+DATA_APPS = ["accounts", "budgets", "transactions", "forecasting", "imports", "banksync"]
 
 NOT_A_BACKUP = "This file isn't a Reconciled backup."
 UNREADABLE = "This backup can't be read. It may be damaged or cut off."
@@ -64,7 +67,13 @@ def backed_up_models():
 
 def _rows(model):
     ImportSession = apps.get_model("imports.ImportSession")
+    BankAccountLink = apps.get_model("banksync.BankAccountLink")
     queryset = model.objects.order_by("pk")
+    if model is BankAccountLink:
+        rows = serializers.serialize("python", queryset)
+        for row in rows:
+            row["fields"].update(connection=None, account_uid="")
+        return rows
     if model is not ImportSession:
         return serializers.serialize("python", queryset)
     # Only committed imports, and only when they happened and where they
@@ -166,7 +175,9 @@ def restore_backup(objects):
     models = backed_up_models()
     ImportSession = apps.get_model("imports.ImportSession")
     imported_accounts = ImportSession.imported_accounts.through
-    tables = ", ".join(connection.ops.quote_name(m._meta.db_table) for m in [*models, imported_accounts])
+    BankConnection = apps.get_model("banksync.BankConnection")
+    cleared = [*models, imported_accounts, BankConnection]
+    tables = ", ".join(connection.ops.quote_name(m._meta.db_table) for m in cleared)
     try:
         with transaction.atomic(), connection.cursor() as cursor:
             # Foreign keys are checked at commit (deferred). Run any pending

@@ -63,6 +63,7 @@ INSTALLED_APPS = [
     "forecasting",
     "reports",
     "backup",
+    "banksync",
 ]
 
 MIDDLEWARE = [
@@ -218,6 +219,12 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 AI_CATEGORIZATION_ENABLED = env_bool("AI_CATEGORIZATION_ENABLED", default=True)
 AI_CATEGORIZATION_MODEL = os.environ.get("AI_CATEGORIZATION_MODEL", "gpt-6-luna")
 AI_CATEGORIZATION_DEADLINE = float(os.environ.get("AI_CATEGORIZATION_DEADLINE", "20"))
+
+
+# Bank sync - see openspec/specs/bank-sync. Off unless both are set. The
+# key is the application's RSA private key, in PEM form.
+ENABLE_BANKING_APP_ID = os.environ.get("ENABLE_BANKING_APP_ID", "")
+ENABLE_BANKING_PRIVATE_KEY = os.environ.get("ENABLE_BANKING_PRIVATE_KEY", "").replace("\\n", "\n")
 
 
 # Logging - Django's own default config only sends 500 tracebacks to

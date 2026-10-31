@@ -12,6 +12,8 @@ vi.mock("../api/backup", async () => {
   return { ...actual, downloadBackup: vi.fn(), restoreBackup: vi.fn() };
 });
 
+vi.mock("../api/bankSync", () => ({ getBankSync: vi.fn().mockResolvedValue({ enabled: false }) }));
+
 const BACKUP = {
   app: "reconciled",
   format_version: 1,

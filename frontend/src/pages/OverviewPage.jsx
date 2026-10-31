@@ -179,7 +179,7 @@ function accountFreshness(account) {
     const text = account.last_value_date ? `value set ${formatDayMonth(account.last_value_date)}` : "No value set";
     return { text, stale: false, days: 0 };
   }
-  return freshness(account.last_import_date);
+  return freshness(account.last_import_date, account.bank_linked);
 }
 
 function AccountsTile({ accounts }) {
@@ -208,7 +208,7 @@ function staleImportItem(accounts) {
   if (!stale) return null;
   return {
     key: "import",
-    to: `/import?account=${stale.stalest.id}`,
+    to: stale.stalest.bank_linked ? "/settings" : `/import?account=${stale.stalest.id}`,
     icon: <Upload className="h-4 w-4" />,
     primary: stale.text,
   };
@@ -248,9 +248,30 @@ function attentionItems(data, month, isCurrent) {
   }
   for (const y of attention.yearly ?? []) items.push(yearlyItem(y, month));
   for (const loan of attention.missed_loans ?? []) items.push(missedLoanItem(loan));
+  for (const bank of attention.reconnect ?? []) items.push(reconnectItem(bank));
   const stale = staleImportItem(data.accounts);
   if (stale) items.push(stale);
   return items;
+}
+
+// A bank consent that ended or ends soon - see specs/overview, "Bank
+// reconnect reminder". days_left is null for a link restored from a backup.
+function reconnectText(bank) {
+  if (bank.days_left === null) return `Reconnect ${bank.bank_name}`;
+  if (bank.ended) {
+    const days = -bank.days_left;
+    return `Reconnect ${bank.bank_name}: sync stopped ${days <= 0 ? "today" : `${plural(days, "day", "days")} ago`}`;
+  }
+  return `Reconnect ${bank.bank_name}: ${plural(bank.days_left, "day", "days")} left`;
+}
+
+function reconnectItem(bank) {
+  return {
+    key: `reconnect-${bank.bank_name}`,
+    to: "/settings",
+    icon: <Landmark className="h-4 w-4 text-warning" />,
+    primary: reconnectText(bank),
+  };
 }
 
 // A loan installment whose payment wasn't seen - see specs/overview,

@@ -9,6 +9,7 @@ openspec/specs/account-transfers.
 from datetime import timedelta
 
 from django.db import transaction as db_transaction
+from django.db.models import Q
 
 from accounts.models import Loan
 
@@ -131,12 +132,66 @@ def link_pair(a, b):
     never by the closest-date search, which could pick another line with
     the same amount. Both came from the bank, so neither is marked as
     created by the transfer and later edits stay independent."""
-    a.category = None
-    b.category = None
-    a.transfer_counterpart = b
-    b.transfer_counterpart = a
-    a.save(update_fields=["category", "transfer_counterpart", "updated_at"])
-    b.save(update_fields=["category", "transfer_counterpart", "updated_at"])
+    for line, other in ((a, b), (b, a)):
+        line.category = None
+        # Whatever was guessed goes with the category.
+        line.category_confirmed = True
+        line.category_source = Transaction.CategorySource.MANUAL
+        line.category_reason = ""
+        line.transfer_counterpart = other
+        line.save(
+            update_fields=[
+                "category",
+                "category_confirmed",
+                "category_source",
+                "category_reason",
+                "transfer_counterpart",
+                "updated_at",
+            ]
+        )
+
+
+def _linkable(account_ids):
+    """Lines automatic linking may touch: never a choice of the user's - a
+    confirmed category, a split or a part of one, a line already linked or
+    matched to a loan payment - and only in linked accounts."""
+    return (
+        Transaction.objects.counted_rows()
+        .ledger_rows()
+        .excluding_adjustments()
+        .filter(
+            Q(category__isnull=True) | Q(category_confirmed=False),
+            account__in=account_ids,
+            transfer_counterpart__isnull=True,
+            loan_adjustment__isnull=True,
+        )
+    )
+
+
+def _opposite_lines(line, account_ids):
+    window = timedelta(days=TRANSFER_MATCH_DAYS)
+    return list(
+        _linkable(account_ids)
+        .exclude(account=line.account_id)
+        .filter(
+            amount_cents=-line.amount_cents,
+            date__gte=line.date - window,
+            date__lte=line.date + window,
+        )
+    )
+
+
+def auto_link_transfers(new_lines, account_ids):
+    """Link each of `new_lines` (just synced) with its other side in another
+    of `account_ids`, when each is the other's single match. See
+    openspec/specs/bank-sync."""
+    for line in new_lines:
+        line = _linkable(account_ids).filter(pk=line.pk).first()
+        if line is None:
+            continue
+        matches = _opposite_lines(line, account_ids)
+        if len(matches) == 1 and [t.pk for t in _opposite_lines(matches[0], account_ids)] == [line.pk]:
+            link_pair(line, matches[0])
 
 
 @db_transaction.atomic

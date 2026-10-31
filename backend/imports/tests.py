@@ -869,7 +869,7 @@ class ImportCategorizationTests(TestCase):
         # Even if categorizing itself blows up (or the worker dies), the
         # created transactions and the committed session are already saved.
         self.client.raise_request_exception = False
-        with mock.patch("imports.views.categorize", side_effect=RuntimeError("worker killed")):
+        with mock.patch("imports.ledger.categorize", side_effect=RuntimeError("worker killed")):
             with self.assertLogs("django.request", "ERROR"):
                 response = self.import_rows(self.ROWS)
 

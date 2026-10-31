@@ -6,6 +6,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.models import TIER_ORDER, Account, Loan, tier_position
+from banksync.models import BankAccountLink, BankConnection
 from budgets.models import Category
 from budgets.summary import budget_rows
 from budgets.utils import month_range, parse_month
@@ -28,6 +29,7 @@ from .report import months_in, spending_cell, spending_report
 from .spending import active_transactions, month_spending
 
 UNCATEGORIZED = "uncategorized"
+RECONNECT_WARNING_DAYS = 14
 
 
 def _month_param(request, name):
@@ -351,6 +353,37 @@ def _attention_missed_loans(today):
     return missed
 
 
+def _link_ended(link):
+    return link.connection is None or link.connection.ended
+
+
+def _last_import_date(last_import, link):
+    """The later of the last file import and the last successful sync."""
+    moments = [m for m in (last_import, link and link.last_synced_at) if m]
+    return timezone.localdate(max(moments)) if moments else None
+
+
+def _attention_reconnect():
+    """Banks whose consent ended or ends within RECONNECT_WARNING_DAYS, and
+    any restored link that hasn't got a connection yet. See
+    openspec/specs/overview."""
+    today = timezone.localdate()
+    rows = []
+    for connection in BankConnection.objects.all():
+        days_left = (timezone.localdate(connection.valid_until) - today).days
+        if connection.ended and days_left > 0:
+            # The bank ended it early.
+            days_left = 0
+        if connection.ended or days_left <= RECONNECT_WARNING_DAYS:
+            rows.append(
+                {"bank_name": connection.bank_name, "days_left": days_left, "ended": connection.ended}
+            )
+    waiting = BankAccountLink.objects.filter(connection__isnull=True, account__archived=False)
+    for bank_name in sorted(set(waiting.values_list("bank_name", flat=True))):
+        rows.append({"bank_name": bank_name, "days_left": None, "ended": True})
+    return rows
+
+
 class OverviewView(APIView):
     """Every figure the overview shows for one month across all active
     accounts, in one request - see openspec/specs/overview."""
@@ -374,6 +407,7 @@ class OverviewView(APIView):
             .annotate(last=Max("updated_at"))
             .values_list("imported_accounts", "last")
         )
+        links = {link.account_id: link for link in BankAccountLink.objects.select_related("connection")}
         last_values = dict(
             Transaction.objects.filter(account__in=accounts, is_adjustment=True)
             .values("account")
@@ -387,7 +421,9 @@ class OverviewView(APIView):
                 "account_type": a.account_type,
                 "tier": a.tier,
                 "balance_cents": a.current_balance_cents,
-                "last_import_date": timezone.localdate(last_imports[a.id]) if a.id in last_imports else None,
+                "last_import_date": _last_import_date(last_imports.get(a.id), links.get(a.id)),
+                "bank_linked": a.id in links,
+                "bank_ended": a.id in links and _link_ended(links[a.id]),
                 "last_value_date": last_values.get(a.id),
             }
             for a in accounts
@@ -455,6 +491,7 @@ class OverviewView(APIView):
                     "categories": _attention_categories(rows, pace),
                     "yearly": _attention_yearly(yearly, current),
                     "missed_loans": _attention_missed_loans(today),
+                    "reconnect": _attention_reconnect(),
                 },
                 "recent": [_recent_row(t) for t in recent],
             }
