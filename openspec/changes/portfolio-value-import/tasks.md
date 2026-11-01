@@ -2,10 +2,10 @@
 
 ## 1. Reading the file
 
-- [ ] 1.1 Add a made-up sample export at `backend/accounts/testdata/portfolio_sample.xml` covering references, an account defined as `accountTo`, a portfolio inside `crossEntry`, `latest` and `prices`, and every known transaction type. Verify no real names or figures from `my.xml` are in it. Also keep them out of tests, specs and commit messages.
-- [ ] 1.2 Add `accounts/portfolio_file.py`: safe parsing, reference resolving, owners found by shape, shares and cash from the sign tables, per-holding rounding. Verify in `accounts/tests_portfolio_file.py` with the "Value worked out from the file" scenarios.
-- [ ] 1.3 Add the refusals: not XML or not a `client` root (encrypted, binary), DOCTYPE, version below 70, unknown type, unknown reference form, transaction reached twice or not at all, negative shares, held security without a price, non-euro base, holding or non-zero cash balance. Verify each with a test, including the external entity scenario.
-- [ ] 1.4 Run the parser on `my.xml` locally without committing it, and verify the total equals the one Portfolio Performance shows, to the cent.
+- [x] 1.1 Add a made-up sample export at `backend/accounts/testdata/portfolio_sample.xml` covering references, an account defined as `accountTo`, a portfolio inside `crossEntry`, `latest` and `prices`, and every known transaction type. Verify no real names or figures from `my.xml` are in it. Also keep them out of tests, specs and commit messages.
+- [x] 1.2 Add `accounts/portfolio_file.py`: safe parsing, reference resolving, owners found by shape, shares and cash from the sign tables, per-holding rounding. Verify in `accounts/tests_portfolio_file.py` with the "Value worked out from the file" scenarios.
+- [x] 1.3 Add the refusals: not XML or not a `client` root (encrypted, binary), DOCTYPE, version below 70, unknown type, unknown reference form, transaction reached twice or not at all, negative shares, held security without a price, non-euro base, holding or non-zero cash balance. Verify each with a test, including the external entity scenario.
+- [x] 1.4 Run the parser on `my.xml` locally without committing it, and verify the total equals the one Portfolio Performance shows, to the cent.
 
 ## 2. API
 

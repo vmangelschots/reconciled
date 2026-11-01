@@ -1,0 +1,186 @@
+<!-- A made-up Portfolio Performance export, shaped like a real one: objects
+     are defined where they first appear and referenced by relative path
+     after that, so an account and two portfolios sit inside transactions.
+     World: 10 bought, 3 moved between portfolios, at the 101.00 in <latest>.
+     Emerging: 4 delivered, at 50.00, its newest entry in <prices>.
+     Old US fund: in and out again, in USD, without a price. -->
+<client>
+  <version>70</version>
+  <baseCurrency>EUR</baseCurrency>
+  <securities>
+    <security>
+      <uuid>sec-world</uuid>
+      <name>World fund</name>
+      <currencyCode>EUR</currencyCode>
+      <prices>
+        <price t="2026-10-28" v="9900000000"/>
+        <price t="2026-10-29" v="10000000000"/>
+      </prices>
+      <latest t="2026-10-30" v="10100000000"/>
+      <isRetired>false</isRetired>
+    </security>
+    <security>
+      <uuid>sec-emerging</uuid>
+      <name>Emerging fund</name>
+      <currencyCode>EUR</currencyCode>
+      <prices>
+        <price t="2026-10-28" v="4900000000"/>
+        <price t="2026-10-29" v="5000000000"/>
+      </prices>
+      <isRetired>false</isRetired>
+    </security>
+    <security>
+      <uuid>sec-old-us</uuid>
+      <name>Old US fund</name>
+      <currencyCode>USD</currencyCode>
+      <prices/>
+      <isRetired>false</isRetired>
+    </security>
+  </securities>
+  <accounts>
+    <account>
+      <uuid>cash-broker</uuid>
+      <name>Broker</name>
+      <currencyCode>EUR</currencyCode>
+      <isRetired>false</isRetired>
+      <transactions>
+        <account-transaction>
+          <uuid>tx-deposit</uuid>
+          <date>2026-01-05T00:00</date>
+          <currencyCode>EUR</currencyCode>
+          <amount>300000</amount>
+          <shares>0</shares>
+          <type>DEPOSIT</type>
+        </account-transaction>
+        <account-transaction>
+          <uuid>tx-buy-cash</uuid>
+          <date>2026-01-06T00:00</date>
+          <currencyCode>EUR</currencyCode>
+          <amount>101000</amount>
+          <security reference="../../../../../securities/security"/>
+          <crossEntry class="buysell">
+            <portfolio>
+              <uuid>port-main</uuid>
+              <name>Main</name>
+              <isRetired>false</isRetired>
+              <referenceAccount reference="../../../../.."/>
+              <transactions>
+                <portfolio-transaction>
+                  <uuid>tx-buy-shares</uuid>
+                  <date>2026-01-06T00:00</date>
+                  <currencyCode>EUR</currencyCode>
+                  <amount>101000</amount>
+                  <security reference="../../../../../../../../../securities/security"/>
+                  <crossEntry class="buysell" reference="../../.."/>
+                  <shares>1000000000</shares>
+                  <type>BUY</type>
+                </portfolio-transaction>
+                <portfolio-transaction>
+                  <uuid>tx-move-out</uuid>
+                  <date>2026-02-01T00:00</date>
+                  <currencyCode>EUR</currencyCode>
+                  <amount>30300</amount>
+                  <security reference="../../../../../../../../../securities/security"/>
+                  <crossEntry class="portfolio-transfer">
+                    <portfolioFrom reference="../../../.."/>
+                    <transactionFrom reference="../.."/>
+                    <portfolioTo>
+                      <uuid>port-second</uuid>
+                      <name>Second</name>
+                      <isRetired>false</isRetired>
+                      <referenceAccount reference="../../../../../../../../.."/>
+                      <transactions>
+                        <portfolio-transaction>
+                          <uuid>tx-move-in</uuid>
+                          <date>2026-02-01T00:00</date>
+                          <currencyCode>EUR</currencyCode>
+                          <amount>30300</amount>
+                          <security reference="../../../../../../../../../../../../../securities/security"/>
+                          <crossEntry class="portfolio-transfer" reference="../../.."/>
+                          <shares>300000000</shares>
+                          <type>TRANSFER_IN</type>
+                        </portfolio-transaction>
+                      </transactions>
+                    </portfolioTo>
+                    <transactionTo reference="../portfolioTo/transactions/portfolio-transaction"/>
+                  </crossEntry>
+                  <shares>300000000</shares>
+                  <type>TRANSFER_OUT</type>
+                </portfolio-transaction>
+                <portfolio-transaction>
+                  <uuid>tx-emerging-in</uuid>
+                  <date>2026-03-01T00:00</date>
+                  <currencyCode>EUR</currencyCode>
+                  <amount>20000</amount>
+                  <security reference="../../../../../../../../../securities/security[2]"/>
+                  <shares>400000000</shares>
+                  <type>DELIVERY_INBOUND</type>
+                </portfolio-transaction>
+                <portfolio-transaction>
+                  <uuid>tx-old-in</uuid>
+                  <date>2026-03-02T00:00</date>
+                  <currencyCode>USD</currencyCode>
+                  <amount>10000</amount>
+                  <security reference="../../../../../../../../../securities/security[3]"/>
+                  <shares>500000000</shares>
+                  <type>DELIVERY_INBOUND</type>
+                </portfolio-transaction>
+                <portfolio-transaction>
+                  <uuid>tx-old-out</uuid>
+                  <date>2026-03-03T00:00</date>
+                  <currencyCode>USD</currencyCode>
+                  <amount>10000</amount>
+                  <security reference="../../../../../../../../../securities/security[3]"/>
+                  <shares>500000000</shares>
+                  <type>DELIVERY_OUTBOUND</type>
+                </portfolio-transaction>
+              </transactions>
+            </portfolio>
+            <portfolioTransaction reference="../portfolio/transactions/portfolio-transaction"/>
+            <account reference="../../../.."/>
+            <accountTransaction reference="../.."/>
+          </crossEntry>
+          <shares>0</shares>
+          <type>BUY</type>
+        </account-transaction>
+        <account-transaction>
+          <uuid>tx-transfer-out</uuid>
+          <date>2026-04-01T00:00</date>
+          <currencyCode>EUR</currencyCode>
+          <amount>4075</amount>
+          <crossEntry class="account-transfer">
+            <accountFrom reference="../../../.."/>
+            <transactionFrom reference="../.."/>
+            <accountTo>
+              <uuid>cash-joint</uuid>
+              <name>Joint broker</name>
+              <currencyCode>EUR</currencyCode>
+              <isRetired>false</isRetired>
+              <transactions>
+                <account-transaction>
+                  <uuid>tx-transfer-in</uuid>
+                  <date>2026-04-01T00:00</date>
+                  <currencyCode>EUR</currencyCode>
+                  <amount>4075</amount>
+                  <crossEntry class="account-transfer" reference="../../.."/>
+                  <shares>0</shares>
+                  <type>TRANSFER_IN</type>
+                </account-transaction>
+              </transactions>
+            </accountTo>
+            <transactionTo reference="../accountTo/transactions/account-transaction"/>
+          </crossEntry>
+          <shares>0</shares>
+          <type>TRANSFER_OUT</type>
+        </account-transaction>
+      </transactions>
+    </account>
+    <account reference="../account/transactions/account-transaction[3]/crossEntry/accountTo"/>
+  </accounts>
+  <portfolios>
+    <portfolio reference="../../accounts/account/transactions/account-transaction[2]/crossEntry/portfolio"/>
+    <portfolio reference="../../accounts/account/transactions/account-transaction[2]/crossEntry/portfolio/transactions/portfolio-transaction[2]/crossEntry/portfolioTo"/>
+  </portfolios>
+  <plans/>
+  <properties/>
+</client>

@@ -69,8 +69,9 @@ and the DOCTYPE refusal already give.
 ### Find owners by shape, not by tag
 
 The parser walks the whole tree. Any non-reference element with both `uuid` and
-`transactions` is an owner, a portfolio when its tag is `portfolio` and otherwise
-a cash account. References are resolved by walking the path, with `..`, `tag` and
+`transactions` is an owner, a cash account when it has a `currencyCode` and
+otherwise a portfolio. Tags don't work here either, since a portfolio can be
+defined as `portfolioTo`. Investment plans also list transactions and are skipped. References are resolved by walking the path, with `..`, `tag` and
 `tag[n]` steps. A `reference` in any other form refuses the file.
 
 Tag-based lookup under `accounts` is exactly the bug the first trial script
