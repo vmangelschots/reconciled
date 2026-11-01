@@ -293,6 +293,21 @@ class RestoreBackupTests(BackupTestCase):
         restore_backup(read_backup(json.dumps(envelope)))
         self.assertEqual(set(Transaction.objects.values_list("category_reason", flat=True)), {""})
 
+    def test_cash_left_out_of_a_portfolio_survives(self):
+        Account.objects.filter(pk=self.revolut.pk).update(portfolio_excluded_cash=["cash-1"])
+        content = self.file_content()
+        self.mess_up()
+        restore_backup(read_backup(content))
+        self.assertEqual(Account.objects.get(name="Revolut").portfolio_excluded_cash, ["cash-1"])
+
+    def test_an_older_backup_leaves_no_cash_out(self):
+        envelope = json.loads(self.file_content())
+        for row in envelope["data"]:
+            if row["model"] == "accounts.account":
+                del row["fields"]["portfolio_excluded_cash"]
+        restore_backup(read_backup(json.dumps(envelope)))
+        self.assertEqual(set(map(tuple, Account.objects.values_list("portfolio_excluded_cash", flat=True))), {()})
+
     def test_a_field_removed_since_is_ignored(self):
         envelope = json.loads(self.file_content())
         for row in envelope["data"]:

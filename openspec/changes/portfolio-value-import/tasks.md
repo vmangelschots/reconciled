@@ -9,10 +9,10 @@
 
 ## 2. API
 
-- [ ] 2.1 Add `portfolio_excluded_cash` to `Account` with a migration, and verify in `backup/tests.py` that it round-trips and that an older backup restores with the default.
-- [ ] 2.2 Add the `portfolio-preview` action: investment and active only, 25 MB limit, value date rule, later-value flag, remembered exclusions applied, zero-balance cash left out. Verify with API tests for each scenario of "Preview before saving", and that a refused file answers 400 with its reason.
-- [ ] 2.3 Add the `portfolio-import` action calling `set_value` and saving the exclusions in one transaction. Verify with tests for "Saving sets the account's value" and "Cash accounts left out are remembered", including the uuid surviving a rename.
-- [ ] 2.4 Verify with tests that both actions answer 404 for another household's account, and that nothing from the file is stored after a save.
+- [x] 2.1 Add `portfolio_excluded_cash` to `Account` with a migration, and verify in `backup/tests.py` that it round-trips and that an older backup restores with the default.
+- [x] 2.2 Add the `portfolio-preview` action: investment and active only, 25 MB limit, value date rule, later-value flag, remembered exclusions applied, zero-balance cash left out. Verify with API tests for each scenario of "Preview before saving", and that a refused file answers 400 with its reason.
+- [x] 2.3 Add the `portfolio-import` action calling `set_value` and saving the exclusions in one transaction. Verify with tests for "Saving sets the account's value" and "Cash accounts left out are remembered", including the uuid surviving a rename.
+- [x] 2.4 Verify with tests that both actions answer 404 for another household's account, and that nothing from the file is stored after a save.
 
 ## 3. Screen
 
