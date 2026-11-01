@@ -22,7 +22,7 @@
 ## 4. Final checks
 
 - [x] 4.1 Run `python manage.py test`, `npm test`, `npm run lint` and `npm run build`, and verify they pass.
-- [ ] 4.2 In the running app, import `my.xml` into an investment account, untick the cash account tracked elsewhere, and verify the value equals Portfolio Performance's total minus that account, dated by the newest price, in the ledger and in net worth.
+- [x] 4.2 In the running app, import `my.xml` into an investment account, untick the cash account tracked elsewhere, and verify the value equals Portfolio Performance's total minus that account, dated by the newest price, in the ledger and in net worth.
 
 ## Workflow follow-up
 

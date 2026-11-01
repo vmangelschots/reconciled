@@ -90,7 +90,7 @@ export function PortfolioImportDialog({ account, open, onOpenChange, onSaved }) 
           <DialogTitle>Import portfolio · {account.name}</DialogTitle>
           <DialogDescription>Save your portfolio as XML in Portfolio Performance, then choose the file.</DialogDescription>
         </DialogHeader>
-        <div className="flex flex-col gap-4">
+        <div className="-mx-1 flex max-h-[calc(100dvh-13rem)] flex-col gap-4 overflow-y-auto px-1">
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="portfolio-file">File</Label>
             <Input id="portfolio-file" type="file" accept=".xml,text/xml" onChange={handleFile} disabled={reading} />
