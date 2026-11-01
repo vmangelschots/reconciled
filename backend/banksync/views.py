@@ -2,7 +2,6 @@
 
 import secrets
 from datetime import date, timedelta
-from urllib.parse import urlsplit
 
 from django.db import transaction as db_transaction
 from django.shortcuts import get_object_or_404
@@ -11,6 +10,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.models import Account
+from core.origin import public_origin
 from households.context import current_household
 from transactions.models import Transaction
 
@@ -32,13 +32,8 @@ NO_ENCRYPTION_KEY = "This Reconciled can't store keys yet. Tell the person who r
 
 def redirect_url(request):
     """Where the bank sends the user back to: what /auth is given, and what
-    a household must add to its application. A same-origin GET has no Origin
-    header, so fall back on the page it came from."""
-    origin = request.headers.get("Origin")
-    if not origin:
-        page = urlsplit(request.headers.get("Referer", ""))
-        origin = f"{page.scheme}://{page.netloc}" if page.netloc else request.build_absolute_uri("/").rstrip("/")
-    return origin + REDIRECT_PATH
+    a household must add to its application."""
+    return public_origin(request) + REDIRECT_PATH
 
 
 def _check_application(found, url):

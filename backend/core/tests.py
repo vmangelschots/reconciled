@@ -1,7 +1,10 @@
 from django.contrib.auth import get_user_model
+from django.test import RequestFactory, SimpleTestCase
 from households.testing import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
+
+from core.origin import public_origin
 
 
 class HealthCheckTests(TestCase):
@@ -68,3 +71,18 @@ class AuthTests(TestCase):
         self.client.post(reverse("auth-logout"))
         response = self.client.get(reverse("auth-me"))
         self.assertEqual(response.status_code, 401)
+
+
+class PublicOriginTests(SimpleTestCase):
+    def origin(self, **headers):
+        return public_origin(RequestFactory().get("/", headers=headers))
+
+    def test_the_origin_header_wins(self):
+        origin = self.origin(Origin="https://budget.example.org", Referer="https://other.example.org/page")
+        self.assertEqual(origin, "https://budget.example.org")
+
+    def test_falls_back_on_the_page_it_came_from(self):
+        self.assertEqual(self.origin(Referer="https://budget.example.org/page?x=1"), "https://budget.example.org")
+
+    def test_falls_back_on_the_request_itself(self):
+        self.assertEqual(self.origin(), "http://testserver")

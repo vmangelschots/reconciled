@@ -59,6 +59,9 @@ export function LoginPage() {
             {submitting ? "Signing in..." : "Sign in"}
           </Button>
         </form>
+        <p className="mt-6 text-sm text-ink-secondary">
+          New here? Ask someone in your household, or whoever runs Reconciled, for an invite link.
+        </p>
       </div>
     </main>
   );
