@@ -65,12 +65,11 @@ def snapshot():
     # A backup never keeps the bank file an import came from.
     for row in rows["imports.ImportSession"]:
         row.update(raw_content="", candidates=[])
-    rows["imported_accounts"] = [
+    # Sorted: set() links them in the order of a Python set of ids.
+    rows["imported_accounts"] = sorted(
         (positions[ImportSession][link["importsession_id"]], positions[Account][link["account_id"]])
-        for link in ImportSession.imported_accounts.through.objects.order_by("pk").values(
-            "importsession_id", "account_id"
-        )
-    ]
+        for link in ImportSession.imported_accounts.through.objects.values("importsession_id", "account_id")
+    )
     return rows
 
 
