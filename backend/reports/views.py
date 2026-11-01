@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.models import TIER_ORDER, Account, Loan, tier_position
-from banksync.models import BankAccountLink, BankConnection
+from banksync.models import BankAccountLink, BankConnection, BankCredentials
 from budgets.models import Category
 from budgets.summary import budget_rows
 from budgets.utils import month_range, parse_month
@@ -463,6 +463,7 @@ class OverviewView(APIView):
 
         return Response(
             {
+                "has_transactions": Transaction.objects.exists(),
                 "month": month.strftime("%Y-%m"),
                 "balance_cents": sum(a["balance_cents"] for a in account_rows),
                 "everyday_cents": tier_totals.get("everyday", 0),
@@ -492,6 +493,7 @@ class OverviewView(APIView):
                     "yearly": _attention_yearly(yearly, current),
                     "missed_loans": _attention_missed_loans(today),
                     "reconnect": _attention_reconnect(),
+                    "bank_sync_stopped": BankCredentials.objects.filter(stopped=True).exists(),
                 },
                 "recent": [_recent_row(t) for t in recent],
             }

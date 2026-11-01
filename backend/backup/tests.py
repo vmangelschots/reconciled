@@ -1,20 +1,28 @@
 import json
+from dataclasses import replace
 from datetime import date
 from datetime import datetime
 from datetime import timezone as dt_timezone
 
+from unittest import mock
+
+from cryptography.fernet import Fernet
 from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import TestCase
+from django.test import override_settings
 from django.urls import reverse
 from rest_framework.test import APIClient
 
 from decimal import Decimal
 
 from accounts.models import Account, Loan, LoanCorrection
+from banksync.models import BankCredentials
 from budgets.models import BudgetSettings, Category, CategoryLimit, YearlyBudget
 from forecasting.models import RecurringTransaction
+from households.context import household_context
+from households.models import Household
+from households.testing import TestCase
 from imports.models import AccountImportSettings, ImportSession
 from transactions.adjustments import set_value
 from transactions.loans import link_payment, schedule, set_up_loan, sync_loan
@@ -29,6 +37,7 @@ from .format import (
     NEWER,
     NOT_A_BACKUP,
     NOT_SAVED,
+    SYNC_RUNNING,
     UNREADABLE,
     BackupError,
     backed_up_models,
@@ -40,14 +49,28 @@ from .format import (
 
 
 def snapshot():
-    """Every backed-up row, as stored, plus where each import went."""
+    """Every backed-up row, as stored, plus where each import went. A restore
+    gives rows new ids in the same order, so ids are shown as positions."""
     rows = {model._meta.label: list(model.objects.order_by("pk").values()) for model in backed_up_models()}
+    positions = {
+        model: {row["id"]: position for position, row in enumerate(rows[model._meta.label])}
+        for model in backed_up_models()
+    }
+    for model in backed_up_models():
+        for row in rows[model._meta.label]:
+            row["id"] = positions[model][row["id"]]
+            for field in model._meta.concrete_fields:
+                if field.remote_field and field.remote_field.model in positions and row[field.attname] is not None:
+                    row[field.attname] = positions[field.remote_field.model][row[field.attname]]
     # A backup never keeps the bank file an import came from.
     for row in rows["imports.ImportSession"]:
         row.update(raw_content="", candidates=[])
-    rows["imported_accounts"] = list(
-        ImportSession.imported_accounts.through.objects.order_by("pk").values("importsession_id", "account_id")
-    )
+    rows["imported_accounts"] = [
+        (positions[ImportSession][link["importsession_id"]], positions[Account][link["account_id"]])
+        for link in ImportSession.imported_accounts.through.objects.order_by("pk").values(
+            "importsession_id", "account_id"
+        )
+    ]
     return rows
 
 
@@ -121,7 +144,7 @@ class BuildBackupTests(BackupTestCase):
     def test_the_envelope(self):
         backup = build_backup()
         self.assertEqual(backup["app"], "reconciled")
-        self.assertEqual(backup["format_version"], 1)
+        self.assertEqual(backup["format_version"], 2)
         self.assertEqual(backup["migrations"]["imports"], "0004_backfill_imported_accounts")
         self.assertEqual(set(backup["migrations"]), set(DATA_APPS))
         # A transfer (2 sides), the split (its parts are inside it), the AI
@@ -176,7 +199,7 @@ class ReadBackupTests(BackupTestCase):
         self.assertRefused(content[: len(content) // 2], UNREADABLE)
 
     def test_a_newer_format_version_is_refused(self):
-        self.assertRefused(self.envelope(format_version=2), NEWER)
+        self.assertRefused(self.envelope(format_version=3), NEWER)
 
     def test_a_backup_from_a_newer_app_is_refused(self):
         migrations = {**json.loads(self.file_content())["migrations"], "accounts": "0099_from_the_future"}
@@ -210,13 +233,13 @@ class RestoreBackupTests(BackupTestCase):
         restore_backup(read_backup(content))
 
         transfer = Transaction.objects.get(payee="To Revolut")
-        self.assertEqual(transfer.transfer_counterpart.account, self.revolut)
+        self.assertEqual(transfer.transfer_counterpart.account.name, "Revolut")
         self.assertEqual(transfer.transfer_counterpart.transfer_counterpart, transfer)
         parts = Transaction.objects.get(payee="Delhaize", split_parent=None).parts.order_by("amount_cents")
         self.assertEqual([(p.amount_cents, p.category.name) for p in parts], [(-4000, "Groceries"), (-2000, "Household")])
         guess = Transaction.objects.get(payee="Coffee Co.")
         self.assertEqual((guess.category_confirmed, guess.category_reason), (False, "Looks like groceries"))
-        self.assertEqual(self.house.current_balance_cents, 29500000)
+        self.assertEqual(Account.objects.get(name="House").current_balance_cents, 29500000)
 
     def test_the_last_import_date_survives(self):
         client = APIClient()
@@ -245,7 +268,7 @@ class RestoreBackupTests(BackupTestCase):
         session = ImportSession.objects.create(account=account, file_format="csv", raw_content="")
         session.imported_accounts.add(account)
         self.assertGreater(txn.pk, Transaction.objects.exclude(pk=txn.pk).latest("pk").pk)
-        self.assertGreater(category.pk, self.tab.pk)
+        self.assertGreater(category.pk, Category.objects.exclude(pk=category.pk).latest("pk").pk)
 
     def test_a_dangling_link_changes_nothing(self):
         envelope = json.loads(self.file_content())
@@ -326,7 +349,7 @@ class BackupApiTests(BackupTestCase):
 
     def test_restore_from_a_newer_version(self):
         envelope = json.loads(self.client.get(reverse("backup")).content)
-        envelope["format_version"] = 2
+        envelope["format_version"] = 3
         response = self.upload(json.dumps(envelope).encode())
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["detail"], NEWER)
@@ -393,5 +416,105 @@ class LoanBackupTests(BackupTestCase):
 
         self.assertEqual(snapshot(), before)
         restored = Loan.objects.get()
-        self.assertEqual(schedule(restored), installments)
-        self.assertEqual(Transaction.objects.get(loan_correction__isnull=False).loan_correction_id, correction.pk)
+        self.assertEqual(
+            [replace(i, correction_id=None) for i in schedule(restored)],
+            [replace(i, correction_id=None) for i in installments],
+        )
+        self.assertEqual(Transaction.objects.get(loan_correction__isnull=False).loan_correction_id, LoanCorrection.objects.get().pk)
+
+
+class TwoHouseholdsTests(BackupTestCase):
+    def setUp(self):
+        super().setUp()
+        self.other = Household.objects.create(name="The Peeters household")
+        with household_context(self.other):
+            self.their_account = Account.objects.create(name="Theirs", account_type="checking", starting_balance_cents=7)
+            Category.objects.create(name="Groceries")
+
+    def their_rows(self):
+        with household_context(self.other):
+            return list(Account.objects.values()), list(Category.objects.values())
+
+    def test_a_backup_holds_this_household_only(self):
+        text = dump_backup(build_backup())
+        self.assertNotIn("Theirs", text)
+        self.assertNotIn('"household_id"', text)
+
+    def test_a_backup_names_its_household(self):
+        self.assertEqual(build_backup()["household"], self.default_household.name)
+
+    def test_a_restore_leaves_other_households_alone(self):
+        before = self.their_rows()
+        content = self.file_content()
+        self.mess_up()
+        restore_backup(read_backup(content))
+        self.assertEqual(self.their_rows(), before)
+
+    def test_a_backup_restores_into_another_household(self):
+        content = self.file_content()
+        with household_context(self.other):
+            restore_backup(read_backup(content))
+            self.assertEqual(Account.objects.count(), 3)
+            self.assertTrue(Transaction.objects.filter(payee="To Revolut", transfer_counterpart__isnull=False).exists())
+        self.assertEqual(Account.objects.count(), 3)
+
+    def test_a_row_pointing_at_another_households_account_is_refused(self):
+        envelope = json.loads(self.file_content())
+        for row in envelope["data"]:
+            if row["model"] == "transactions.transaction":
+                row["fields"]["account"] = self.their_account.pk
+        before = self.their_rows(), snapshot()
+        with self.assertRaisesMessage(BackupError, NOT_SAVED):
+            restore_backup(read_backup(json.dumps(envelope)))
+        self.assertEqual((self.their_rows(), snapshot()), before)
+
+    def test_a_household_in_the_file_is_ignored(self):
+        envelope = json.loads(self.file_content())
+        for row in envelope["data"]:
+            if row["model"] == "accounts.account":
+                row["fields"]["household"] = self.other.pk
+        before = self.their_rows()
+        restore_backup(read_backup(json.dumps(envelope)))
+        self.assertEqual(self.their_rows(), before)
+        self.assertEqual(Account.objects.count(), 3)
+
+    def test_a_backup_from_before_households_restores(self):
+        envelope = json.loads(self.file_content())
+        envelope["format_version"] = 1
+        envelope.pop("household")
+        before = snapshot()
+        self.mess_up()
+        restore_backup(read_backup(json.dumps(envelope)))
+        self.assertEqual(Account.objects.count(), 3)
+        self.assertEqual(len(snapshot()["accounts.Account"]), len(before["accounts.Account"]))
+
+    def test_remembered_accounts_follow_the_restore(self):
+        pockets = self.revolut
+        AccountImportSettings.objects.create(
+            account=self.crelan, product_accounts={"Pockets": pockets.pk, "Skipped": None, "Gone": 999999}
+        )
+        content = self.file_content()
+        self.mess_up()
+        restore_backup(read_backup(content))
+        remembered = AccountImportSettings.objects.get(account__name="Crelan").product_accounts
+        self.assertEqual(remembered["Pockets"], Account.objects.get(name="Revolut").pk)
+        self.assertIsNone(remembered["Skipped"])
+        self.assertIsNone(remembered["Gone"])
+
+    def test_a_restore_during_a_sync_is_refused(self):
+        content = self.file_content()
+        before = snapshot()
+        with mock.patch("backup.format.household_lock") as lock:
+            lock.return_value.__enter__.return_value = False
+            with self.assertRaisesMessage(BackupError, SYNC_RUNNING):
+                restore_backup(read_backup(content))
+        self.assertEqual(snapshot(), before)
+
+    @override_settings(HOUSEHOLD_ENCRYPTION_KEYS=[Fernet.generate_key().decode()])
+    def test_credentials_and_the_ai_choice_stay(self):
+        BankCredentials.objects.create(app_id="app", private_key="key")
+        Household.objects.filter(pk=self.default_household.pk).update(ai_enabled=False)
+        restore_backup(read_backup(self.file_content()))
+        self.assertEqual(BankCredentials.objects.get().private_key, "key")
+        self.assertFalse(Household.objects.get(pk=self.default_household.pk).ai_enabled)
+        self.assertNotIn("ai_enabled", self.file_content().decode())

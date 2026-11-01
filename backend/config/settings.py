@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 import os
 from pathlib import Path
 
+from corsheaders.defaults import default_headers
 from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -56,6 +57,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "corsheaders",
     "core",
+    "households",
     "accounts",
     "budgets",
     "transactions",
@@ -74,6 +76,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "households.middleware.HouseholdMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -180,7 +183,7 @@ REST_FRAMEWORK = {
         "core.authentication.SessionAuthentication401",
     ],
     "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.IsAuthenticated",
+        "households.permissions.HasHousehold",
     ],
 }
 
@@ -196,6 +199,7 @@ CORS_ALLOWED_ORIGINS = [
     if o.strip()
 ]
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_HEADERS = (*default_headers, "x-household")
 
 CSRF_TRUSTED_ORIGINS = [
     o.strip()
@@ -223,6 +227,9 @@ AI_CATEGORIZATION_DEADLINE = float(os.environ.get("AI_CATEGORIZATION_DEADLINE", 
 
 # Bank sync - see openspec/specs/bank-sync. Off unless both are set. The
 # key is the application's RSA private key, in PEM form.
+# Encrypt each household's Enable Banking key: comma-separated Fernet keys,
+# newest first. See banksync/credentials.py.
+HOUSEHOLD_ENCRYPTION_KEYS = [k.strip() for k in os.environ.get("HOUSEHOLD_ENCRYPTION_KEYS", "").split(",") if k.strip()]
 ENABLE_BANKING_APP_ID = os.environ.get("ENABLE_BANKING_APP_ID", "")
 ENABLE_BANKING_PRIVATE_KEY = os.environ.get("ENABLE_BANKING_PRIVATE_KEY", "").replace("\\n", "\n")
 

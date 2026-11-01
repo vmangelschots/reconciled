@@ -1,8 +1,10 @@
 from django.db import models
 from django.db.models import Exists, OuterRef
 
+from households.scoping import HouseholdManager, HouseholdOwned, HouseholdQuerySet
 
-class TransactionQuerySet(models.QuerySet):
+
+class TransactionQuerySet(HouseholdQuerySet):
     def ledger_rows(self):
         """The bank's lines: everything except the parts of a split. What
         balances, duplicate detection and the ledger list work from."""
@@ -31,7 +33,7 @@ class TransactionQuerySet(models.QuerySet):
         return self.exclude(category__parent__is_tab_group=True)
 
 
-class Transaction(models.Model):
+class Transaction(HouseholdOwned):
     class CategorySource(models.TextChoices):
         MANUAL = "manual", "Manual"
         HISTORY = "history", "History"
@@ -113,10 +115,11 @@ class Transaction(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    objects = TransactionQuerySet.as_manager()
+    objects = HouseholdManager.from_queryset(TransactionQuerySet)()
 
     class Meta:
         ordering = ["-date", "-id"]
+        indexes = [models.Index(fields=["household", "date"], name="txn_household_date")]
         constraints = [
             models.UniqueConstraint(
                 fields=["loan", "loan_installment"],

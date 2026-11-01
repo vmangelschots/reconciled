@@ -2,7 +2,8 @@ from dataclasses import fields
 from datetime import date
 from unittest import mock
 
-from django.test import TestCase, override_settings
+from django.test import override_settings
+from households.testing import TestCase
 
 from accounts.models import Account
 from budgets.models import Category

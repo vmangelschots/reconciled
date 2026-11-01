@@ -2,6 +2,7 @@
 
 import secrets
 from datetime import date, timedelta
+from urllib.parse import urlsplit
 
 from django.db import transaction as db_transaction
 from django.shortcuts import get_object_or_404
@@ -10,10 +11,12 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from accounts.models import Account
+from households.context import current_household
 from transactions.models import Transaction
 
 from . import client
-from .models import BankAccountLink, BankConnection
+from .credentials import NoEncryptionKey, encrypt, is_private_key
+from .models import BankAccountLink, BankConnection, BankCredentials
 from .sync import sync_all
 
 DEFAULT_COUNTRY = "BE"
@@ -22,6 +25,56 @@ DEFAULT_COUNTRY = "BE"
 REDIRECT_PATH = "/settings/banks"
 SESSION_KEY = "bank_authorization"
 NOT_SET_UP = "Bank sync isn't set up."
+WRONG_HOUSEHOLD = "You switched household while connecting. Switch back and connect the bank again."
+INVALID_KEY = "That isn't a valid private key. Upload the .pem file from Enable Banking."
+NO_ENCRYPTION_KEY = "This Reconciled can't store keys yet. Tell the person who runs it."
+
+
+def redirect_url(request):
+    """Where the bank sends the user back to: what /auth is given, and what
+    a household must add to its application. A same-origin GET has no Origin
+    header, so fall back on the page it came from."""
+    origin = request.headers.get("Origin")
+    if not origin:
+        page = urlsplit(request.headers.get("Referer", ""))
+        origin = f"{page.scheme}://{page.netloc}" if page.netloc else request.build_absolute_uri("/").rstrip("/")
+    return origin + REDIRECT_PATH
+
+
+def _check_application(found, url):
+    """Ask Enable Banking about the application, and remember what it said."""
+    states = BankCredentials.State
+    try:
+        app = client.application()
+    except client.CredentialsRejected:
+        state = states.REJECTED
+    except client.Unreachable:
+        state = states.UNREACHABLE
+    except client.BankError:
+        state = states.REJECTED
+    else:
+        if str(app.get("environment", "")).upper() == "SANDBOX":
+            state = states.SANDBOX
+        elif url not in (app.get("redirect_urls") or []):
+            state = states.REDIRECT_MISSING
+        elif not app.get("active"):
+            state = states.NOT_ACTIVE
+        else:
+            state = states.READY
+    found.state = state
+    if state == states.READY:
+        found.stopped = False
+    found.save(update_fields=["state", "stopped", "updated_at"])
+
+
+def _credentials_row(request):
+    found = BankCredentials.objects.first()
+    return {
+        "state": found.state if found else "not_set_up",
+        "app_id": found.app_id if found else "",
+        "stopped": found.stopped if found else False,
+        "redirect_url": redirect_url(request),
+    }
 
 
 def _default_start_date(account):
@@ -84,8 +137,9 @@ def _psu_headers(request):
 
 class StatusView(APIView):
     def get(self, request):
+        credentials = _credentials_row(request)
         if not client.enabled():
-            return Response({"enabled": False})
+            return Response({"enabled": False, "credentials": credentials})
         links = list(BankAccountLink.objects.select_related("account"))
         links_by_hash = {link.account_hash: link for link in links}
         accounts = Account.objects.filter(archived=False).order_by("name")
@@ -93,6 +147,7 @@ class StatusView(APIView):
         return Response(
             {
                 "enabled": True,
+                "credentials": credentials,
                 "connections": [_connection_row(c, links_by_hash) for c in BankConnection.objects.all()],
                 # After a restore: links with no connection yet.
                 "waiting_links": [_link_row(link) for link in links if link.connection_id is None],
@@ -103,6 +158,36 @@ class StatusView(APIView):
                 ],
             }
         )
+
+
+class CredentialsView(APIView):
+    def post(self, request):
+        """Save a new application and key, then check them. A key that can't
+        be parsed isn't saved; one that fails the check is."""
+        app_id = str(request.data.get("app_id") or "").strip()
+        private_key = request.data.get("private_key") or ""
+        if not app_id:
+            return Response({"detail": "Enter the application ID."}, status=400)
+        if not is_private_key(private_key):
+            return Response({"detail": INVALID_KEY}, status=400)
+        try:
+            encrypted = encrypt(private_key)
+        except NoEncryptionKey:
+            return Response({"detail": NO_ENCRYPTION_KEY}, status=503)
+        found, _created = BankCredentials.objects.update_or_create(
+            defaults={"app_id": app_id, "encrypted_key": encrypted, "stopped": False},
+        )
+        _check_application(found, redirect_url(request))
+        return Response(_credentials_row(request), status=201)
+
+
+class CredentialsCheckView(APIView):
+    def post(self, request):
+        found = BankCredentials.objects.first()
+        if found is None:
+            return Response({"detail": NOT_SET_UP}, status=400)
+        _check_application(found, redirect_url(request))
+        return Response(_credentials_row(request))
 
 
 class BanksView(APIView):
@@ -124,18 +209,18 @@ class AuthorizeView(APIView):
             return Response({"detail": NOT_SET_UP}, status=400)
         bank_name = request.data.get("bank_name")
         country = request.data.get("country", DEFAULT_COUNTRY)
-        origin = request.headers.get("Origin")
-        if not bank_name or not origin:
+        if not bank_name:
             return Response({"detail": "Pick a bank."}, status=400)
         state = secrets.token_urlsafe(32)
         try:
             seconds = client.maximum_consent_seconds(bank_name, country)
             valid_until = timezone.now() + timedelta(seconds=seconds or 90 * 86400)
-            url = client.start_authorization(bank_name, country, origin + REDIRECT_PATH, state, valid_until)
+            url = client.start_authorization(bank_name, country, redirect_url(request), state, valid_until)
         except client.BankError as e:
             return Response({"detail": str(e)}, status=502)
         request.session[SESSION_KEY] = {
             "state": state,
+            "household": current_household().pk,
             "bank_name": bank_name,
             "country": country,
             "valid_until": valid_until.isoformat(),
@@ -179,6 +264,8 @@ class CompleteView(APIView):
         started = request.session.pop(SESSION_KEY, None)
         if not started or not secrets.compare_digest(started["state"], str(request.data.get("state", ""))):
             return Response({"detail": "This bank authorization can't be finished. Please try again."}, status=400)
+        if started.get("household") != current_household().pk:
+            return Response({"detail": WRONG_HOUSEHOLD}, status=400)
         code = request.data.get("code")
         if not code:
             return Response({"detail": "The bank sent nothing back. Please try again."}, status=400)

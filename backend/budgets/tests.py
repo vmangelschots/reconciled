@@ -2,7 +2,7 @@ from datetime import date
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from households.testing import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
@@ -403,9 +403,10 @@ class BudgetSummaryQueryTests(TestCase):
             YearlyBudget.objects.create(category=yearly, from_year=2026, amount_cents=1000)
             Transaction.objects.create(account=account, date="2026-01-05", amount_cents=-100, payee="x", category=yearly)
 
-        # Four for the monthly rows and uncategorized, one for the month's
-        # yearly spending, four for the yearly rows.
-        with self.assertNumQueries(9):
+        # One for the user's household, four for the monthly rows and
+        # uncategorized, one for the month's yearly spending, four for the
+        # yearly rows.
+        with self.assertNumQueries(10):
             response = client.get(reverse("budget-summary"), {"month": "2026-01"})
 
         self.assertEqual([c["spent_cents"] for c in response.json()["categories"]], [100] * 6)

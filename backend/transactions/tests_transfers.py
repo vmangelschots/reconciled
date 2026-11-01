@@ -1,6 +1,6 @@
 from datetime import date
 
-from django.test import TestCase
+from households.testing import TestCase
 
 from accounts.models import Account
 from budgets.models import Category

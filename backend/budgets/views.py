@@ -16,12 +16,14 @@ YEARLY_KINDS = {Category.BudgetKind.YEARLY, Category.BudgetKind.TARGET}
 
 
 class CategoryViewSet(viewsets.ModelViewSet):
-    queryset = (
-        Category.objects.select_related("parent")
-        .prefetch_related("yearly_budgets", "limits")
-        .annotate(transaction_count=Count("transactions"))
-    )
     serializer_class = CategorySerializer
+
+    def get_queryset(self):
+        return (
+            Category.objects.select_related("parent")
+            .prefetch_related("yearly_budgets", "limits")
+            .annotate(transaction_count=Count("transactions"))
+        )
 
     def destroy(self, request, *args, **kwargs):
         category = self.get_object()

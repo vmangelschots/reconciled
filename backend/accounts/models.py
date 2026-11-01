@@ -1,6 +1,8 @@
 from django.db import models
 from django.db.models import Case, IntegerField, Sum, Value, When
 
+from households.scoping import HouseholdOwned, HouseholdScoped
+
 # Tiers from most to least liquid; an account's tier follows its type.
 # See the accounts spec's "Account tiers".
 TIER_ORDER = ["everyday", "savings", "investments", "property", "loans"]
@@ -28,7 +30,7 @@ def tier_position():
     )
 
 
-class Account(models.Model):
+class Account(HouseholdOwned):
     class AccountType(models.TextChoices):
         CHECKING = "checking", "Checking"
         SAVINGS = "savings", "Savings"
@@ -64,10 +66,12 @@ class Account(models.Model):
         return self.starting_balance_cents + total
 
 
-class Loan(models.Model):
+class Loan(HouseholdScoped):
     """A loan account's annuity terms. The schedule is computed from these,
     never stored; all rules live in transactions/loans.py. See
     openspec/specs/loan-schedules."""
+
+    household_path = "account__household"
 
     account = models.OneToOneField(Account, on_delete=models.CASCADE, related_name="loan")
     principal_cents = models.BigIntegerField()
@@ -88,11 +92,13 @@ class Loan(models.Model):
         return f"Loan for {self.account}"
 
 
-class LoanCorrection(models.Model):
+class LoanCorrection(HouseholdScoped):
     """What the bank says is owed at the end of `date`. The schedule
     restarts from it at the next installment, with `payment_cents` or the
     annuity over the installments left; see transactions/loans.py and
     openspec/specs/loan-schedules."""
+
+    household_path = "loan__account__household"
 
     loan = models.ForeignKey(Loan, on_delete=models.CASCADE, related_name="corrections")
     date = models.DateField()

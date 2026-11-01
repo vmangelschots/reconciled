@@ -4,9 +4,14 @@ from io import BytesIO, StringIO
 from unittest import mock
 from urllib.error import HTTPError
 
+import jwt
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption, PrivateFormat
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
-from django.test import TestCase, override_settings
+from django.test import override_settings
+from households.testing import TestCase
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -14,6 +19,8 @@ from rest_framework.test import APIClient
 from accounts.models import Account
 from backup.format import build_backup, dump_backup, read_backup, restore_backup
 from budgets.models import Category
+from households.context import current_household, household_context
+from households.models import Household, Membership
 from imports.models import ImportSession
 from transactions.models import Transaction
 from transactions.splits import SplitLine, save_split
@@ -21,8 +28,17 @@ from transactions.transfers import link_transfer
 
 from . import client
 from .lines import to_candidate, with_references
-from .models import BankAccountLink, BankConnection, SeenBankLine
-from .sync import sync_all
+from .models import BankAccountLink, BankConnection, BankCredentials, SeenBankLine
+from .sync import household_lock, sync_all, sync_every_household
+from .views import _store_session
+
+
+def own_credentials(**extra):
+    """The test household's Enable Banking application."""
+    return BankCredentials.objects.create(app_id="app", private_key="key", **extra)
+
+
+TEST_KEY = Fernet.generate_key().decode()
 
 
 def line(reference="r1", amount="21.85", day="2026-10-25", debit=True, payee="Ethias", text=("Verzekeringstaks",), **extra):
@@ -83,8 +99,8 @@ class SyncCase(TestCase):
         return Transaction.objects.filter(account=account or self.crelan)
 
 
+@override_settings(HOUSEHOLD_ENCRYPTION_KEYS=[TEST_KEY])
 class ClientTests(TestCase):
-    @override_settings(ENABLE_BANKING_APP_ID="", ENABLE_BANKING_PRIVATE_KEY="")
     def test_off_without_credentials(self):
         self.assertFalse(client.enabled())
 
@@ -429,7 +445,7 @@ class FailureTests(SyncCase):
         self.assertEqual([c.args[0] for c in self.fetched.call_args_list], [self.other.account_uid])
 
     def test_sync_pressed_during_a_scheduled_run(self):
-        with mock.patch("banksync.sync._single_run") as run:
+        with mock.patch("banksync.sync.household_lock") as run:
             run.return_value.__enter__.return_value = False
             self.assertIsNone(sync_all())
         self.fetched.assert_not_called()
@@ -439,16 +455,18 @@ class CommandTests(TestCase):
     @override_settings(ENABLE_BANKING_APP_ID="", ENABLE_BANKING_PRIVATE_KEY="")
     def test_no_credentials(self):
         out = StringIO()
-        with mock.patch("banksync.management.commands.sync_banks.sync_all") as sync:
+        with mock.patch("banksync.sync.sync_all") as sync:
             call_command("sync_banks", stdout=out)
         sync.assert_not_called()
         self.assertIn("isn't set up", out.getvalue())
 
 
 @override_settings(ENABLE_BANKING_APP_ID="app", ENABLE_BANKING_PRIVATE_KEY="key")
+@override_settings(HOUSEHOLD_ENCRYPTION_KEYS=[TEST_KEY])
 class ApiTests(SyncCase):
     def setUp(self):
         super().setUp()
+        own_credentials()
         self.api = APIClient()
         self.api.force_login(get_user_model().objects.create_user("me", password="x"))
 
@@ -477,7 +495,10 @@ class ApiTests(SyncCase):
 
     @override_settings(ENABLE_BANKING_APP_ID="", ENABLE_BANKING_PRIVATE_KEY="")
     def test_no_credentials(self):
-        self.assertEqual(self.api.get("/api/bank-sync/").json(), {"enabled": False})
+        BankCredentials.objects.all().delete()
+        body = self.api.get("/api/bank-sync/").json()
+        self.assertFalse(body["enabled"])
+        self.assertEqual(body["credentials"]["state"], "not_set_up")
         self.assertEqual(self.api.post("/api/bank-sync/run/").status_code, 400)
 
     def test_authorize_crelan(self):
@@ -597,6 +618,7 @@ class OverviewTests(SyncCase):
 class BackupTests(SyncCase):
     def round_trip(self):
         restore_backup(read_backup(dump_backup(build_backup())))
+        self.crelan = Account.objects.get(name="Crelan")
 
     def test_nothing_about_bank_access_is_in_the_file(self):
         self.link.refresh_from_db()
@@ -624,7 +646,7 @@ class BackupTests(SyncCase):
         self.round_trip()
         link = BankAccountLink.objects.get()
         self.assertFalse(BankConnection.objects.exists())
-        self.assertEqual((link.connection, link.account_uid, link.account), (None, "", self.crelan))
+        self.assertEqual((link.connection, link.account_uid, link.account.name), (None, "", "Crelan"))
         self.assertEqual(sync_all(), 0)
         self.fetched.assert_not_called()
 
@@ -634,3 +656,241 @@ class BackupTests(SyncCase):
         backup["migrations"].pop("banksync")
         restore_backup(read_backup(dump_backup(backup)))
         self.assertFalse(BankAccountLink.objects.exists())
+
+
+def private_key():
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    return key.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption()).decode()
+
+
+APP = {"redirect_urls": ["http://testserver/settings/banks"], "active": True, "environment": "PRODUCTION"}
+
+
+@override_settings(HOUSEHOLD_ENCRYPTION_KEYS=[TEST_KEY], ALLOWED_HOSTS=["testserver"])
+class CredentialsTests(TestCase):
+    def setUp(self):
+        self.api = APIClient()
+        self.api.force_login(get_user_model().objects.create_user("me", password="x"))
+        self.key = private_key()
+
+    def save(self, app=APP, key=None, error=None):
+        kwargs = {"side_effect": error} if error else {"return_value": app}
+        with mock.patch("banksync.views.client.application", **kwargs):
+            return self.api.post(
+                "/api/bank-sync/credentials/", {"app_id": "app-1", "private_key": key or self.key}, format="json"
+            )
+
+    def test_ready(self):
+        response = self.save()
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(response.json()["state"], "ready")
+        self.assertTrue(client.enabled())
+
+    def test_the_key_is_encrypted_and_never_returned(self):
+        response = self.save()
+        found = BankCredentials.objects.get()
+        secret = self.key.splitlines()[1]
+        self.assertNotIn(secret, found.encrypted_key)
+        self.assertEqual(found.private_key, self.key)
+        self.assertNotIn(secret, response.content.decode())
+        self.assertNotIn(secret, self.api.get("/api/bank-sync/").content.decode())
+
+    def test_not_a_private_key_saves_nothing(self):
+        response = self.save(key="hello")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("isn't a valid private key", response.json()["detail"])
+        self.assertFalse(BankCredentials.objects.exists())
+
+    def test_each_failed_check_says_what_is_wrong_and_keeps_the_key(self):
+        cases = [
+            ("rejected", {"error": client.CredentialsRejected("x")}),
+            ("unreachable", {"error": client.Unreachable("x")}),
+            ("redirect_missing", {"app": {**APP, "redirect_urls": []}}),
+            ("not_active", {"app": {**APP, "active": False}}),
+            ("sandbox", {"app": {**APP, "environment": "SANDBOX"}}),
+        ]
+        for state, kwargs in cases:
+            with self.subTest(state=state):
+                self.assertEqual(self.save(**kwargs).json()["state"], state)
+                self.assertTrue(BankCredentials.objects.exists())
+
+    def test_check_again(self):
+        self.save(app={**APP, "active": False})
+        with mock.patch("banksync.views.client.application", return_value=APP):
+            response = self.api.post("/api/bank-sync/credentials/check/")
+        self.assertEqual(response.json()["state"], "ready")
+
+    def test_the_redirect_url_comes_from_where_the_page_is(self):
+        body = self.api.get("/api/bank-sync/", HTTP_REFERER="https://budget.example/settings").json()
+        self.assertEqual(body["credentials"]["redirect_url"], "https://budget.example/settings/banks")
+
+    def test_replacing_stops_using_the_old_key(self):
+        self.save()
+        other = private_key()
+        self.save(key=other)
+        self.assertEqual(BankCredentials.objects.get().private_key, other)
+
+    def test_without_an_encryption_key(self):
+        with override_settings(HOUSEHOLD_ENCRYPTION_KEYS=[]):
+            self.assertEqual(self.save().status_code, 503)
+        self.assertFalse(BankCredentials.objects.exists())
+
+    def test_tokens_are_signed_with_the_households_key(self):
+        self.save()
+        token = client._token()
+        self.assertEqual(jwt.get_unverified_header(token)["kid"], "app-1")
+
+    def test_rotating_keeps_credentials_working(self):
+        self.save()
+        new = Fernet.generate_key().decode()
+        with override_settings(HOUSEHOLD_ENCRYPTION_KEYS=[new, TEST_KEY]):
+            call_command("rotate_encryption_key", stdout=StringIO())
+        with override_settings(HOUSEHOLD_ENCRYPTION_KEYS=[new]):
+            self.assertEqual(BankCredentials.objects.get().private_key, self.key)
+
+
+@override_settings(HOUSEHOLD_ENCRYPTION_KEYS=[TEST_KEY])
+class TwoHouseholdSyncTests(SyncCase):
+    def setUp(self):
+        super().setUp()
+        own_credentials()
+        self.other = Household.objects.create(name="Other")
+        with household_context(self.other):
+            own_credentials()
+            self.other_account = Account.objects.create(name="Joint", account_type="checking", starting_balance_cents=0)
+            self.other_link = self.make_link(self.other_account, "crelan-hash", connection=self.connect("Crelan"))
+
+    def test_a_joint_account_arrives_once_in_each_household(self):
+        self.feed(line())
+        results = sync_every_household()
+        self.assertEqual(results, {self.household_name(): 1, "Other": 1})
+        self.assertEqual(self.txns().count(), 1)
+        with household_context(self.other):
+            self.assertEqual(Transaction.objects.count(), 1)
+        self.assertEqual(sync_every_household(), {self.household_name(): 0, "Other": 0})
+
+    def household_name(self):
+        return self.default_household.name
+
+    def test_one_households_failure_leaves_the_other(self):
+        self.feed(line())
+        original = sync_all
+
+        def flaky():
+            if current_household() == self.other:
+                raise RuntimeError("boom")
+            return original()
+
+        with mock.patch("banksync.sync.sync_all", side_effect=flaky):
+            results = sync_every_household()
+        self.assertEqual(results, {self.household_name(): 1})
+
+    def test_a_rejected_key_stops_only_that_household_once(self):
+        self.feed(line())
+        with mock.patch("banksync.sync.client.fetch_transactions", side_effect=client.CredentialsRejected("x")):
+            self.assertEqual(sync_all(), 0)
+        found = BankCredentials.objects.get()
+        self.assertTrue(found.stopped)
+        self.assertEqual(found.state, "rejected")
+        self.link.refresh_from_db()
+        self.link.connection.refresh_from_db()
+        self.assertEqual(self.link.last_error, "")
+        self.assertFalse(self.link.connection.ended)
+        with household_context(self.other):
+            self.assertFalse(BankCredentials.objects.get().stopped)
+
+    def test_a_stopped_key_shows_on_the_overview(self):
+        BankCredentials.objects.update(stopped=True)
+        api = APIClient()
+        api.force_authenticate(get_user_model().objects.create_user("me", password="x"))
+        body = api.get(reverse("report-overview"), {"month": "2026-10"}).json()
+        self.assertTrue(body["attention"]["bank_sync_stopped"] if "attention" in body else body["bank_sync_stopped"])
+
+    def test_a_lock_is_per_household(self):
+        with household_lock() as mine:
+            self.assertTrue(mine)
+            with household_context(self.other), household_lock() as theirs:
+                self.assertTrue(theirs)
+
+    def test_reconnecting_leaves_the_other_household_alone(self):
+        session = {
+            "session_id": "fresh",
+            "access": {"valid_until": (timezone.now() + timedelta(days=180)).isoformat()},
+            "accounts": [{"uid": "fresh-uid", "identification_hash": "crelan-hash", "name": "Joint", "currency": "EUR"}],
+        }
+        _store_session("Crelan", "BE", session, timezone.now())
+        self.link.refresh_from_db()
+        self.assertEqual(self.link.account_uid, "fresh-uid")
+        with household_context(self.other):
+            self.other_link.refresh_from_db()
+            self.assertEqual(self.other_link.account_uid, "crelan-hash-uid")
+            self.assertEqual(BankConnection.objects.get().session_id, "Crelan-session")
+
+
+@override_settings(HOUSEHOLD_ENCRYPTION_KEYS=[TEST_KEY])
+class SwitchDuringAuthorizationTests(TestCase):
+    def test_no_connection_lands_in_the_other_household(self):
+        one, two = Household.objects.create(name="One"), Household.objects.create(name="Two")
+        user = get_user_model().objects.create_user("me", password="x")
+        Membership.objects.create(user=user, household=one)
+        Membership.objects.create(user=user, household=two)
+        for household in (one, two):
+            with household_context(household):
+                own_credentials()
+        api = APIClient()
+        api.force_login(user)
+        api.post("/api/household/switch/", {"household": one.pk}, format="json")
+        with mock.patch("banksync.views.client.maximum_consent_seconds", return_value=100), mock.patch(
+            "banksync.views.client.start_authorization", return_value="https://bank"
+        ):
+            self.assertEqual(
+                api.post("/api/bank-sync/authorize/", {"bank_name": "Crelan"}, format="json").status_code, 200
+            )
+        state = api.session["bank_authorization"]["state"]
+        api.post("/api/household/switch/", {"household": two.pk}, format="json")
+        with mock.patch("banksync.views.client.create_session") as create:
+            response = api.post("/api/bank-sync/complete/", {"state": state, "code": "c"}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("switched household", response.json()["detail"])
+        create.assert_not_called()
+        self.assertFalse(BankConnection.objects.all_households().exists())
+
+
+class BootstrapTests(TestCase):
+    def run_it(self):
+        env = {"BUDGET_APP_USERNAME": "boss", "BUDGET_APP_PASSWORD": "pw"}
+        out, err = StringIO(), StringIO()
+        with mock.patch.dict("os.environ", env):
+            call_command("bootstrap_user", stdout=out, stderr=err)
+        return out.getvalue(), err.getvalue()
+
+    def boss_household(self):
+        return Membership.objects.get(user__username="boss").household
+
+    def test_a_restart_changes_nothing(self):
+        self.run_it()
+        self.run_it()
+        self.assertEqual(Membership.objects.filter(user__username="boss").count(), 1)
+
+    @override_settings(ENABLE_BANKING_APP_ID="app", ENABLE_BANKING_PRIVATE_KEY="key", HOUSEHOLD_ENCRYPTION_KEYS=[TEST_KEY])
+    def test_environment_values_move_to_the_first_household_once(self):
+        self.run_it()
+        with household_context(self.boss_household()):
+            found = BankCredentials.objects.get()
+            self.assertEqual(found.private_key, "key")
+            found.app_id = "changed"
+            found.save()
+        self.run_it()
+        with household_context(self.boss_household()):
+            self.assertEqual(BankCredentials.objects.get().app_id, "changed")
+
+    @override_settings(ENABLE_BANKING_APP_ID="app", ENABLE_BANKING_PRIVATE_KEY="key", HOUSEHOLD_ENCRYPTION_KEYS=[])
+    def test_no_encryption_key_logs_and_carries_on(self):
+        _out, err = self.run_it()
+        self.assertIn("HOUSEHOLD_ENCRYPTION_KEYS", err)
+        self.assertFalse(BankCredentials.objects.all_households().exists())
+
+    @override_settings(ENABLE_BANKING_APP_ID="", ENABLE_BANKING_PRIVATE_KEY="")
+    def test_nothing_to_move(self):
+        self.run_it()
+        self.assertFalse(BankCredentials.objects.all_households().exists())

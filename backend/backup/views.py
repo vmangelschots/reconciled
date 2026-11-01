@@ -7,7 +7,7 @@ from .format import BackupError, backup_filename, build_backup, dump_backup, rea
 
 
 class BackupView(APIView):
-    """Download every backed-up row as one JSON file."""
+    """Download this household's backed-up rows as one JSON file."""
 
     def get(self, request):
         response = HttpResponse(dump_backup(build_backup()), content_type="application/json")
@@ -16,7 +16,7 @@ class BackupView(APIView):
 
 
 class RestoreView(APIView):
-    """Replace everything with a backup file's data (multipart "file")."""
+    """Replace this household's data with a backup file's (multipart "file")."""
 
     parser_classes = [MultiPartParser]
 

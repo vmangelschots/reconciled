@@ -17,6 +17,8 @@ from typing import Protocol
 import openai
 from django.conf import settings
 
+from households.context import current_household
+
 logger = logging.getLogger(__name__)
 
 # Questions per request; larger runs are sent one chunk after another.
@@ -66,9 +68,14 @@ class CategoryGuesser(Protocol):
         "ok", "failed" or "key_rejected". Never raises."""
 
 
+def ai_available():
+    """Whether this server can offer AI at all; each household then chooses."""
+    return bool(settings.AI_CATEGORIZATION_ENABLED and settings.OPENAI_API_KEY)
+
+
 def get_guesser():
     """The configured guesser, or None when AI categorization is off."""
-    if not settings.AI_CATEGORIZATION_ENABLED or not settings.OPENAI_API_KEY:
+    if not ai_available() or not current_household().ai_enabled:
         return None
     return OpenAIGuesser()
 

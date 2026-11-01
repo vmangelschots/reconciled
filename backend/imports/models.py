@@ -1,7 +1,11 @@
 from django.db import models
 
+from households.scoping import HouseholdScoped
 
-class ImportSession(models.Model):
+
+class ImportSession(HouseholdScoped):
+    household_path = "account__household"
+
     class FileFormat(models.TextChoices):
         CSV = "csv", "CSV"
         OFX = "ofx", "OFX"
@@ -65,10 +69,12 @@ class ImportSession(models.Model):
         return f"{self.file_format} import for {self.account} ({self.status})"
 
 
-class AccountImportSettings(models.Model):
+class AccountImportSettings(HouseholdScoped):
     """What the Import page remembers per upload account, written only when
     an import commits: the last CSV column mapping, and where each Revolut
     Product went ({product: account_id | null for skipped})."""
+
+    household_path = "account__household"
 
     account = models.OneToOneField(
         "accounts.Account", on_delete=models.CASCADE, related_name="import_settings"

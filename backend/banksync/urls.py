@@ -4,6 +4,8 @@ from . import views
 
 urlpatterns = [
     path("bank-sync/", views.StatusView.as_view()),
+    path("bank-sync/credentials/", views.CredentialsView.as_view()),
+    path("bank-sync/credentials/check/", views.CredentialsCheckView.as_view()),
     path("bank-sync/banks/", views.BanksView.as_view()),
     path("bank-sync/authorize/", views.AuthorizeView.as_view()),
     path("bank-sync/complete/", views.CompleteView.as_view()),

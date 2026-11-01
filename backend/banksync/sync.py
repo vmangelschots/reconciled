@@ -7,6 +7,9 @@ from datetime import date, timedelta
 from django.db import connection, transaction as db_transaction
 from django.utils import timezone
 
+from households.context import current_household, household_context
+from households.models import Household
+
 from imports.ledger import (
     confirm_transfer_counterpart,
     new_transaction,
@@ -19,27 +22,30 @@ from transactions.transfers import auto_link_transfers
 
 from . import client
 from .lines import BOOKED, to_candidate, with_references
-from .models import BankAccountLink, SeenBankLine
+from .models import BankAccountLink, BankCredentials, SeenBankLine
 
 logger = logging.getLogger(__name__)
 
 # Lines a bank books late still arrive, and a failed period is retried.
 OVERLAP_DAYS = 10
-# Any fixed number: only sync takes this PostgreSQL advisory lock.
+# Any fixed number: only sync and restore take this PostgreSQL advisory lock,
+# one per household.
 SYNC_LOCK = 8275001
 
 
 @contextmanager
-def _single_run():
+def household_lock():
+    """Yields whether this got the current household's lock."""
+    lock = [SYNC_LOCK, current_household().pk]
     with connection.cursor() as cursor:
-        cursor.execute("SELECT pg_try_advisory_lock(%s)", [SYNC_LOCK])
+        cursor.execute("SELECT pg_try_advisory_lock(%s::int, %s::int)", lock)
         acquired = cursor.fetchone()[0]
     try:
         yield acquired
     finally:
         if acquired:
             with connection.cursor() as cursor:
-                cursor.execute("SELECT pg_advisory_unlock(%s)", [SYNC_LOCK])
+                cursor.execute("SELECT pg_advisory_unlock(%s::int, %s::int)", lock)
 
 
 def _syncable_links():
@@ -132,6 +138,9 @@ def _sync_link(link, psu_headers):
     try:
         lines = client.fetch_transactions(link.account_uid, _fetch_from(link), psu_headers)
         return _post_lines(link, lines)
+    except client.CredentialsRejected:
+        # The whole household's problem, not this link's. See sync_all.
+        raise
     except client.SessionEnded as e:
         link.connection.ended_early = True
         link.connection.save(update_fields=["ended_early"])
@@ -147,21 +156,43 @@ def _sync_link(link, psu_headers):
 
 
 def sync_all(psu_headers=None):
-    """Sync every linked account. Returns the lines added, or None when
-    another sync is running."""
-    with _single_run() as acquired:
+    """Sync the current household's linked accounts. Returns the lines
+    added, or None when another of its syncs is running."""
+    with household_lock() as acquired:
         if not acquired:
             return None
         links = _syncable_links()
         created = []
-        for link in links:
-            # A session that ended on an earlier link of this run.
-            link.connection.refresh_from_db(fields=["ended_early"])
-            if not link.connection.ended:
-                created += _sync_link(link, psu_headers)
+        try:
+            for link in links:
+                # A session that ended on an earlier link of this run.
+                link.connection.refresh_from_db(fields=["ended_early"])
+                if not link.connection.ended:
+                    created += _sync_link(link, psu_headers)
+        except client.CredentialsRejected:
+            BankCredentials.objects.update(stopped=True, state=BankCredentials.State.REJECTED)
+        else:
+            if links:
+                BankCredentials.objects.update(stopped=False)
 
         auto_link_transfers(created, BankAccountLink.objects.filter(account__archived=False).values("account"))
         settle_new_transactions(
             Transaction.objects.filter(pk__in=[t.pk for t in created], transfer_counterpart__isnull=True)
         )
         return len(created)
+
+
+def sync_every_household():
+    """The scheduled run: each household with its own credentials, one after
+    another. One household's failure stays its own. Returns {name: added}, with
+    None for one already running and missing for one without bank sync."""
+    results = {}
+    for household in Household.objects.all():
+        with household_context(household):
+            if not client.enabled():
+                continue
+            try:
+                results[household.name] = sync_all()
+            except Exception:
+                logger.exception("Bank sync failed for household %s", household.pk)
+    return results

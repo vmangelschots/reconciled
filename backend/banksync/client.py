@@ -8,7 +8,9 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 import jwt
-from django.conf import settings
+
+from .credentials import NoEncryptionKey
+from .models import BankCredentials
 
 API_URL = "https://api.enablebanking.com"
 TIMEOUT_SECONDS = 20
@@ -20,6 +22,14 @@ class BankError(Exception):
     """A request failed; the message is safe to show the user."""
 
 
+class CredentialsRejected(BankError):
+    """Enable Banking doesn't accept the household's key."""
+
+
+class Unreachable(BankError):
+    """Enable Banking didn't answer."""
+
+
 class SessionEnded(BankError):
     """The bank session is over and needs a new authorization."""
 
@@ -28,11 +38,25 @@ class RateLimited(BankError):
     """The bank refuses more fetches for now."""
 
 
+def _credentials():
+    return BankCredentials.objects.first()
+
+
 def enabled():
-    return bool(settings.ENABLE_BANKING_APP_ID and settings.ENABLE_BANKING_PRIVATE_KEY)
+    """Whether the current household can talk to Enable Banking at all."""
+    found = _credentials()
+    if found is None:
+        return False
+    try:
+        return bool(found.private_key)
+    except NoEncryptionKey:
+        return False
 
 
 def _token():
+    found = _credentials()
+    if found is None:
+        raise CredentialsRejected("Bank sync isn't set up.")
     now = int(time.time())
     return jwt.encode(
         {
@@ -41,9 +65,9 @@ def _token():
             "iat": now,
             "exp": now + TOKEN_SECONDS,
         },
-        settings.ENABLE_BANKING_PRIVATE_KEY,
+        found.private_key,
         algorithm="RS256",
-        headers={"kid": settings.ENABLE_BANKING_APP_ID},
+        headers={"kid": found.app_id},
     )
 
 
@@ -57,6 +81,8 @@ def _error(status, content):
         return RateLimited("The bank is limiting requests. The next sync will try again.")
     if status == 401 and "SESSION" in code:
         return SessionEnded("The bank session has ended.")
+    if status == 401:
+        return CredentialsRejected("Enable Banking didn't accept the key.")
     return BankError(f"Enable Banking answered with an error ({status} {code}).".replace(" )", ")"))
 
 
@@ -74,8 +100,13 @@ def _call(method, path, *, body=None, query=None, headers=None):
     except HTTPError as e:
         raise _error(e.code, e.read()) from None
     except (URLError, TimeoutError):
-        raise BankError("Enable Banking couldn't be reached.") from None
+        raise Unreachable("Enable Banking couldn't be reached.") from None
     return json.loads(content) if content else {}
+
+
+def application():
+    """What Enable Banking knows about the household's application."""
+    return _call("GET", "/application")
 
 
 def list_banks(country):

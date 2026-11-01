@@ -56,10 +56,12 @@ class ImportSessionViewSet(
     transactions ledger until commit() is called.
     """
 
-    queryset = ImportSession.objects.all()
     serializer_class = ImportSessionSerializer
     # create (upload) needs multipart for the file; map/assign/commit send JSON.
     parser_classes = [MultiPartParser, JSONParser]
+
+    def get_queryset(self):
+        return ImportSession.objects.all()
 
     def create(self, request, *args, **kwargs):
         file_obj = request.FILES.get("file")

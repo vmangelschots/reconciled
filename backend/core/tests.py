@@ -1,5 +1,5 @@
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from households.testing import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
@@ -49,7 +49,7 @@ class AuthTests(TestCase):
 
         me_response = self.client.get(reverse("auth-me"))
         self.assertEqual(me_response.status_code, 200)
-        self.assertEqual(me_response.json(), {"username": self.username})
+        self.assertEqual(me_response.json()["username"], self.username)
 
     def test_login_with_wrong_password_is_rejected(self):
         response = self.client.post(

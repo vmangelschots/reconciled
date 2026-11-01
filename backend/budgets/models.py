@@ -1,8 +1,10 @@
 from django.core.exceptions import ValidationError
 from django.db import models
 
+from households.scoping import HouseholdOwned, HouseholdScoped
 
-class Category(models.Model):
+
+class Category(HouseholdOwned):
     """Exactly two levels: `parent` is null (top-level) or points at a
     top-level category. A category whose own `parent` is set can never
     itself be used as a parent - enforced here (clean(), a second line
@@ -43,7 +45,7 @@ class Category(models.Model):
         verbose_name_plural = "categories"
         constraints = [
             models.UniqueConstraint(
-                fields=["name"],
+                fields=["household", "name"],
                 condition=models.Q(parent__isnull=True),
                 name="unique_top_level_category_name",
             ),
@@ -71,7 +73,7 @@ class Category(models.Model):
                 )
 
 
-class CategoryLimit(models.Model):
+class CategoryLimit(HouseholdScoped):
     """A monthly spending limit for a category.
 
     `month` holds the first-of-month date of a specific override, or
@@ -82,6 +84,8 @@ class CategoryLimit(models.Model):
     month) wouldn't do this, since SQL treats every NULL as distinct from
     every other NULL.
     """
+
+    household_path = "category__household"
 
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name="limits")
     month = models.DateField(null=True, blank=True)
@@ -108,7 +112,7 @@ class CategoryLimit(models.Model):
         return f"{self.category.name} ({scope}): {self.limit_cents}"
 
 
-class YearlyBudget(models.Model):
+class YearlyBudget(HouseholdScoped):
     """A yearly or yearly-on-a-date budget's values from `from_year` on.
 
     One row per year in which the values changed: year Y uses the row
@@ -118,6 +122,8 @@ class YearlyBudget(models.Model):
     one history line per year. The due fields are null for a plain
     yearly budget.
     """
+
+    household_path = "category__household"
 
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name="yearly_budgets")
     from_year = models.PositiveSmallIntegerField()
@@ -137,13 +143,14 @@ class YearlyBudget(models.Model):
         return f"{self.category.name} ({self.from_year}+): {self.amount_cents}"
 
 
-class BudgetSettings(models.Model):
-    """The single row of budget-wide settings; read with `load()`.
+class BudgetSettings(HouseholdScoped):
+    """A household's one row of budget-wide settings; read with `load()`.
 
     `start_month` is the first-of-month date budgeting by year starts
     from, or null for "every year counts in full".
     """
 
+    household = models.OneToOneField("households.Household", on_delete=models.PROTECT, related_name="+")
     start_month = models.DateField(null=True, blank=True)
 
     class Meta:
@@ -151,7 +158,7 @@ class BudgetSettings(models.Model):
 
     @classmethod
     def load(cls):
-        settings, _created = cls.objects.get_or_create(pk=1)
+        settings, _created = cls.objects.get_or_create()
         return settings
 
     def __str__(self):
