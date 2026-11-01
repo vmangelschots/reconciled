@@ -14,6 +14,7 @@ import {
   updateTransaction,
 } from "../api/transactions";
 import { CategoryCombobox } from "../components/CategoryCombobox";
+import { PortfolioImportDialog } from "../components/PortfolioImportDialog";
 import { SetValueDialog } from "../components/SetValueDialog";
 import { SplitEditor } from "../components/SplitEditor";
 import { Button, buttonVariants } from "../components/ui/Button";
@@ -116,6 +117,7 @@ export function TransactionsPage() {
   const [loading, setLoading] = useState(true);
   const [pendingIds, setPendingIds] = useState(new Set());
   const [settingValue, setSettingValue] = useState(false);
+  const [importingPortfolio, setImportingPortfolio] = useState(false);
   const hasLoadedRef = useRef(false);
   const nextTempIdRef = useRef(-1);
   const toast = useToast();
@@ -404,6 +406,7 @@ export function TransactionsPage() {
   // installment would overwrite it. See the loan-schedules spec.
   const hasSchedule = account.account_type === "loan" && account.has_loan;
   const canSetValue = !isArchived && VALUED_TYPES.has(account.account_type) && !hasSchedule;
+  const canImportPortfolio = !isArchived && account.account_type === "investment";
   const scheduleLink = account.account_type === "loan" && (hasSchedule || !isArchived) && (
     <Link
       to={`/transactions/${account.id}/schedule`}
@@ -423,6 +426,11 @@ export function TransactionsPage() {
               {canSetValue && (
                 <Button variant="outline" size="sm" onClick={() => setSettingValue(true)}>
                   Set value
+                </Button>
+              )}
+              {canImportPortfolio && (
+                <Button variant="outline" size="sm" onClick={() => setImportingPortfolio(true)}>
+                  Import portfolio
                 </Button>
               )}
               {scheduleLink}
@@ -447,6 +455,18 @@ export function TransactionsPage() {
           account={account}
           open={settingValue}
           onOpenChange={setSettingValue}
+          onSaved={() => {
+            refreshAccounts();
+            reload();
+          }}
+        />
+      )}
+
+      {canImportPortfolio && importingPortfolio && (
+        <PortfolioImportDialog
+          account={account}
+          open={importingPortfolio}
+          onOpenChange={setImportingPortfolio}
           onSaved={() => {
             refreshAccounts();
             reload();

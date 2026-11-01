@@ -1,4 +1,4 @@
-import { apiFetch } from "./client";
+import { apiFetch, apiUpload } from "./client";
 
 // Each type belongs to a tier, from most to least liquid - see the
 // accounts spec's "Account tiers". Listed in tier order.
@@ -36,6 +36,16 @@ export function getAccount(id) {
 
 // Records the account's value on a date as a value adjustment; returns
 // { adjustment, current_balance_cents }. See the value-adjustments spec.
+export function previewPortfolio(id, file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  return apiUpload(`/api/accounts/${id}/portfolio-preview/`, formData);
+}
+
+export function importPortfolio(id, data) {
+  return apiFetch(`/api/accounts/${id}/portfolio-import/`, { method: "POST", body: data });
+}
+
 export function setAccountValue(id, data) {
   return apiFetch(`/api/accounts/${id}/set-value/`, { method: "POST", body: data });
 }

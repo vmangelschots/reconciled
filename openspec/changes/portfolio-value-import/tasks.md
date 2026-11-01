@@ -16,12 +16,12 @@
 
 ## 3. Screen
 
-- [ ] 3.1 Add `previewPortfolio` and `importPortfolio` to `api/accounts.js`, and `PortfolioImportDialog.jsx` with the file step, the preview, live total from the ticks, the later-value note, inline refusals and the reminder to delete the export. Verify in `PortfolioImportDialog.test.jsx`, including unticking and a refusal.
-- [ ] 3.2 Add "Import portfolio" to the `TransactionsPage` header for active investment accounts, refreshing the balance and ledger after a save. Verify in `TransactionsPage.test.jsx` for investment, property and archived accounts.
+- [x] 3.1 Add `previewPortfolio` and `importPortfolio` to `api/accounts.js`, and `PortfolioImportDialog.jsx` with the file step, the preview, live total from the ticks, the later-value note, inline refusals and the reminder to delete the export. Verify in `PortfolioImportDialog.test.jsx`, including unticking and a refusal.
+- [x] 3.2 Add "Import portfolio" to the `TransactionsPage` header for active investment accounts, refreshing the balance and ledger after a save. Verify in `TransactionsPage.test.jsx` for investment, property and archived accounts.
 
 ## 4. Final checks
 
-- [ ] 4.1 Run `python manage.py test`, `npm test`, `npm run lint` and `npm run build`, and verify they pass.
+- [x] 4.1 Run `python manage.py test`, `npm test`, `npm run lint` and `npm run build`, and verify they pass.
 - [ ] 4.2 In the running app, import `my.xml` into an investment account, untick the cash account tracked elsewhere, and verify the value equals Portfolio Performance's total minus that account, dated by the newest price, in the ledger and in net worth.
 
 ## Workflow follow-up

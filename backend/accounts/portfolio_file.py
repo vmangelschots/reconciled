@@ -227,11 +227,12 @@ def _holding(security, count):
 
 
 def _latest_price(security):
-    """(date, price) of the newest of the price history and `latest`."""
+    """(date, price) of the newest of the price history and `latest`. On the
+    same date `latest` wins, as it does in Portfolio Performance."""
     entries = list(security.iterfind("prices/price"))
     latest = security.find("latest")
     if latest is not None and latest.get("t"):
-        entries.append(latest)
+        entries.insert(0, latest)
     if not entries:
         return None
     newest = max(entries, key=lambda entry: entry.get("t"))

@@ -24,7 +24,9 @@ What that export showed:
   `accountTransaction`, `portfolio-transaction`, `portfolioTransaction`,
   `transactionFrom`, `transactionTo`).
 - Shares and prices are scaled by 10^8, amounts by 10^2.
-- A security's newest price may be in `latest`, or only in `prices`.
+- A security's newest price may be in `latest`, or only in `prices`. `latest` can
+  share a date with the history at a different price, and `latest` is the one
+  Portfolio Performance values with.
 
 ## Goals / Non-Goals
 

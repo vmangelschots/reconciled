@@ -62,6 +62,11 @@ class SampleTests(SimpleTestCase):
         emerging = next(h for h in self.file.holdings if h.name == "Emerging fund")
         self.assertEqual(emerging.price_date, date(2026, 10, 29))
 
+    def test_latest_wins_over_the_history_on_the_same_date(self):
+        data = SAMPLE.replace(b'<latest t="2026-10-30"', b'<latest t="2026-10-29"')
+        world = next(h for h in read_portfolio_file(data).holdings if h.name == "World fund")
+        self.assertEqual(world.value_cents, 101000)
+
     def test_a_sold_foreign_holding_without_a_price_doesnt_count(self):
         self.assertNotIn("Old US fund", [h.name for h in self.file.holdings])
 

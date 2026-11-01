@@ -54,6 +54,11 @@ transactions. Holdings with no shares left SHALL NOT count.
   price history, which ends on 29 October
 - **THEN** the 30 October price is used
 
+#### Scenario: Two prices on the same date
+- **WHEN** a holding's separate newest price and its price history both have an
+  entry for 30 October, at different prices
+- **THEN** the separate newest price is used
+
 #### Scenario: An account first named inside a transfer
 - **WHEN** a cash account is only described in the file inside a transfer from
   another account
