@@ -27,7 +27,7 @@ Everything runs in the `reconciled` namespace, behind one HTTPS hostname.
 | Your hostname | `10-config.yaml` (3 places) and `50-ingress.yaml` (2 places) | `budget.example.com` |
 | cert-manager issuer name | `50-ingress.yaml` annotation | `letsencrypt` |
 | Image version (recommended: pin a release instead of `latest`) | `30-backend.yaml` (2 places), `40-frontend.yaml` | `:latest` |
-| Secret key, DB password, your login | `15-secret.yaml` (copy of `examples/secret.example.yaml`) | `change-me` |
+| Secret key, encryption key, DB password, your login | `15-secret.yaml` (copy of `examples/secret.example.yaml`) | `change-me` |
 
 Create the secret file. It's git-ignored, so it can't be committed by
 accident:
@@ -43,7 +43,9 @@ python -c "import secrets; print(secrets.token_urlsafe(50))"
 Add `OPENAI_API_KEY` to `15-secret.yaml` to have OpenAI guess
 categories for payees your history doesn't cover yet. Payee names, notes
 and amounts are sent to OpenAI; account names, dates and balances never
-are. Without the key, only your history is used. Three plain settings can
+are. Without the key, only your history is used. Each household turns this
+on for itself in Settings, and it uses your OpenAI account; the first household
+keeps it on after an upgrade. Three plain settings can
 go in `10-config.yaml` if the defaults don't suit you:
 
 | Setting | Default | What it does |
@@ -55,19 +57,64 @@ go in `10-config.yaml` if the defaults don't suit you:
 Restart the backend after changing any of them:
 `kubectl -n reconciled rollout restart deploy/backend`.
 
+### Encryption key
+
+Each household's Enable Banking key is stored encrypted with
+`HOUSEHOLD_ENCRYPTION_KEYS` from `15-secret.yaml`. Generate one:
+
+```sh
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Keep a copy somewhere other than the database: a database dump doesn't hold
+it, and without it households have to enter their keys again. Their budgets
+aren't affected.
+
+To rotate it, put a new key first in the comma-separated list, restart the
+backend, run `manage.py rotate_encryption_key`, then remove the old key.
+
+### Households
+
+The login in `15-secret.yaml` gets the first household. For someone else:
+
+```sh
+kubectl -n reconciled exec deploy/backend -- \
+  python manage.py create_household "The Peeters household" --url https://<your hostname>
+```
+
+This prints an invite link for their first member, who chooses their own login
+and password. Members can then invite others from Settings, and anyone with a
+login can be in several households. Links work once, for 7 days.
+
+Tell people what you can see: whoever runs the server can read every household
+in the database. Household budget data isn't in Django admin, which only
+manages households, members and logins.
+
+Remove someone from a household in Django admin. To delete a household and all
+its data, for good: `manage.py delete_household <id>`. Run
+`manage.py check_household_integrity` after an upgrade to confirm nothing links
+across households.
+
 ### Optional: bank sync
 
-Register an application in the [Enable Banking](https://enablebanking.com/)
-Control Panel, with `https://<your hostname>/settings/banks` as a redirect
-URL, and activate it by linking your own accounts. That mode is for personal
-use. Add `ENABLE_BANKING_APP_ID` and `ENABLE_BANKING_PRIVATE_KEY` to
-`15-secret.yaml`, then restart the backend. Connect your banks under
-Settings. Transactions then pass through Enable Banking.
+Each household uses its own [Enable Banking](https://enablebanking.com/)
+application, set up under Settings, which walks them through it and shows the
+redirect URL to add, `https://<your hostname>/settings/banks`. Restricted mode
+is for personal use with accounts linked to that application. Whether several
+people's applications may run on one server isn't confirmed with Enable
+Banking, so ask them before connecting another household's bank. Transactions
+pass through Enable Banking.
 
-`35-bank-sync.yaml` syncs at 06:30 and 18:30 UTC. Without the keys it finishes
-without doing anything. It uses the same image as the backend, so keep its
-tag in step when you pin one. Consent lasts about 180 days at most banks; the
-Overview says when to reconnect.
+When upgrading from a single-household version, keep `ENABLE_BANKING_APP_ID`
+and `ENABLE_BANKING_PRIVATE_KEY` in the Secret and add the encryption key: the
+backend moves them into the first household on its next start, and you can then
+remove them. Take a database dump first. Reversing the migrations is only safe
+while there is one household; after that, restore the dump.
+
+`35-bank-sync.yaml` syncs every household at 06:30 and 18:30 UTC, one after
+another. A household without credentials is skipped. It uses the same image as
+the backend, so keep its tag in step when you pin one. Consent lasts about 180
+days at most banks; the Overview says when to reconnect.
 
 `BUDGET_APP_USERNAME` / `BUDGET_APP_PASSWORD` is the account you log in
 with. It's created on the backend's first start and never changed

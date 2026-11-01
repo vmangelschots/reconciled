@@ -1,9 +1,13 @@
 """The backup file: what goes in it and how it goes back. See
 openspec/specs/data-backup.
 
-A backup is Django's "python" serialization of BACKED_UP_MODELS inside an
-envelope (see build_backup). Restoring replaces every backed-up table with
-the file's rows, keeping their ids and timestamps.
+A backup is Django's "python" serialization of one household's rows of
+BACKED_UP_MODELS inside an envelope (see build_backup), with no household in
+them. Restoring replaces the current household's rows with the file's, keeping
+timestamps. Rows get new ids: tables are shared, so the file's ids may belong to
+another household by now. Every link is rewritten to match, and a link to
+anything outside the file refuses the restore, so a file can't reach another
+household.
 
 Versions: FORMAT_VERSION is the envelope's own shape, and "migrations"
 records the latest migration of each backed-up app. A backup naming a
@@ -11,7 +15,8 @@ migration this install doesn't have comes from a newer app and is refused.
 An older one loads into the current models: fields added since take their
 default and fields removed since are ignored. A migration that reshapes
 existing data (more than adding a field with a default) must bump
-FORMAT_VERSION and add a converter here from the previous version.
+FORMAT_VERSION and add a converter here from the previous version. Version 1 is
+from before households; its rows already are one household's.
 """
 
 import json
@@ -20,14 +25,17 @@ from decimal import Decimal
 
 from django.apps import apps
 from django.core import serializers
-from django.core.management.color import no_style
 from django.core.serializers.base import DeserializationError
 from django.db import DatabaseError, connection, transaction
 from django.db.migrations.loader import MigrationLoader
 from django.db.migrations.recorder import MigrationRecorder
 from django.utils import timezone
 
-FORMAT_VERSION = 1
+from banksync.sync import household_lock
+from households.context import current_household
+
+FORMAT_VERSION = 2
+READABLE_VERSIONS = {1, 2}
 APP_MARKER = "reconciled"
 
 # Every model in the data apps is either backed up or excluded on purpose;
@@ -47,14 +55,16 @@ BACKED_UP_MODELS = [
     "banksync.BankAccountLink",
     "banksync.SeenBankLine",
 ]
-# Bank access: a restore clears it, and links wait to be reconnected.
-EXCLUDED_MODELS = ["banksync.BankConnection"]
+# Bank access: a restore clears connections, and links wait to be reconnected.
+# Credentials stay with the household.
+EXCLUDED_MODELS = ["banksync.BankConnection", "banksync.BankCredentials"]
 DATA_APPS = ["accounts", "budgets", "transactions", "forecasting", "imports", "banksync"]
 
 NOT_A_BACKUP = "This file isn't a Reconciled backup."
 UNREADABLE = "This backup can't be read. It may be damaged or cut off."
 NEWER = "This backup was made by a newer version of Reconciled. Update the app, then restore it."
 NOT_SAVED = "This backup couldn't be restored: some of its data doesn't fit together. Nothing was changed."
+SYNC_RUNNING = "A bank sync is running. Try again in a moment. Nothing was changed."
 
 
 class BackupError(ValueError):
@@ -69,18 +79,17 @@ def _rows(model):
     ImportSession = apps.get_model("imports.ImportSession")
     BankAccountLink = apps.get_model("banksync.BankAccountLink")
     queryset = model.objects.order_by("pk")
-    if model is BankAccountLink:
-        rows = serializers.serialize("python", queryset)
-        for row in rows:
-            row["fields"].update(connection=None, account_uid="")
-        return rows
-    if model is not ImportSession:
-        return serializers.serialize("python", queryset)
-    # Only committed imports, and only when they happened and where they
-    # went (the last-import dates) - never the bank file or its lines.
-    rows = serializers.serialize("python", queryset.filter(status=ImportSession.Status.COMMITTED))
+    if model is ImportSession:
+        # Only committed imports, and only when they happened and where they
+        # went (the last-import dates) - never the bank file or its lines.
+        queryset = queryset.filter(status=ImportSession.Status.COMMITTED)
+    rows = serializers.serialize("python", queryset)
     for row in rows:
-        row["fields"].update(raw_content="", candidates=[])
+        row["fields"].pop("household", None)
+        if model is BankAccountLink:
+            row["fields"].update(connection=None, account_uid="")
+        if model is ImportSession:
+            row["fields"].update(raw_content="", candidates=[])
     return rows
 
 
@@ -103,6 +112,7 @@ def build_backup():
         "app": APP_MARKER,
         "format_version": FORMAT_VERSION,
         "exported_at": timezone.now().isoformat(),
+        "household": current_household().name,
         "migrations": _latest_migrations(),
         "summary": {
             "accounts": Account.objects.count(),
@@ -133,9 +143,8 @@ def backup_filename():
 
 
 def read_backup(content):
-    """Check a backup file's content (bytes or str) and deserialize it,
-    without writing anything. Returns the objects to restore; raises
-    BackupError."""
+    """Check a backup file's content (bytes or str) without writing anything.
+    Returns its rows; raises BackupError."""
     if isinstance(content, bytes):
         try:
             content = content.decode("utf-8")
@@ -149,7 +158,7 @@ def read_backup(content):
         raise BackupError(UNREADABLE) from None
     if envelope.get("app") != APP_MARKER:
         raise BackupError(NOT_A_BACKUP)
-    if envelope.get("format_version") != FORMAT_VERSION:
+    if envelope.get("format_version") not in READABLE_VERSIONS:
         raise BackupError(NEWER)
 
     migrations = envelope.get("migrations")
@@ -164,38 +173,117 @@ def read_backup(content):
     if any(not isinstance(row, dict) or row.get("model") not in labels for row in data):
         raise BackupError(UNREADABLE)
     try:
-        return list(serializers.deserialize("python", data, ignorenonexistent=True))
+        list(serializers.deserialize("python", data, ignorenonexistent=True))
     except (DeserializationError, ValueError, TypeError, LookupError):
         raise BackupError(UNREADABLE) from None
+    return data
 
 
-def restore_backup(objects):
-    """Replace every backed-up table with `objects` (from read_backup), all
-    or nothing. Returns the restored counts; raises BackupError."""
-    models = backed_up_models()
-    ImportSession = apps.get_model("imports.ImportSession")
+def clear_household(household, *, keep_credentials=True):
+    """Delete the bound household's rows, leaving its login and invites. Raw
+    deletes, children first: signals would recompute what's being deleted, and
+    PROTECT would refuse half of it. Foreign keys wait for the commit."""
+    get = apps.get_model
+    ImportSession = get("imports.ImportSession")
     imported_accounts = ImportSession.imported_accounts.through
-    BankConnection = apps.get_model("banksync.BankConnection")
-    cleared = [*models, imported_accounts, BankConnection]
-    tables = ", ".join(connection.ops.quote_name(m._meta.db_table) for m in cleared)
+    imported_accounts.objects.filter(importsession__account__household=household).order_by()._raw_delete(
+        using=connection.alias
+    )
+    models = [
+        get("banksync.SeenBankLine"),
+        get("banksync.BankAccountLink"),
+        get("banksync.BankConnection"),
+        get("transactions.Transaction"),
+        get("accounts.LoanCorrection"),
+        get("accounts.Loan"),
+        ImportSession,
+        get("imports.AccountImportSettings"),
+        get("forecasting.RecurringTransaction"),
+        get("budgets.CategoryLimit"),
+        get("budgets.YearlyBudget"),
+        get("budgets.BudgetSettings"),
+        get("budgets.Category"),
+        get("accounts.Account"),
+    ]
+    if not keep_credentials:
+        models.insert(0, get("banksync.BankCredentials"))
+    for model in models:
+        model.objects.order_by()._raw_delete(using=connection.alias)
+
+
+def _new_ids(rows):
+    """{model label: {id in the file: new id}}, taken from each table's own
+    sequence, so anything added later is numbered after them."""
+    ids = {}
+    with connection.cursor() as cursor:
+        for model in backed_up_models():
+            label = model._meta.label_lower
+            old = [row.get("pk") for row in rows if row["model"] == label]
+            if len(set(old)) != len(old):
+                raise BackupError(NOT_SAVED)
+            cursor.execute(
+                "SELECT nextval(pg_get_serial_sequence(%s, 'id')) FROM generate_series(1, %s)",
+                [model._meta.db_table, len(old)],
+            )
+            ids[label] = dict(zip(old, [new for (new,) in cursor.fetchall()]))
+    return ids
+
+
+def _new_id(ids, target, value):
     try:
-        with transaction.atomic(), connection.cursor() as cursor:
-            # Foreign keys are checked at commit (deferred). Run any pending
-            # checks first - TRUNCATE refuses a table with some - and check
-            # the restored rows before leaving, so a dangling link fails
-            # here and rolls back rather than at some later commit.
-            cursor.execute("SET CONSTRAINTS ALL IMMEDIATE")
-            cursor.execute(f"TRUNCATE {tables} RESTART IDENTITY CASCADE")
-            cursor.execute("SET CONSTRAINTS ALL DEFERRED")
-            for obj in objects:
-                obj.save()
-            cursor.execute("SET CONSTRAINTS ALL IMMEDIATE")
-            cursor.execute("SET CONSTRAINTS ALL DEFERRED")
-            # Rows keep their ids, so new rows must be numbered after them.
-            for sql in connection.ops.sequence_reset_sql(no_style(), [*models, imported_accounts]):
-                cursor.execute(sql)
-    except DatabaseError:
+        return ids[target][value]
+    except (KeyError, TypeError):
+        # Pointing outside the file: not this backup's to touch.
         raise BackupError(NOT_SAVED) from None
+
+
+def _rewritten(row, ids, household):
+    """A copy of a file row, with its new id, links and household."""
+    model = apps.get_model(row["model"])
+    fields = dict(row["fields"])
+    for field in model._meta.concrete_fields:
+        if field.name == "household" or not field.remote_field or fields.get(field.name) is None:
+            continue
+        target = field.remote_field.model._meta.label_lower
+        # Connections aren't in a backup; a link waits to be reconnected.
+        fields[field.name] = None if target not in ids else _new_id(ids, target, fields[field.name])
+    for field in model._meta.many_to_many:
+        target = field.remote_field.model._meta.label_lower
+        fields[field.name] = [_new_id(ids, target, value) for value in fields.get(field.name) or []]
+    # Remembered Revolut products hold account ids in JSON. Nothing depends on
+    # one that's gone: the mapping just asks again.
+    if "product_accounts" in fields:
+        accounts = ids["accounts.account"]
+        fields["product_accounts"] = {
+            product: accounts.get(account) for product, account in (fields["product_accounts"] or {}).items()
+        }
+    if model.household_path == "household":
+        fields["household"] = household.pk
+    return {"model": row["model"], "pk": ids[row["model"]][row.get("pk")], "fields": fields}
+
+
+def restore_backup(rows):
+    """Replace the current household's data with `rows` (from read_backup), all
+    or nothing. Returns the restored counts; raises BackupError."""
+    household = current_household()
+    with household_lock() as acquired:
+        if not acquired:
+            raise BackupError(SYNC_RUNNING)
+        try:
+            with transaction.atomic(), connection.cursor() as cursor:
+                # Checked at the end, so rows can go in any order, and a dangling
+                # link fails here and rolls back rather than at a later commit.
+                cursor.execute("SET CONSTRAINTS ALL DEFERRED")
+                ids = _new_ids(rows)
+                rewritten = [_rewritten(row, ids, household) for row in rows]
+                clear_household(household)
+                objects = list(serializers.deserialize("python", rewritten, ignorenonexistent=True))
+                for obj in objects:
+                    obj.save()
+                cursor.execute("SET CONSTRAINTS ALL IMMEDIATE")
+                cursor.execute("SET CONSTRAINTS ALL DEFERRED")
+        except DatabaseError:
+            raise BackupError(NOT_SAVED) from None
 
     Account = apps.get_model("accounts.Account")
     Transaction = apps.get_model("transactions.Transaction")

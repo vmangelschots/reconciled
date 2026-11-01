@@ -204,9 +204,9 @@ class SplitLineSerializer(serializers.Serializer):
 
     id = serializers.IntegerField(required=False, allow_null=True)
     amount_cents = serializers.IntegerField()
-    category = serializers.PrimaryKeyRelatedField(queryset=Category.objects.all(), required=False, allow_null=True)
+    category = serializers.PrimaryKeyRelatedField(queryset=Category.objects, required=False, allow_null=True)
     transfer_account = serializers.PrimaryKeyRelatedField(
-        queryset=Account.objects.all(), required=False, allow_null=True
+        queryset=Account.objects, required=False, allow_null=True
     )
     notes = serializers.CharField(required=False, allow_blank=True, default="")
 

@@ -1,8 +1,48 @@
 from django.db import models
 from django.utils import timezone
 
+from households.scoping import HouseholdOwned, HouseholdScoped
 
-class BankConnection(models.Model):
+from . import credentials
+
+
+class BankCredentials(HouseholdScoped):
+    """A household's Enable Banking application. Never in a backup, and the
+    key never leaves the server once saved."""
+
+    class State(models.TextChoices):
+        READY = "ready"
+        REJECTED = "rejected"
+        REDIRECT_MISSING = "redirect_missing"
+        NOT_ACTIVE = "not_active"
+        SANDBOX = "sandbox"
+        UNREACHABLE = "unreachable"
+
+    household = models.OneToOneField("households.Household", on_delete=models.PROTECT, related_name="+")
+    app_id = models.CharField(max_length=100)
+    encrypted_key = models.TextField()
+    # What the last check found. Checks are made on request, not on every load.
+    state = models.CharField(max_length=20, choices=State.choices, default=State.READY)
+    # A sync was refused: Enable Banking stopped accepting the key.
+    stopped = models.BooleanField(default=False)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name_plural = "bank credentials"
+
+    def __str__(self):
+        return self.app_id
+
+    @property
+    def private_key(self):
+        return credentials.decrypt(self.encrypted_key)
+
+    @private_key.setter
+    def private_key(self, text):
+        self.encrypted_key = credentials.encrypt(text)
+
+
+class BankConnection(HouseholdOwned):
     """One authorization at a bank. Never in a backup: session_id is bank
     access, so a restore clears connections and links wait to reconnect."""
 
@@ -29,7 +69,7 @@ class BankConnection(models.Model):
         return self.ended_early or self.valid_until <= timezone.now()
 
 
-class BankAccountLink(models.Model):
+class BankAccountLink(HouseholdOwned):
     """A bank account feeding a ledger account. connection is null after a
     restore, until the bank is reconnected."""
 
@@ -45,11 +85,16 @@ class BankAccountLink(models.Model):
     last_added_count = models.PositiveIntegerField(default=0)
     last_error = models.CharField(max_length=300, blank=True, default="")
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["household", "account_hash"], name="one_link_per_bank_account")
+        ]
+
     def __str__(self):
         return f"{self.bank_name} -> {self.account}"
 
 
-class SeenBankLine(models.Model):
+class SeenBankLine(HouseholdOwned):
     """Every bank line a sync has dealt with. Keyed by account hash, not by
     link, and outliving its transaction, so neither a reconnect nor a
     deleted transaction brings a line back. A transaction with a row here
@@ -63,7 +108,7 @@ class SeenBankLine(models.Model):
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(fields=["account_hash", "reference"], name="one_seen_line_per_reference")
+            models.UniqueConstraint(fields=["household", "account_hash", "reference"], name="one_seen_line_per_reference")
         ]
 
     def __str__(self):

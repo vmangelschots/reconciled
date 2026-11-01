@@ -12,7 +12,28 @@ vi.mock("../api/backup", async () => {
   return { ...actual, downloadBackup: vi.fn(), restoreBackup: vi.fn() };
 });
 
-vi.mock("../api/bankSync", () => ({ getBankSync: vi.fn().mockResolvedValue({ enabled: false }) }));
+vi.mock("../api/bankSync", () => ({
+  getBankSync: vi.fn().mockResolvedValue({
+    enabled: false,
+    credentials: { state: "not_set_up", app_id: "", stopped: false, redirect_url: "https://b.example/settings/banks" },
+  }),
+}));
+
+vi.mock("../api/household", () => ({
+  getHousehold: vi.fn().mockResolvedValue({
+    id: 1,
+    name: "The Peeters household",
+    members: [{ username: "ann", you: true }],
+    invites: [],
+    can_leave: false,
+    ai_available: false,
+    ai_enabled: false,
+  }),
+}));
+
+vi.mock("../auth/AuthContext", () => ({
+  useAuth: () => ({ user: { household: { id: 1, name: "The Peeters household" } } }),
+}));
 
 const BACKUP = {
   app: "reconciled",
@@ -49,9 +70,16 @@ beforeEach(() => {
 });
 
 describe("readBackupSummary", () => {
+  it("names another household's backup, but not this household's own", () => {
+    const summary = { exportedAt: "2026-10-20T14:03:00+00:00", household: "The Janssens", accounts: 1, transactions: 2 };
+    expect(backupLine(summary, "The Peeters")).toContain("· The Janssens ·");
+    expect(backupLine(summary, "The Janssens")).not.toContain("The Janssens");
+  });
+
   it("reads when the backup was made and what it holds", async () => {
     await expect(backupApi.readBackupSummary(backupFile())).resolves.toEqual({
       exportedAt: "2026-10-20T14:03:00+00:00",
+      household: null,
       accounts: 3,
       transactions: 1204,
     });
@@ -112,7 +140,7 @@ describe("SettingsPage", () => {
       backupLine({ exportedAt: BACKUP.exported_at, accounts: 3, transactions: 1204 }),
     );
     expect(dialog).toHaveTextContent(/3 accounts · 1,204 transactions/);
-    expect(dialog).toHaveTextContent("Everything now in the app is replaced by the backup.");
+    expect(dialog).toHaveTextContent("Everything in this household is replaced by the backup, for all its members.");
     expect(backupApi.restoreBackup).not.toHaveBeenCalled();
   });
 
@@ -129,10 +157,10 @@ describe("SettingsPage", () => {
     renderPage();
     const file = backupFile();
     await pick(file);
-    await userEvent.click(await screen.findByRole("button", { name: "Replace everything" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Replace this household's data" }));
 
     expect(backupApi.restoreBackup).toHaveBeenCalledWith(file);
-    expect(await screen.findByText("Restored 3 accounts and 1,204 transactions.")).toBeInTheDocument();
+    expect(await screen.findByText("Restored 3 accounts and 1,204 transactions. Reconnect your banks in Settings.")).toBeInTheDocument();
     expect(screen.getByText("Overview page")).toBeInTheDocument();
   });
 
@@ -144,7 +172,7 @@ describe("SettingsPage", () => {
     backupApi.restoreBackup.mockRejectedValue(error);
     renderPage();
     await pick(backupFile());
-    await userEvent.click(await screen.findByRole("button", { name: "Replace everything" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Replace this household's data" }));
 
     expect(await screen.findByText(error.data.detail)).toBeInTheDocument();
     expect(screen.queryByText("Overview page")).not.toBeInTheDocument();

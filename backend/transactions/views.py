@@ -10,7 +10,7 @@ from budgets.models import Category
 from budgets.tabs import TAB_GROUP_ERROR
 
 from . import tabs
-from .ai import get_guesser
+from .ai import ai_available, get_guesser
 from .categorize import categorize, needs_review, review_groups, uncategorized
 from .loans import sync_loans
 from .models import Transaction
@@ -161,6 +161,7 @@ class TransactionViewSet(viewsets.ModelViewSet):
                 "groups": review_groups(),
                 "uncategorized_count": uncategorized().count(),
                 "ai_enabled": get_guesser() is not None,
+                "ai_available": ai_available(),
             }
         )
 

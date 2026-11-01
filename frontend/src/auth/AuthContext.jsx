@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
-import { apiFetch, ensureCsrfCookie } from "../api/client";
+import { apiFetch, ensureCsrfCookie, setActiveHousehold } from "../api/client";
 
 const AuthContext = createContext(null);
 
@@ -7,25 +7,31 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const loadUser = useCallback(async () => {
+    const me = await apiFetch("/api/auth/me/");
+    setActiveHousehold(me.household?.id ?? null);
+    setUser(me);
+    return me;
+  }, []);
+
   useEffect(() => {
-    apiFetch("/api/auth/me/")
-      .then(setUser)
+    loadUser()
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
-  }, []);
+  }, [loadUser]);
 
   const login = useCallback(async (username, password) => {
     await ensureCsrfCookie();
-    const loggedInUser = await apiFetch("/api/auth/login/", {
+    await apiFetch("/api/auth/login/", {
       method: "POST",
       body: { username, password },
     });
-    setUser(loggedInUser);
-    return loggedInUser;
-  }, []);
+    return loadUser();
+  }, [loadUser]);
 
   const logout = useCallback(async () => {
     await apiFetch("/api/auth/logout/", { method: "POST" });
+    setActiveHousehold(null);
     setUser(null);
   }, []);
 

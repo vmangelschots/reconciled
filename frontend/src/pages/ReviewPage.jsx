@@ -105,6 +105,7 @@ export function ReviewPage() {
   const [uncategorizedCount, setUncategorizedCount] = useState(0);
   const [categories, setCategories] = useState([]);
   const [aiEnabled, setAiEnabled] = useState(false);
+  const [aiOffered, setAiOffered] = useState(false);
   const [backfill, setBackfill] = useState({ running: false, noMatchOf: null, aiLines: [] });
 
   const confirmRefs = useRef({});
@@ -135,6 +136,7 @@ export function ReviewPage() {
     setGroups(next);
     setUncategorizedCount(data.uncategorized_count);
     setAiEnabled(Boolean(data.ai_enabled));
+    setAiOffered(Boolean(data.ai_available) && !data.ai_enabled);
     if (next.length) pendingFocus.current = focusTarget(next[0]);
   }
 
@@ -330,6 +332,7 @@ export function ReviewPage() {
           headingRef={emptyHeadingRef}
           uncategorizedCount={uncategorizedCount}
           aiEnabled={aiEnabled}
+          aiOffered={aiOffered}
           backfill={backfill}
           onBackfill={runBackfill}
         />
@@ -486,7 +489,7 @@ function ReviewGroup({
   );
 }
 
-function EmptyState({ headingRef, uncategorizedCount, aiEnabled, backfill, onBackfill }) {
+function EmptyState({ headingRef, uncategorizedCount, aiEnabled, aiOffered, backfill, onBackfill }) {
   const slow = useAfterDelay(backfill.running && aiEnabled, SLOW_HINT_MS);
   const runningLabel = (
     <>
@@ -557,6 +560,9 @@ function EmptyState({ headingRef, uncategorizedCount, aiEnabled, backfill, onBac
               ? "Uses your history first, then AI for new payees."
               : "Only payees you've categorized before get a guess."}
           </p>
+        )}
+        {aiOffered && (
+          <p className="text-xs text-ink-secondary">Using your history only. AI suggestions can be turned on in Settings.</p>
         )}
       </>
     );

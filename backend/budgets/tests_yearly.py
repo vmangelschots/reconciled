@@ -1,7 +1,8 @@
 from collections import namedtuple
 from datetime import date
 
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase
+from households.testing import TestCase
 
 from accounts.models import Account
 from transactions.models import Transaction

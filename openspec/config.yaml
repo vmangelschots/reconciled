@@ -28,8 +28,9 @@ context: |
   Enable Banking (see openspec/specs/bank-sync). Other providers (e.g.
   Plaid/SimpleFIN) are not in scope unless the user asks.
 
-  Assume single-user / single-household use unless the user says otherwise -
-  no multi-tenant account system needed for v1.
+  A few invited households share one instance, in shared tables, each with
+  its own Enable Banking application (see openspec/specs/households). This is
+  not a public multi-tenant service: no open sign-up, roles or billing.
 
 # Per-artifact rules (optional)
 # Add custom rules for specific artifacts.

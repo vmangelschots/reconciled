@@ -8,6 +8,7 @@ import {
   Inbox,
   Landmark,
   Tag,
+  RotateCcw,
   Upload,
 } from "lucide-react";
 import { Fragment, useState } from "react";
@@ -248,6 +249,7 @@ function attentionItems(data, month, isCurrent) {
   }
   for (const y of attention.yearly ?? []) items.push(yearlyItem(y, month));
   for (const loan of attention.missed_loans ?? []) items.push(missedLoanItem(loan));
+  if (attention.bank_sync_stopped) items.push(syncStoppedItem());
   for (const bank of attention.reconnect ?? []) items.push(reconnectItem(bank));
   const stale = staleImportItem(data.accounts);
   if (stale) items.push(stale);
@@ -263,6 +265,15 @@ function reconnectText(bank) {
     return `Reconnect ${bank.bank_name}: sync stopped ${days <= 0 ? "today" : `${plural(days, "day", "days")} ago`}`;
   }
   return `Reconnect ${bank.bank_name}: ${plural(bank.days_left, "day", "days")} left`;
+}
+
+function syncStoppedItem() {
+  return {
+    key: "bank-sync-stopped",
+    to: "/settings",
+    icon: <Landmark className="h-4 w-4 text-warning" />,
+    primary: "Bank sync stopped: check your Enable Banking key",
+  };
 }
 
 function reconnectItem(bank) {
@@ -396,6 +407,46 @@ const CATEGORY_VIEWS = [
   { value: "pie", label: "Pie", Icon: ChartPie },
 ];
 
+// A household with nothing in it yet - see specs/overview, "First run".
+function FirstRun() {
+  return (
+    <Panel flush>
+      <EmptyState
+        className="px-5 pt-2"
+        icon={<Landmark className="h-6 w-6" />}
+        action={
+          <Link to="/accounts" className={buttonVariants()}>
+            Add your accounts
+          </Link>
+        }
+      >
+        <span className="block text-base font-medium text-ink-primary">Welcome. Let's set up your budget.</span>
+        Add your accounts first, then bring in your transactions.
+      </EmptyState>
+      <ul className="divide-y divide-border border-t border-border">
+        <ListRow
+          to="/settings#bank-connections"
+          icon={<Landmark className="h-4 w-4" />}
+          primary="Connect your bank"
+          secondary="New transactions arrive by themselves"
+        />
+        <ListRow
+          to="/import"
+          icon={<Upload className="h-4 w-4" />}
+          primary="Import a file"
+          secondary="Upload an export from your bank"
+        />
+        <ListRow
+          to="/settings#backup"
+          icon={<RotateCcw className="h-4 w-4" />}
+          primary="Restore a backup"
+          secondary="Start from a file you already have"
+        />
+      </ul>
+    </Panel>
+  );
+}
+
 /**
  * The home page: how all accounts together are doing in one month, and
  * what needs attention. Each panel loads and fails on its own. See specs/overview.
@@ -431,22 +482,11 @@ export function OverviewPage() {
     </PageHeader>
   );
 
-  if (loaded && accounts.length === 0) {
+  if ((loaded && accounts.length === 0) || overview.data?.has_transactions === false) {
     return (
       <section className="flex flex-col gap-6">
         {header}
-        <Panel>
-          <EmptyState
-            icon={<Landmark className="h-6 w-6" />}
-            action={
-              <Link to="/accounts" className={buttonVariants()}>
-                Go to Accounts
-              </Link>
-            }
-          >
-            There are no accounts yet.
-          </EmptyState>
-        </Panel>
+        <FirstRun />
       </section>
     );
   }

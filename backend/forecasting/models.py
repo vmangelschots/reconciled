@@ -1,7 +1,11 @@
 from django.db import models
 
+from households.scoping import HouseholdScoped
 
-class RecurringTransaction(models.Model):
+
+class RecurringTransaction(HouseholdScoped):
+    household_path = "account__household"
+
     class Frequency(models.TextChoices):
         WEEKLY = "weekly", "Weekly"
         BIWEEKLY = "biweekly", "Biweekly"

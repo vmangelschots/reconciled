@@ -3,9 +3,12 @@ from django.http import JsonResponse
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from households.membership import SESSION_KEY, last_used
+from households.views import NO_HOUSEHOLD, describe_user
 
 
 @require_GET
@@ -40,7 +43,11 @@ class LoginView(APIView):
         user = authenticate(request, username=username, password=password)
         if user is None:
             return Response({"detail": "Invalid credentials"}, status=401)
+        membership = last_used(user)
+        if membership is None:
+            return Response({"detail": NO_HOUSEHOLD}, status=403)
         django_login(request, user)
+        request.session[SESSION_KEY] = membership.household_id
         return Response({"username": user.username})
 
 
@@ -51,7 +58,8 @@ class LogoutView(APIView):
 
 
 class MeView(APIView):
-    permission_classes = [IsAuthenticated]
+    # This is how a page learns its household.
+    checks_household_header = False
 
     def get(self, request):
-        return Response({"username": request.user.username})
+        return Response(describe_user(request))

@@ -5,7 +5,8 @@ from decimal import Decimal
 from django.db import IntegrityError
 from django.db import transaction as db_transaction
 from django.contrib.auth import get_user_model
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase
+from households.testing import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 

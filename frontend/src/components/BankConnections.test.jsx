@@ -27,8 +27,11 @@ const CONNECTION = {
   accounts: [{ uid: "u1", name: "Current", iban: "BE00123456789012", currency: "EUR", link: LINK }],
 };
 
+const READY = { state: "ready", app_id: "3f2a1234aaaa91c0", stopped: false, redirect_url: "https://b.example/settings/banks" };
+const NOT_SET_UP = { ...READY, state: "not_set_up", app_id: "" };
+
 function status(extra) {
-  return { enabled: true, connections: [CONNECTION], waiting_links: [], accounts: [], ...extra };
+  return { enabled: true, credentials: READY, connections: [CONNECTION], waiting_links: [], accounts: [], ...extra };
 }
 
 function renderIt() {
@@ -46,9 +49,9 @@ beforeEach(() => {
 
 describe("BankConnections", () => {
   it("says when bank sync isn't set up", async () => {
-    api.getBankSync.mockResolvedValue({ enabled: false });
+    api.getBankSync.mockResolvedValue({ enabled: false, credentials: NOT_SET_UP });
     renderIt();
-    expect(await screen.findByText(/Bank sync isn't set up/)).toBeInTheDocument();
+    expect(await screen.findByText(/Setup takes about 15 minutes/)).toBeInTheDocument();
     expect(api.getBanks).not.toHaveBeenCalled();
   });
 

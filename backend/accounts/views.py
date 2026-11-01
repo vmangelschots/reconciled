@@ -24,9 +24,9 @@ class LoanTermsSerializer(serializers.Serializer):
     annual_rate = serializers.DecimalField(max_digits=7, decimal_places=4)
     term_months = serializers.IntegerField()
     first_payment_date = serializers.DateField()
-    paid_from = serializers.PrimaryKeyRelatedField(queryset=Account.objects.all())
+    paid_from = serializers.PrimaryKeyRelatedField(queryset=Account.objects)
     payment_category = serializers.PrimaryKeyRelatedField(
-        queryset=Category.objects.all(), allow_null=True, required=False, default=None
+        queryset=Category.objects, allow_null=True, required=False, default=None
     )
     # What the bank says is owed today; a new setup only, saved as a
     # correction on the setup day.
@@ -45,7 +45,7 @@ class CorrectionSerializer(serializers.Serializer):
 
 
 class LinkSerializer(serializers.Serializer):
-    transaction = serializers.PrimaryKeyRelatedField(queryset=Transaction.objects.all())
+    transaction = serializers.PrimaryKeyRelatedField(queryset=Transaction.objects)
 
 
 def _payment_info(payment):

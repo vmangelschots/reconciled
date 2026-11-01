@@ -7,6 +7,9 @@ import httpx2
 import openai
 from django.test import SimpleTestCase, override_settings
 
+from households.context import household_context
+from households.models import Household
+
 from .ai import OpenAIGuesser, Guess, PayeeQuestion, get_guesser
 
 CATEGORIES = [(1, "Eating out"), (2, "Groceries"), (3, "Transport / Train")]
@@ -49,7 +52,13 @@ class GetGuesserTests(SimpleTestCase):
 
     @override_settings(OPENAI_API_KEY="sk-test", AI_CATEGORIZATION_ENABLED=True)
     def test_openai_with_a_key(self):
-        self.assertIsInstance(get_guesser(), OpenAIGuesser)
+        with household_context(Household(ai_enabled=True)):
+            self.assertIsInstance(get_guesser(), OpenAIGuesser)
+
+    @override_settings(OPENAI_API_KEY="sk-test", AI_CATEGORIZATION_ENABLED=True)
+    def test_none_when_the_household_said_no(self):
+        with household_context(Household(ai_enabled=False)):
+            self.assertIsNone(get_guesser())
 
 
 @override_settings(AI_CATEGORIZATION_MODEL="gpt-6-luna")

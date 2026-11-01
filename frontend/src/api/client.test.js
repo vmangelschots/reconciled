@@ -47,3 +47,30 @@ describe("apiFetch base URL", () => {
     expect(fetchMock.mock.calls[0][0]).toBe("http://localhost:8000/api/accounts/");
   });
 });
+
+describe("the household header", () => {
+  it("sends the household this page loaded", async () => {
+    const { apiFetch, setActiveHousehold } = await loadClient();
+    const fetchMock = vi.fn().mockResolvedValue(new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    setActiveHousehold(7);
+    await apiFetch("/api/accounts/");
+    expect(fetchMock.mock.calls[0][1].headers["X-Household"]).toBe("7");
+    setActiveHousehold(null);
+    await apiFetch("/api/accounts/");
+    expect(fetchMock.mock.calls[1][1].headers["X-Household"]).toBeUndefined();
+    vi.unstubAllGlobals();
+  });
+
+  it("reloads with a message when the household changed in another tab", async () => {
+    const { apiFetch, takeNotice } = await loadClient();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response('{"detail":"x"}', { status: 409 })));
+    const assign = vi.fn();
+    vi.stubGlobal("location", { ...window.location, assign });
+    await expect(apiFetch("/api/accounts/")).rejects.toThrow();
+    expect(assign).toHaveBeenCalledWith("/");
+    expect(takeNotice()).toBe("Your household changed, so this page reloaded.");
+    expect(takeNotice()).toBeNull();
+    vi.unstubAllGlobals();
+  });
+});
