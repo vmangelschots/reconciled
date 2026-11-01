@@ -13,3 +13,6 @@ backend/staticfiles/
 
 # Real Kubernetes secret (copied from k8s/examples/secret.example.yaml)
 k8s/15-secret.yaml
+
+# Personal Portfolio Performance export
+/my.xml
