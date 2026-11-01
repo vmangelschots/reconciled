@@ -1,6 +1,7 @@
 from django.utils import timezone
 from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
 from budgets.models import Category
@@ -10,13 +11,19 @@ from transactions.adjustments import AdjustmentError, set_value
 from transactions.models import Transaction
 from transactions.serializers import TransactionSerializer
 
+from . import portfolio_import
 from .models import Account, Loan, tier_position
+from .portfolio_file import PortfolioFileError
 from .serializers import AccountSerializer
 
 
 class SetValueSerializer(serializers.Serializer):
     date = serializers.DateField()
     value_cents = serializers.IntegerField()
+
+
+class PortfolioImportSerializer(SetValueSerializer):
+    excluded_cash_ids = serializers.ListField(child=serializers.CharField(), required=False, default=list)
 
 
 class LoanTermsSerializer(serializers.Serializer):
@@ -177,6 +184,35 @@ class AccountViewSet(
         body.is_valid(raise_exception=True)
         try:
             adjustment = set_value(account, body.validated_data["date"], body.validated_data["value_cents"])
+        except AdjustmentError as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        account.refresh_from_db()
+        return Response(
+            {
+                "adjustment": TransactionSerializer(adjustment).data,
+                "current_balance_cents": account.current_balance_cents,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+    @action(detail=True, methods=["post"], url_path="portfolio-preview", parser_classes=[MultiPartParser])
+    def portfolio_preview(self, request, pk=None):
+        """POST a Portfolio Performance export; returns what its value would
+        be. Nothing is kept; see openspec/specs/portfolio-value-import."""
+        try:
+            return Response(portfolio_import.preview(self.get_object(), request.FILES.get("file")))
+        except (AdjustmentError, PortfolioFileError) as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=True, methods=["post"], url_path="portfolio-import")
+    def portfolio_import(self, request, pk=None):
+        """POST {"date", "value_cents", "excluded_cash_ids"} from a preview
+        sets the value and remembers the cash accounts left out."""
+        account = self.get_object()
+        body = PortfolioImportSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        try:
+            adjustment = portfolio_import.save(account, **body.validated_data)
         except AdjustmentError as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
         account.refresh_from_db()

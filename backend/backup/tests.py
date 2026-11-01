@@ -65,12 +65,11 @@ def snapshot():
     # A backup never keeps the bank file an import came from.
     for row in rows["imports.ImportSession"]:
         row.update(raw_content="", candidates=[])
-    rows["imported_accounts"] = [
+    # Sorted: set() links them in the order of a Python set of ids.
+    rows["imported_accounts"] = sorted(
         (positions[ImportSession][link["importsession_id"]], positions[Account][link["account_id"]])
-        for link in ImportSession.imported_accounts.through.objects.order_by("pk").values(
-            "importsession_id", "account_id"
-        )
-    ]
+        for link in ImportSession.imported_accounts.through.objects.values("importsession_id", "account_id")
+    )
     return rows
 
 
@@ -292,6 +291,21 @@ class RestoreBackupTests(BackupTestCase):
                 del row["fields"]["category_reason"]
         restore_backup(read_backup(json.dumps(envelope)))
         self.assertEqual(set(Transaction.objects.values_list("category_reason", flat=True)), {""})
+
+    def test_cash_left_out_of_a_portfolio_survives(self):
+        Account.objects.filter(pk=self.revolut.pk).update(portfolio_excluded_cash=["cash-1"])
+        content = self.file_content()
+        self.mess_up()
+        restore_backup(read_backup(content))
+        self.assertEqual(Account.objects.get(name="Revolut").portfolio_excluded_cash, ["cash-1"])
+
+    def test_an_older_backup_leaves_no_cash_out(self):
+        envelope = json.loads(self.file_content())
+        for row in envelope["data"]:
+            if row["model"] == "accounts.account":
+                del row["fields"]["portfolio_excluded_cash"]
+        restore_backup(read_backup(json.dumps(envelope)))
+        self.assertEqual(set(map(tuple, Account.objects.values_list("portfolio_excluded_cash", flat=True))), {()})
 
     def test_a_field_removed_since_is_ignored(self):
         envelope = json.loads(self.file_content())

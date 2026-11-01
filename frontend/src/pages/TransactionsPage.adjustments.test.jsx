@@ -29,6 +29,7 @@ vi.mock("../api/transactions", async () => {
 });
 
 const HOUSE = { id: 3, name: "House", account_type: "property", tier: "property", current_balance_cents: 31000000 };
+const FUNDS = { id: 5, name: "Funds", account_type: "investment", tier: "investments", current_balance_cents: 1400000 };
 const MORTGAGE = { id: 4, name: "Mortgage", account_type: "loan", tier: "loans", current_balance_cents: -18800000 };
 const CHECKING = { id: 1, name: "Revolut", account_type: "checking", tier: "everyday", current_balance_cents: 120000 };
 const SAVINGS = { id: 2, name: "Spaarrekening", account_type: "savings", tier: "savings", current_balance_cents: 0 };
@@ -179,6 +180,33 @@ describe("Set value", () => {
 
 // A loan that follows its schedule - see the loan-schedules spec and the
 // value-adjustments spec's scheduled adjustments.
+describe("Import portfolio", () => {
+  it("is offered on an investment account beside Set value", async () => {
+    accountsApi.listAccounts.mockResolvedValue([FUNDS]);
+    accountsApi.getAccount.mockResolvedValue(FUNDS);
+    renderLedger(5);
+    expect(await screen.findByRole("button", { name: "Set value" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Import portfolio" })).toBeInTheDocument();
+  });
+
+  it("isn't offered on a house", async () => {
+    accountsApi.listAccounts.mockResolvedValue([HOUSE]);
+    accountsApi.getAccount.mockResolvedValue(HOUSE);
+    renderLedger(3);
+    expect(await screen.findByRole("button", { name: "Set value" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Import portfolio" })).not.toBeInTheDocument();
+  });
+
+  it("isn't offered on an archived account", async () => {
+    const archived = { ...FUNDS, archived: true };
+    accountsApi.listAccounts.mockResolvedValue([]);
+    accountsApi.getAccount.mockResolvedValue(archived);
+    renderLedger(5);
+    expect(await screen.findByText("Archived")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Import portfolio" })).not.toBeInTheDocument();
+  });
+});
+
 describe("A loan with a schedule", () => {
   const SCHEDULED = { ...MORTGAGE, has_loan: true, loan_paid_from: CHECKING.id };
   const INSTALLMENT = {

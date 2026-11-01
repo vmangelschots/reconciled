@@ -45,6 +45,9 @@ class Account(HouseholdOwned):
     account_type = models.CharField(max_length=20, choices=AccountType.choices)
     starting_balance_cents = models.BigIntegerField()
     archived = models.BooleanField(default=False)
+    # Portfolio Performance cash accounts left out of this account's value:
+    # see openspec/specs/portfolio-value-import.
+    portfolio_excluded_cash = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
