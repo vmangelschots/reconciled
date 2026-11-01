@@ -75,16 +75,21 @@ backend, run `manage.py rotate_encryption_key`, then remove the old key.
 
 ### Households
 
-The login in `15-secret.yaml` gets the first household. For someone else:
+The login in `15-secret.yaml` gets the first household. For someone else, add a
+household at `https://<your hostname>/admin/`. The confirmation shows an invite
+link for their first member, who chooses their own login and password. Copy it
+now, because it's only shown once. If it expires or gets lost, select the
+household in the list and run the **Create invite link** action.
+
+The same from the command line:
 
 ```sh
 kubectl -n reconciled exec deploy/backend -- \
   python manage.py create_household "The Peeters household" --url https://<your hostname>
 ```
 
-This prints an invite link for their first member, who chooses their own login
-and password. Members can then invite others from Settings, and anyone with a
-login can be in several households. Links work once, for 7 days.
+Members can then invite others from Settings, and anyone with a login can be in
+several households. Links work once, for 7 days.
 
 Tell people what you can see: whoever runs the server can read every household
 in the database. Household budget data isn't in Django admin, which only
