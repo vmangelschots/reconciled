@@ -21,8 +21,9 @@ export function LoginPage() {
     try {
       await login(username, password);
       navigate(location.state?.from?.pathname ?? "/", { replace: true });
-    } catch {
-      toast.error("Invalid username or password.");
+    } catch (e) {
+      // A login with no household is told why; a wrong password isn't told more.
+      toast.error(e.status === 403 ? e.data?.detail : "Invalid username or password.");
     } finally {
       setSubmitting(false);
     }

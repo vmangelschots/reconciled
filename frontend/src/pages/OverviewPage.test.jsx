@@ -126,9 +126,19 @@ describe("Overview month", () => {
     accountsApi.listAccounts.mockResolvedValue([]);
     renderPage();
 
-    expect(await screen.findByText("There are no accounts yet.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Go to Accounts" })).toHaveAttribute("href", "/accounts");
+    expect(await screen.findByText("Welcome. Let's set up your budget.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Add your accounts" })).toHaveAttribute("href", "/accounts");
     expect(overviewApi.getOverview).not.toHaveBeenCalled();
+  });
+
+  it("welcomes a household that has accounts but no transactions yet", async () => {
+    overviewApi.getOverview.mockResolvedValue({ has_transactions: false });
+    renderPage();
+
+    expect(await screen.findByText("Welcome. Let's set up your budget.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Connect your bank/ })).toHaveAttribute("href", "/settings#bank-connections");
+    expect(screen.getByRole("link", { name: /Import a file/ })).toHaveAttribute("href", "/import");
+    expect(screen.getByRole("link", { name: /Restore a backup/ })).toHaveAttribute("href", "/settings#backup");
   });
 
   it("offers Import in the header", async () => {
@@ -822,6 +832,13 @@ describe("bank sync in needs attention", () => {
     );
     renderPage();
     expect(await attentionLink("Crelan: last sync 12 days ago")).toHaveAttribute("href", "/settings");
+  });
+
+  it("says when bank sync stopped on a bad key, once", async () => {
+    overviewApi.getOverview.mockResolvedValue(overview({ attention: { ...overview().attention, bank_sync_stopped: true } }));
+    renderPage();
+
+    expect(await screen.findByText("Bank sync stopped: check your Enable Banking key")).toBeInTheDocument();
   });
 
   it("leaves an ended connection to the reconnect line", async () => {

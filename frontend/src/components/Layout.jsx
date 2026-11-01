@@ -19,6 +19,7 @@ import { useMediaQuery } from '../hooks/useMediaQuery'
 import { cn } from '../lib/cn'
 import { formatMoneyWhole } from '../lib/money'
 import { ReviewCountProvider, useReviewCount } from '../review/ReviewCountContext'
+import { HouseholdSwitcher } from './HouseholdSwitcher'
 import { ThemeToggle } from './ThemeToggle'
 import { Amount } from './ui/Amount'
 import { Button } from './ui/Button'
@@ -213,6 +214,7 @@ function Sidebar() {
       </nav>
       <div className="flex flex-col gap-3 border-t border-border px-3 py-4">
         <TotalReadout />
+        <HouseholdSwitcher className="px-3" />
         <div className="flex items-center gap-1 pl-3">
           <span className="flex-1 truncate text-sm text-ink-secondary">{user?.username}</span>
           <ThemeToggle />
@@ -272,6 +274,7 @@ function TabBar() {
               <SidebarLink key={item.to} item={item} onNavigate={() => setMoreOpen(false)} />
             ))}
           </nav>
+          <HouseholdSwitcher className="mt-3 border-t border-border px-3 pt-3" />
           <div className="mt-3 flex items-center gap-2 border-t border-border px-3 pt-3">
             <span className="flex-1 truncate text-sm text-ink-secondary">{user?.username}</span>
             <ThemeToggle />

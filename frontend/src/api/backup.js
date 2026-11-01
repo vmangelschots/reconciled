@@ -18,7 +18,7 @@ function filenameFrom(response) {
   return match ? match[1] : todaysFilename();
 }
 
-/** Download a backup of everything and save it as a file. */
+/** Download a backup of this household and save it as a file. */
 export async function downloadBackup() {
   const response = await fetch(`${API_BASE_URL}/api/backup/`, { credentials: "include" });
   if (!response.ok) {
@@ -39,7 +39,7 @@ export async function downloadBackup() {
 
 /**
  * What a picked file says about itself, for the confirm step:
- * { exportedAt, accounts, transactions }. Rejects a file that isn't a
+ * { exportedAt, household, accounts, transactions }. Rejects a file that isn't a
  * Reconciled backup; the server checks the rest when restoring.
  */
 export async function readBackupSummary(file) {
@@ -54,12 +54,13 @@ export async function readBackupSummary(file) {
   if (backup?.app !== "reconciled" || !backup.summary) throw new Error(NOT_A_BACKUP);
   return {
     exportedAt: backup.exported_at,
+    household: backup.household ?? null,
     accounts: backup.summary.accounts,
     transactions: backup.summary.transactions,
   };
 }
 
-/** Replace everything with the backup's data; resolves to { accounts, transactions }. */
+/** Replace this household's data with the backup's; resolves to { accounts, transactions }. */
 export function restoreBackup(file) {
   const formData = new FormData();
   formData.append("file", file);

@@ -10,9 +10,10 @@ import {
   unlinkBankAccount,
 } from "../api/bankSync";
 import { plural } from "../lib/importFreshness";
+import { BankCredentials, credentialsBadge } from "./BankCredentials";
 import { formatDayMonth } from "../lib/yearlyBudgets";
 import { Button } from "./ui/Button";
-import { Card, CardContent, CardHeader, CardTitle } from "./ui/Card";
+import { Panel } from "./ui/Panel";
 import { Input } from "./ui/Input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/Select";
 import { useToast } from "./ui/Toast";
@@ -175,7 +176,10 @@ export function BankConnections() {
     load();
   }, [load]);
 
-  const enabled = status?.enabled;
+  const credentials = status?.credentials;
+  const enabled = status?.enabled && credentials?.state === "ready";
+  // Connections stay in view while a key is being fixed.
+  const showBanks = status?.enabled && (enabled || status.connections.length > 0 || status.waiting_links.length > 0);
   useEffect(() => {
     if (enabled) {
       getBanks()
@@ -208,19 +212,11 @@ export function BankConnections() {
     }
   }
 
-  if (status === null) return null;
-
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Bank connections</CardTitle>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        {!status.enabled ? (
-          <p className="text-sm text-ink-secondary">
-            Bank sync isn't set up. It needs Enable Banking credentials on the server.
-          </p>
-        ) : (
+    <Panel id="bank-connections" title="Bank connections" loading={status === null} actions={credentialsBadge(credentials)}>
+      <div className="flex flex-col gap-4">
+        {credentials && <BankCredentials credentials={credentials} onChange={load} />}
+        {showBanks && (
           <>
             {status.waiting_links.map((link) => (
               <div key={link.id} className="flex items-center justify-between gap-3 rounded-lg bg-warning/10 p-3">
@@ -274,7 +270,7 @@ export function BankConnections() {
             </div>
           </>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </Panel>
   );
 }

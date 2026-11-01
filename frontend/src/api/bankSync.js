@@ -6,6 +6,14 @@ export function getBankSync() {
   return apiFetch("/api/bank-sync/");
 }
 
+export function saveBankCredentials(body) {
+  return apiFetch("/api/bank-sync/credentials/", { method: "POST", body });
+}
+
+export function checkBankCredentials() {
+  return apiFetch("/api/bank-sync/credentials/check/", { method: "POST" });
+}
+
 export function getBanks() {
   return apiFetch("/api/bank-sync/banks/");
 }
