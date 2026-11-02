@@ -9,10 +9,10 @@ what has been spent against it since budgeting started.
 
 ### Requirement: Yearly budget
 A category of the yearly kind SHALL have one amount per calendar year.
-All of the category's spending in the year SHALL count against it,
-whatever the month. Money not spent in one month SHALL stay available
-for the rest of the same year, and SHALL NOT carry over to the next
-year.
+All of the category's spending in the year, including that of its
+subcategories whatever their budget kind, SHALL count against it, whatever
+the month. Money not spent in one month SHALL stay available for the rest
+of the same year, and SHALL NOT carry over to the next year.
 
 #### Scenario: Spending in any month counts
 - **WHEN** "Clothing" has a yearly budget of 1200.00 and spent 300.00 in
@@ -31,11 +31,19 @@ year.
   in March
 - **THEN** "Gifts" has 1200.00 for 2027 with 200.00 spent
 
+#### Scenario: Subcategories count against a yearly parent
+- **WHEN** "Holidays" has a yearly budget of 2000.00 and spent 300.00
+  directly, 500.00 in its yearly subcategory "Flights" and 40.00 in its
+  monthly subcategory "Parking"
+- **THEN** "Holidays" shows 840.00 spent and 1160.00 left, and "Flights"
+  shows its own 500.00
+
 ### Requirement: Yearly budget on a date
 A category of the yearly-on-a-date kind SHALL have an amount and a due
 date, given as a day and a month, that apply every year. The system
 SHALL reject 29 February as a due date. All of the category's spending
-in the calendar year SHALL count towards paying it.
+in the calendar year, including that of its subcategories, SHALL count
+towards paying it.
 
 #### Scenario: Set a target
 - **WHEN** the user gives "Property tax" a yearly budget on a date of
@@ -45,6 +53,11 @@ in the calendar year SHALL count towards paying it.
 #### Scenario: Reject 29 February
 - **WHEN** the user sets a due date of 29 February
 - **THEN** the system rejects it
+
+#### Scenario: A subcategory's spending pays the target
+- **WHEN** "Property tax" is 400.00 and its subcategory "Instalments" spent
+  400.00 this year
+- **THEN** "Property tax" shows paid
 
 ### Requirement: Budgeting start month
 The system SHALL let the user set one budgeting start month, or leave it
@@ -188,7 +201,7 @@ and yearly-on-a-date budget for the viewed month's year, below the
 monthly summary. Spending SHALL be counted from the later of 1 January
 and the start month through the end of the viewed month, and the
 section title SHALL say up to which day. Subcategories SHALL be grouped
-under their parent, with independent figures.
+under their parent, and a parent's figures SHALL include them.
 
 #### Scenario: Viewing October
 - **WHEN** on 24 October 2026, with the start month October 2026,
