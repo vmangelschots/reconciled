@@ -168,11 +168,9 @@ export function BudgetsPage() {
 
   const categoryTree = buildCategoryTree(categories);
   const monthlyItems = summary
-    ? flattenTree(
-        buildCategoryTree(summary.categories.map((row) => ({ ...row, id: row.category_id, name: row.category_name }))),
-      ).map(({ row, indent }) => ({
+    ? budgetTree(summary.categories, byId).map(({ row, indent, name }) => ({
         id: row.category_id,
-        name: row.category_name,
+        name,
         indent,
         budgetCents: row.limit_cents,
         spentCents: row.spent_cents,
@@ -180,9 +178,16 @@ export function BudgetsPage() {
         over: row.over_limit,
         status: (
           <span className={cn("text-sm", row.over_limit ? "font-semibold text-critical" : "text-ink-secondary")}>
-            {row.limit_cents == null ? "No limit" : row.over_limit ? "Over limit" : "OK"}
+            {row.limit_cents == null
+              ? row.covered_by_parent
+                ? `Covered by ${byId[row.parent_id]?.name ?? "parent"}`
+                : "No limit"
+              : row.over_limit
+                ? "Over limit"
+                : "OK"}
           </span>
         ),
+        note: coverageNote(row, row.limit_cents),
         editor: () => renderEditor(row.category_id, row.category_name, row.limit_cents),
       }))
     : [];
@@ -270,17 +275,9 @@ export function BudgetsPage() {
   );
 }
 
-// Parents followed by their subcategories, each with whether it's indented.
-function flattenTree(tree) {
-  return tree.flatMap((parent) => [
-    { row: parent, indent: false },
-    ...(parent.subcategories ?? []).map((sub) => ({ row: sub, indent: true })),
-  ]);
-}
-
-// The yearly rows, subcategories under a yearly parent; a yearly
-// subcategory whose parent isn't yearly reads "Parent / Sub".
-function yearlyTree(rows, byId) {
+// The budget rows, subcategories under their parent; a subcategory whose
+// parent isn't listed (the other kind of budget) reads "Parent / Sub".
+function budgetTree(rows, byId) {
   const ids = new Set(rows.map((r) => r.category_id));
   const top = rows.filter((r) => !ids.has(r.parent_id));
   return top.flatMap((row) => [
@@ -293,10 +290,19 @@ function yearlyTree(rows, byId) {
   ]);
 }
 
+// Says a parent's figures include its subcategories, and when their caps
+// add up to more than its budget - which is allowed, so it's only a note.
+function coverageNote(row, budgetCents) {
+  if (!row.covers_subcategories) return null;
+  return row.caps_cents > budgetCents
+    ? `Includes subcategories · caps add up to ${formatMoney(row.caps_cents)}`
+    : "Includes subcategories";
+}
+
 function YearlyPanel({ yearly, byId, onMonthChange, onStartMonth, renderEditor, listProps }) {
   const [settingStart, setSettingStart] = useState(false);
   const start = yearly.start_month?.slice(0, 7) ?? null;
-  const items = yearlyTree(yearly.categories, byId).map(({ row, indent, name }) => ({
+  const items = budgetTree(yearly.categories, byId).map(({ row, indent, name }) => ({
     id: row.category_id,
     name,
     indent,
@@ -306,6 +312,7 @@ function YearlyPanel({ yearly, byId, onMonthChange, onStartMonth, renderEditor, 
       : row.kind === "target"
         ? `due ${formatDayMonth(row.due_date)}`
         : null,
+    note: coverageNote(row, row.budget_cents),
     spentCents: row.spent_cents,
     leftCents: row.remaining_cents,
     over: row.over,
@@ -462,6 +469,7 @@ function BudgetList({ items, footer = [], isWide, editingId, onEdit, highlightId
               {item.budgetNote && ` · ${item.budgetNote}`}
             </span>
             {item.status}
+            {item.note && <span className="text-xs text-ink-muted">{item.note}</span>}
             {editingId === item.id && <div className="mt-2 rounded-md bg-surface-2 p-3">{item.editor()}</div>}
           </li>
         ))}
@@ -529,7 +537,10 @@ function BudgetRows({ item, editing, onEdit, highlight }) {
         </TableCell>
         <TableCell className="num text-right">{formatMoney(item.spentCents)}</TableCell>
         <TableCell className={cn("num text-right", item.over && "text-critical")}>{formatCents(item.leftCents)}</TableCell>
-        <TableCell>{item.status}</TableCell>
+        <TableCell>
+          {item.status}
+          {item.note && <span className="block text-xs text-ink-muted">{item.note}</span>}
+        </TableCell>
       </TableRow>
       {editing && (
         <tr>

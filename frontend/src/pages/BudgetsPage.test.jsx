@@ -527,3 +527,59 @@ describe("BudgetsPage on a phone", () => {
     expect(form.closest("li")).toHaveTextContent("Clothing");
   });
 });
+
+describe("BudgetsPage parents and subcategories", () => {
+  const FOOD = {
+    category_id: 10, category_name: "Food", parent_id: null, limit_cents: 40000, spent_cents: 30000,
+    remaining_cents: 10000, over_limit: false, covers_subcategories: true, covered_by_parent: false, caps_cents: 10000,
+  };
+  const TAKEOUT = {
+    category_id: 11, category_name: "Takeout", parent_id: 10, limit_cents: null, spent_cents: 5000,
+    remaining_cents: null, over_limit: false, covers_subcategories: false, covered_by_parent: true, caps_cents: null,
+  };
+  const FOOD_CATEGORIES = [
+    { id: 10, name: "Food", parent: null },
+    { id: 11, name: "Takeout", parent: 10 },
+    { id: 12, name: "Holidays", parent: null, budget_kind: "yearly" },
+    { id: 13, name: "Parking", parent: 12 },
+  ];
+
+  beforeEach(() => {
+    categoriesApi.listCategories.mockResolvedValue(FOOD_CATEGORIES);
+  });
+
+  it("says a parent includes its subcategories and a subcategory is covered", async () => {
+    budgetsApi.getBudgetSummary.mockResolvedValue({ ...SUMMARY, categories: [FOOD, TAKEOUT] });
+
+    renderPage();
+
+    expect(await screen.findByText("Includes subcategories")).toBeInTheDocument();
+    expect(await screen.findByText("Covered by Food")).toBeInTheDocument();
+    expect(screen.queryByText("No limit")).not.toBeInTheDocument();
+  });
+
+  it("notes caps that add up to more than the parent", async () => {
+    budgetsApi.getBudgetSummary.mockResolvedValue({
+      ...SUMMARY,
+      categories: [{ ...FOOD, caps_cents: 45000 }, TAKEOUT],
+    });
+
+    renderPage();
+
+    expect(
+      await screen.findByText(`Includes subcategories · caps add up to ${formatMoney(45000)}`),
+    ).toBeInTheDocument();
+  });
+
+  it("lists a monthly subcategory whose parent is yearly", async () => {
+    const parking = {
+      ...TAKEOUT, category_id: 13, category_name: "Parking", parent_id: 12,
+    };
+    budgetsApi.getBudgetSummary.mockResolvedValue({ ...SUMMARY, categories: [parking] });
+
+    renderPage();
+
+    expect(await screen.findByText("Holidays / Parking")).toBeInTheDocument();
+    expect(await screen.findByText("Covered by Holidays")).toBeInTheDocument();
+  });
+});
