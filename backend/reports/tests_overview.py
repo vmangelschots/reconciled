@@ -205,6 +205,36 @@ class OverviewTests(TestCase):
         [item] = self.body()["attention"]["categories"]
         self.assertEqual((item["name"], item["parent_name"]), ("Supermarket", "Groceries"))
 
+    def test_a_cap_over_inside_a_parent_on_budget(self):
+        restaurant = Category.objects.create(name="Restaurant", parent=self.groceries)
+        self.limit(self.groceries, 100000)
+        self.limit(restaurant, 10000)
+        self.txn(-13000, 3, category=restaurant)
+        self.txn(-65000, 3, category=self.groceries)
+
+        body = self.body()
+
+        self.assertEqual(self.attention_names(), [("Restaurant", 130, True)])
+        self.assertEqual((body["budget"]["spent_cents"], body["budget"]["limit_cents"]), (78000, 100000))
+
+    def test_parent_and_cap_both_over(self):
+        restaurant = Category.objects.create(name="Restaurant", parent=self.groceries)
+        self.limit(self.groceries, 100000)
+        self.limit(restaurant, 10000)
+        self.txn(-13000, 3, category=restaurant)
+        self.txn(-92000, 3, category=self.groceries)
+
+        self.assertEqual(self.attention_names(), [("Groceries", 105, True), ("Restaurant", 130, True)])
+
+    def test_subcategories_without_a_limit_arent_outside_budgets(self):
+        takeout = Category.objects.create(name="Takeout", parent=self.groceries)
+        self.limit(self.groceries, 100000)
+        self.txn(-5000, 3, category=takeout)
+
+        budget = self.body()["budget"]
+
+        self.assertEqual((budget["spent_cents"], budget["outside_cents"]), (5000, 0))
+
     def test_review_and_uncategorized_counts(self):
         self.txn(-1000, 3, category=self.groceries, category_confirmed=False, category_source="history")
         self.txn(-2000, 4)

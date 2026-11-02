@@ -8,7 +8,7 @@ from accounts.models import Account
 from transactions.models import Transaction
 
 from .models import BudgetSettings, Category, CategoryLimit, YearlyBudget
-from .summary import budget_rows
+from .summary import budget_rows, yearly_spent_cents
 from .yearly import (
     budgeted_period,
     is_ahead,
@@ -21,7 +21,6 @@ from .yearly import (
     tolerance_cents,
     values_for_year,
     yearly_rows,
-    yearly_spent_cents,
 )
 
 Row = namedtuple("Row", "from_year amount_cents due_month due_day")
@@ -193,6 +192,45 @@ class YearlyRowsTests(TestCase):
     def _row(self, month, today, category=None):
         rows = yearly_rows(month, today)["categories"]
         return next(r for r in rows if r["category_id"] == (category or self.clothing).id)
+
+    def test_subcategories_count_against_a_yearly_parent(self):
+        holidays = self._yearly("Holidays", 200000)
+        flights = Category.objects.create(name="Flights", parent=holidays, budget_kind=Category.BudgetKind.YEARLY)
+        YearlyBudget.objects.create(category=flights, from_year=2026, amount_cents=250000)
+        parking = Category.objects.create(name="Parking", parent=holidays)
+        self._spend(holidays, "2026-03-10", 30000)
+        self._spend(flights, "2026-04-10", 50000)
+        self._spend(parking, "2026-05-10", 4000)
+
+        parent = self._row(date(2026, 6, 1), date(2026, 10, 24), holidays)
+        sub = self._row(date(2026, 6, 1), date(2026, 10, 24), flights)
+
+        self.assertEqual((parent["spent_cents"], parent["remaining_cents"]), (84000, 116000))
+        self.assertTrue(parent["covers_subcategories"])
+        self.assertEqual(parent["caps_cents"], 250000)
+        self.assertEqual(sub["spent_cents"], 50000)
+
+    def test_subcategory_spending_respects_the_start_month(self):
+        self._start(date(2026, 10, 1))
+        sub = Category.objects.create(name="Shoes", parent=self.clothing)
+        self._spend(sub, "2026-08-10", 25000)
+        self._spend(sub, "2026-10-10", 8000)
+
+        self.assertEqual(self._row(date(2026, 10, 1), date(2026, 10, 24))["spent_cents"], 8000)
+
+    def test_a_subcategory_pays_the_target(self):
+        tax = self._yearly("Property tax", 40000, due=(11, 1))
+        instalments = Category.objects.create(name="Instalments", parent=tax)
+        self._spend(instalments, "2026-10-10", 40000)
+
+        self.assertEqual(self._row(date(2026, 10, 1), date(2026, 10, 24), tax)["state"], "paid")
+
+    def test_a_parent_warns_on_its_rolled_up_spending(self):
+        self._start(date(2026, 10, 1))
+        sub = Category.objects.create(name="Shoes", parent=self.clothing)
+        self._spend(sub, "2026-10-10", 27000)
+
+        self.assertTrue(self._row(date(2026, 10, 1), date(2026, 10, 24))["ahead"])
 
     def test_spending_in_any_month_counts(self):
         self._spend(self.clothing, "2026-02-10", 30000)
