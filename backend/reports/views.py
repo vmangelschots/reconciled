@@ -7,6 +7,7 @@ from rest_framework.views import APIView
 
 from accounts.models import TIER_ORDER, Account, Loan, tier_position
 from banksync.models import BankAccountLink, BankConnection, BankCredentials
+from budgets.attention import attention_categories, attention_yearly
 from budgets.models import Category
 from budgets.summary import budget_rows, budget_totals, yearly_spent_cents
 from budgets.utils import month_range, parse_month
@@ -225,88 +226,7 @@ class SpendingCellView(APIView):
         )
 
 
-# A category this close to its limit is a warning once it is also ahead
-# of the month's pace - see openspec/specs/overview.
-WARNING_SHARE = 85
 RECENT_COUNT = 8
-
-
-def _attention_categories(rows, pace):
-    """Over-limit categories (most euros over first), then - for the
-    current month, when `pace` is set - those at 85% or more and ahead of
-    the month's pace (highest share first). Shares are rounded down."""
-    names = {row["category_id"]: row["category_name"] for row in rows}
-    over, warn = [], []
-    for row in rows:
-        limit = row["limit_cents"]
-        if not limit or limit <= 0:
-            continue
-        spent = row["spent_cents"]
-        share = spent * 100 // limit
-        item = {
-            "id": row["category_id"],
-            "name": row["category_name"],
-            "parent_name": names.get(row["parent_id"]),
-            "spent_cents": spent,
-            "limit_cents": limit,
-            "share": share,
-            "over": spent > limit,
-        }
-        if spent > limit:
-            over.append(item)
-        elif pace is not None and share >= WARNING_SHARE and share > pace * 100:
-            warn.append(item)
-    over.sort(key=lambda c: -(c["spent_cents"] - c["limit_cents"]))
-    warn.sort(key=lambda c: -c["share"])
-    return over + warn
-
-
-# Yearly warnings, most pressing first - see openspec/specs/overview.
-YEARLY_ORDER = ["overdue", "over", "partly_paid", "not_seen", "ahead", "due_soon"]
-
-
-def _attention_yearly(yearly, current):
-    """Yearly budgets and targets that need attention in the chosen month.
-    Due soon and ahead of pace are early warnings, so only for the current
-    month; a target paid within its tolerance is never listed."""
-    names = {}
-    items = []
-    for row in yearly["categories"]:
-        names[row["category_id"]] = row["category_name"]
-        if row["kind"] == "target":
-            state = "over" if row["state"] == "paid_over" else row["state"]
-        elif row["over"]:
-            state = "over"
-        elif row["ahead"]:
-            state = "ahead"
-        else:
-            continue
-        if state not in YEARLY_ORDER or (not current and state in ("due_soon", "ahead")):
-            continue
-        items.append(
-            {
-                "id": row["category_id"],
-                "name": row["category_name"],
-                "parent_id": row["parent_id"],
-                "kind": row["kind"],
-                "state": state,
-                "share": row["spent_cents"] * 100 // row["budget_cents"] if row["budget_cents"] > 0 else None,
-                "spent_cents": row["spent_cents"],
-                "budget_cents": row["budget_cents"],
-                "due_date": row["due_date"],
-            }
-        )
-    parents = dict(Category.objects.filter(id__in={i["parent_id"] for i in items if i["parent_id"]}).values_list("id", "name"))
-    for item in items:
-        item["parent_name"] = parents.get(item.pop("parent_id"))
-    items.sort(
-        key=lambda i: (
-            YEARLY_ORDER.index(i["state"]),
-            -(i["spent_cents"] - i["budget_cents"]) if i["state"] == "over" else 0,
-            -(i["share"] or 0) if i["state"] == "ahead" else 0,
-        )
-    )
-    return items
 
 
 def _category_label(category):
@@ -483,8 +403,8 @@ class OverviewView(APIView):
                 "attention": {
                     "review_count": needs_review().count(),
                     "uncategorized_count": uncategorized().count(),
-                    "categories": _attention_categories(rows, pace),
-                    "yearly": _attention_yearly(yearly, current),
+                    "categories": attention_categories(rows, pace),
+                    "yearly": attention_yearly(yearly, current),
                     "missed_loans": _attention_missed_loans(today),
                     "reconnect": _attention_reconnect(),
                     "bank_sync_stopped": BankCredentials.objects.filter(stopped=True).exists(),

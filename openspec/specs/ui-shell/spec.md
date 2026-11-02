@@ -34,9 +34,9 @@ preference.
 The system SHALL show the primary navigation as a sidebar on wide
 viewports and as a bottom tab bar on narrow viewports. The sidebar SHALL
 list Overview, Transactions, Review, Budgets, Forecast and Reports, then
-Import, Accounts and Settings, with the total balance of the active
-accounts, the theme toggle and sign out in its footer. The tab bar SHALL
-show Overview, Transactions, Review, Budgets and More, where More opens
+Import, Accounts, Categories and Settings, with the total balance of the
+active accounts, the theme toggle and sign out in its footer. The tab bar
+SHALL show Overview, Transactions, Review, Budgets and More, where More opens
 the rest, the theme toggle and sign out. Review SHALL show its waiting
 count in both.
 
@@ -50,7 +50,7 @@ count in both.
 - **WHEN** the viewport is narrower than 1024px
 - **THEN** a bottom tab bar shows Overview, Transactions, Review, Budgets
   and More, and opening More reveals Forecast, Reports, Import, Accounts,
-  Settings, the theme toggle and sign out
+  Categories, Settings, the theme toggle and sign out
 
 #### Scenario: The current page is marked
 - **WHEN** the user is on Budgets

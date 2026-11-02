@@ -89,58 +89,6 @@ category.
   yearly
 - **THEN** the system rejects the request
 
-### Requirement: View budget period summary
-The system SHALL show, for a given month, each monthly category's limit,
-its spending in that month, the remaining amount, and whether it is over
-its limit. Yearly and yearly-on-a-date categories SHALL NOT be listed in
-the monthly summary. Subcategories SHALL be grouped under their parent for
-display, including when the parent is not listed itself. A parent with a
-limit SHALL show that its figures include its subcategories, and a
-subcategory without a limit under a parent with a budget SHALL show that
-it is covered by the parent.
-
-#### Scenario: Category within limit
-- **WHEN** "Groceries" has a 400.00 limit for the current month and
-  320.00 in assigned transactions
-- **THEN** the summary shows 320.00 spent, 80.00 remaining, and not over
-  limit
-
-#### Scenario: Category over limit
-- **WHEN** "Groceries" has a 400.00 limit for the current month and
-  430.00 in assigned transactions
-- **THEN** the summary shows 430.00 spent, -30.00 remaining, and flags
-  the category as over limit
-
-#### Scenario: Subcategories are grouped under their parent, not summed into it
-- **WHEN** "Groceries" has no budget and 320.00 in transactions assigned
-  directly to it, and its subcategory "Supermarket" has 90.00 in
-  transactions assigned to "Supermarket" specifically
-- **THEN** the summary shows "Supermarket" grouped under "Groceries",
-  "Groceries" shows 320.00 spent (not 410.00), and "Supermarket" shows
-  90.00 spent against its own limit
-
-#### Scenario: Subcategories are included in a parent with a limit
-- **WHEN** "Groceries" has a 500.00 limit and 320.00 in transactions
-  assigned directly to it, and its subcategory "Supermarket" has 90.00 in
-  transactions assigned to "Supermarket" specifically
-- **THEN** the summary shows "Supermarket" grouped under "Groceries",
-  "Groceries" shows 410.00 spent and says it includes its subcategories,
-  and "Supermarket" shows 90.00 spent
-
-#### Scenario: A subcategory without a limit is covered by its parent
-- **WHEN** "Food" has a limit and its subcategory "Takeout" has none
-- **THEN** "Takeout" shows its spending and that it is covered by "Food",
-  not that it has no limit
-
-#### Scenario: A monthly subcategory of a yearly parent is listed
-- **WHEN** "Holidays" is yearly and its subcategory "Parking" is monthly
-- **THEN** the monthly summary lists "Parking", and doesn't list "Holidays"
-
-#### Scenario: Yearly categories are not in the monthly summary
-- **WHEN** "Clothing" is yearly and spent 180.00 this month
-- **THEN** the monthly summary doesn't list "Clothing", and its 180.00
-  is not uncategorized spend
-
 ### Requirement: Uncategorized transactions excluded from budgets
 The system SHALL exclude uncategorized transactions from every category's
 spend total, and SHALL report the total amount of uncategorized
@@ -250,8 +198,7 @@ category SHALL be monthly. Tab groups and tabs SHALL have no kind.
 
 #### Scenario: Make a category yearly
 - **WHEN** the user switches "Clothing" to yearly with 1200.00 a year
-- **THEN** "Clothing" leaves the monthly summary and appears under "This
-  year"
+- **THEN** "Clothing" shows its figures for the year in the budget list
 
 #### Scenario: No kind for a tab
 - **WHEN** the user tries to give "Tabs / Jan" a yearly budget
@@ -279,32 +226,6 @@ dialog first, saying what will be removed.
 #### Scenario: Nothing to drop
 - **WHEN** "Gifts" has no limit and the user switches it to yearly
 - **THEN** it switches without asking
-
-### Requirement: Yearly spending in the monthly summary
-The monthly summary SHALL end with a line showing the month's spending
-covered by a yearly or yearly-on-a-date budget, pointing to the "This year"
-section, so the month's spending stays complete. Spending covered by a
-parent with a monthly limit SHALL NOT be on this line, since it already
-counts in that parent. Spending under a yearly or yearly-on-a-date parent
-SHALL be on this line, whatever the subcategory's kind.
-
-#### Scenario: Yearly spending line
-- **WHEN** "Clothing" (yearly) spent 180.00 and "Property tax" (yearly
-  on a date) 400.00 this month
-- **THEN** the monthly summary ends with "Yearly budgets 580.00 this
-  month"
-
-#### Scenario: Under a monthly parent it isn't counted twice
-- **WHEN** "Food" has a monthly limit and its yearly subcategory
-  "Restaurant" spent 400.00 this month, and no other yearly budget spent
-  anything
-- **THEN** the monthly summary has no yearly spending line, and "Food"'s
-  spending includes the 400.00
-
-#### Scenario: Under a yearly parent it follows the parent
-- **WHEN** "Holidays" is yearly and its monthly subcategory "Parking"
-  spent 40.00 this month
-- **THEN** the yearly spending line includes the 40.00
 
 ### Requirement: A parent's budget covers its subcategories
 A top-level category's budget SHALL cover its own spending plus that of all

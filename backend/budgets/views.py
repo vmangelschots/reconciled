@@ -5,10 +5,13 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from reports.spending import month_spending
+
 from . import utils
+from .attention import attention_categories, attention_yearly
 from .models import BudgetSettings, Category, CategoryLimit, YearlyBudget
 from .serializers import CategorySerializer
-from .summary import budget_rows, uncategorized_spent, yearly_spent_cents
+from .summary import budget_rows, budget_totals, uncategorized_spent, yearly_spent_cents
 from .yearly import yearly_rows
 from .utils import parse_due, parse_month
 
@@ -139,13 +142,33 @@ class BudgetSummaryView(APIView):
                 raise ValueError(month_param)
         except ValueError:
             return Response({"detail": "month must be in YYYY-MM format."}, status=400)
+        today = utils.today()
+        current = period_start == today.replace(day=1)
+        days_in_month = (utils.month_range(period_start) - period_start).days
+        pace = today.day / days_in_month if current else None
+        rows = budget_rows(period_start)
+        yearly = yearly_rows(period_start, today)
+        yearly_spent = yearly_spent_cents(period_start)
+        _, uncategorized_cents = month_spending(period_start)
         return Response(
             {
                 "month": month_param,
-                "categories": budget_rows(period_start),
+                "categories": rows,
                 "uncategorized_spent_cents": uncategorized_spent(period_start),
-                "yearly_spent_cents": yearly_spent_cents(period_start),
-                "yearly": yearly_rows(period_start, utils.today()),
+                "yearly_spent_cents": yearly_spent,
+                "yearly": yearly,
+                # The same figures and warnings as the overview's budget tile.
+                "totals": {
+                    **budget_totals(rows),
+                    "yearly_spent_cents": yearly_spent,
+                    "uncategorized_cents": uncategorized_cents,
+                },
+                "pace": pace,
+                "days_left": days_in_month - today.day + 1 if current else None,
+                "attention": {
+                    "categories": attention_categories(rows, pace),
+                    "yearly": attention_yearly(yearly, current),
+                },
             }
         )
 

@@ -70,6 +70,14 @@ describe("ProgressBar", () => {
   });
 });
 
+describe("ProgressBar positive tone", () => {
+  it("stays full and green past its maximum", () => {
+    render(<ProgressBar value={405} max={400} tone="positive" />);
+    expect(screen.getByTestId("progress-fill")).toHaveClass("bg-positive");
+    expect(screen.getByTestId("progress-fill").style.width).toBe("100%");
+  });
+});
+
 describe("Panel", () => {
   it("shows its title, actions and body", () => {
     render(

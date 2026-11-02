@@ -36,8 +36,9 @@ import { useReport } from "../hooks/useReport";
 import { cn } from "../lib/cn";
 import { formatShortDate } from "../lib/dates";
 import { freshness, plural, staleImports } from "../lib/importFreshness";
+import { budgetExtras, categoryWarning, perDayCents, yearlyWarning } from "../lib/budgetOverview";
 import { formatMoney, formatMoneyWhole } from "../lib/money";
-import { currentMonth, daysSince, monthLabel, monthName } from "../lib/months";
+import { currentMonth, monthLabel, monthName } from "../lib/months";
 import { formatDayMonth } from "../lib/yearlyBudgets";
 import { VALUED_TYPES, tierLabel } from "../lib/tiers";
 import { useAccounts } from "../accounts/AccountsContext";
@@ -115,11 +116,7 @@ function BalanceTile({ data, month, isCurrent }) {
 
 function BudgetTile({ budget }) {
   const yearlySpent = budget.yearly_spent_cents ?? 0;
-  const extras = [
-    yearlySpent > 0 && `${whole(yearlySpent)} on yearly budgets`,
-    budget.outside_cents > 0 && `+${whole(budget.outside_cents)} outside budgets`,
-    budget.uncategorized_cents > 0 && `${whole(budget.uncategorized_cents)} uncategorized`,
-  ].filter(Boolean);
+  const extras = budgetExtras({ ...budget, yearly_spent_cents: yearlySpent });
 
   if (!budget.has_limits) {
     const spent = budget.spent_cents + budget.outside_cents + budget.uncategorized_cents + yearlySpent;
@@ -133,8 +130,7 @@ function BudgetTile({ budget }) {
   }
 
   const left = budget.limit_cents - budget.spent_cents;
-  const perDay =
-    left > 0 && budget.days_left ? Math.floor(left / 100 / budget.days_left) * 100 : null;
+  const perDay = perDayCents(left, budget.days_left);
   return (
     <Stat
       label="Budget"
@@ -238,13 +234,14 @@ function attentionItems(data, month, isCurrent) {
     });
   }
   for (const c of attention.categories) {
+    const { primary, secondary, critical } = categoryWarning(c);
     items.push({
       key: `category-${c.id}`,
       to: `/budgets?month=${month}`,
-      icon: <AlertTriangle className={cn("h-4 w-4", c.over ? "text-critical" : "text-warning")} />,
-      primary: c.over ? `${c.name} ${whole(c.spent_cents - c.limit_cents)} over` : `${c.name} at ${c.share}%`,
-      secondary: `${c.parent_name ? `${c.parent_name} · ` : ""}${whole(c.spent_cents)} of ${whole(c.limit_cents)}`,
-      tone: c.over ? "text-critical" : undefined,
+      icon: <AlertTriangle className={cn("h-4 w-4", critical ? "text-critical" : "text-warning")} />,
+      primary,
+      secondary,
+      tone: critical ? "text-critical" : undefined,
     });
   }
   for (const y of attention.yearly ?? []) items.push(yearlyItem(y, month));
@@ -301,32 +298,18 @@ function missedLoanItem(loan) {
 // A yearly budget or target that needs attention - see specs/overview,
 // "Yearly warnings".
 function yearlyItem(y, month) {
-  const over = y.spent_cents - y.budget_cents;
-  const daysLeft = y.due_date ? -daysSince(y.due_date) : null;
-  const primary = {
-    over: `${y.name} ${whole(over)} over`,
-    ahead: `${y.name} at ${y.share}% of ${month.slice(0, 4)}`,
-    due_soon: `${y.name} due ${daysLeft === 0 ? "today" : daysLeft === 1 ? "tomorrow" : `in ${daysLeft} days`}`,
-    not_seen: `${y.name} not seen yet`,
-    overdue: `${y.name} overdue`,
-    partly_paid: `${y.name} ${whole(-over)} short`,
-  }[y.state];
-  const figures =
-    y.kind === "target"
-      ? `Due ${formatDayMonth(y.due_date)} · ${whole(y.spent_cents)} of ${whole(y.budget_cents)}`
-      : `Yearly · ${whole(y.spent_cents)} of ${whole(y.budget_cents)}`;
-  const critical = y.state === "over" || y.state === "overdue";
+  const { primary, secondary, critical, upcoming } = yearlyWarning(y, month.slice(0, 4));
   return {
     key: `yearly-${y.id}`,
     to: `/budgets?month=${month}`,
     icon:
-      y.state === "due_soon" ? (
+      upcoming ? (
         <CalendarClock className="h-4 w-4 text-ink-muted" />
       ) : (
         <AlertTriangle className={cn("h-4 w-4", critical ? "text-critical" : "text-warning")} />
       ),
     primary,
-    secondary: `${y.parent_name ? `${y.parent_name} · ` : ""}${figures}`,
+    secondary,
     tone: critical ? "text-critical" : undefined,
   };
 }

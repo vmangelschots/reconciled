@@ -8,6 +8,7 @@ import {
   LogOut,
   PiggyBank,
   Settings,
+  Tags,
   TrendingUp,
   Upload,
 } from 'lucide-react'
@@ -36,6 +37,7 @@ const NAV_ITEMS = [
   { to: '/reports', label: 'Reports', icon: ChartColumnStacked, group: 'main' },
   { to: '/import', label: 'Import', icon: Upload, group: 'more' },
   { to: '/accounts', label: 'Accounts', icon: Landmark, group: 'more' },
+  { to: '/categories', label: 'Categories', icon: Tags, group: 'more' },
   { to: '/settings', label: 'Settings', icon: Settings, group: 'more' },
 ]
 

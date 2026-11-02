@@ -238,6 +238,32 @@ class UmbrellaBudgetTests(TestCase):
 
         self.assertTrue(self._rows()["Groceries"]["covered_by_parent"])
 
+    def test_a_group_totals_everything_under_it(self):
+        self._yearly(self.restaurant)
+        self._spend(self.food, 1000)
+        self._spend(self.groceries, 3000)
+        self._spend(self.restaurant, 2000)
+        self._spend(self.restaurant, 9000, month=9)
+
+        rows = self._rows()
+
+        self.assertEqual(rows["Food"]["group_spent_cents"], 6000)
+        self.assertEqual(rows["Food"]["spent_cents"], 1000)
+        self.assertIsNone(rows["Groceries"]["group_spent_cents"])
+
+    def test_a_parent_with_a_limit_is_no_group(self):
+        self._limit(self.food, 5000)
+
+        self.assertIsNone(self._rows()["Food"]["group_spent_cents"])
+
+    def test_an_override_is_flagged_only_in_its_month(self):
+        self._limit(self.food, 100000)
+        self._limit(self.food, 60000, month=date(2026, 12, 1))
+
+        self.assertFalse(self._rows()["Food"]["overridden"])
+        december = {r["category_name"]: r for r in budget_rows(date(2026, 12, 1))}
+        self.assertTrue(december["Food"]["overridden"])
+
     def test_a_parent_without_a_budget_is_a_group(self):
         self._limit(self.restaurant, 5000)
         self._spend(self.restaurant, 2000)
@@ -297,6 +323,50 @@ class UmbrellaBudgetTests(TestCase):
         self.assertTrue(rows["Groceries"]["covered_by_parent"])
         self.assertEqual((totals["limit_cents"], totals["spent_cents"], totals["outside_cents"]), (0, 0, 0))
         self.assertEqual(yearly_spent_cents(self.MONTH), 5000)
+
+
+class SummaryForTheOverviewTests(TestCase):
+    """What the Budgets page's headline and Needs a look use."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(get_user_model().objects.create_user(username="s", password="x"))
+        self.account = Account.objects.create(name="Main", account_type="checking", starting_balance_cents=0)
+        self.food = Category.objects.create(name="Food")
+        self.restaurant = Category.objects.create(name="Restaurant", parent=self.food)
+        self.gifts = Category.objects.create(name="Gifts")
+        self.clothing = Category.objects.create(name="Clothing", budget_kind=Category.BudgetKind.YEARLY)
+        YearlyBudget.objects.create(category=self.clothing, from_year=2026, amount_cents=120000)
+        CategoryLimit.objects.create(category=self.food, month=None, limit_cents=100000)
+        CategoryLimit.objects.create(category=self.restaurant, month=None, limit_cents=10000)
+        for category, cents in ((self.restaurant, 13000), (self.gifts, 3500), (self.clothing, 2000), (None, 4200)):
+            Transaction.objects.create(
+                account=self.account, date="2026-10-05", amount_cents=-cents, payee="x", category=category
+            )
+
+    def _summary(self, month="2026-10"):
+        return self.client.get(reverse("budget-summary"), {"month": month}).json()
+
+    def test_totals_and_attention_equal_the_overview(self):
+        today = date(2026, 10, 24)
+        with patch("budgets.utils.today", lambda: today), patch("reports.views._today", lambda: today):
+            summary = self._summary()
+            overview = self.client.get(reverse("report-overview"), {"month": "2026-10"}).json()
+
+        for key, value in summary["totals"].items():
+            self.assertEqual(value, overview["budget"][key], key)
+        self.assertEqual(summary["pace"], overview["budget"]["pace"])
+        self.assertEqual(summary["days_left"], overview["budget"]["days_left"])
+        self.assertEqual(summary["attention"]["categories"], overview["attention"]["categories"])
+        self.assertEqual(summary["attention"]["yearly"], overview["attention"]["yearly"])
+        self.assertEqual(summary["attention"]["categories"][0]["name"], "Restaurant")
+
+    def test_no_pace_outside_the_current_month(self):
+        with patch("budgets.utils.today", lambda: date(2026, 10, 24)):
+            for month in ("2026-09", "2026-11"):
+                summary = self._summary(month)
+                self.assertIsNone(summary["pace"])
+                self.assertIsNone(summary["days_left"])
 
 
 class BudgetSummaryTests(TestCase):
@@ -538,8 +608,8 @@ class BudgetSummaryQueryTests(TestCase):
 
         # One for the user's household, four for the monthly rows and
         # uncategorized, three for the month's yearly spending, four for the
-        # yearly rows.
-        with self.assertNumQueries(12):
+        # yearly rows and their parents, one for the uncategorized outflows.
+        with self.assertNumQueries(14):
             response = client.get(reverse("budget-summary"), {"month": "2026-01"})
 
         self.assertEqual([c["spent_cents"] for c in response.json()["categories"]], [100] * 6)

@@ -74,6 +74,7 @@ describe('Layout navigation', () => {
       'Reports',
       'Import',
       'Accounts',
+      'Categories',
       'Settings',
     ])
     expect(await screen.findByText(formatMoney(348217 + 1000000))).toBeInTheDocument()
@@ -97,7 +98,7 @@ describe('Layout navigation', () => {
     await userEvent.click(within(tabBar).getByRole('button', { name: 'More' }))
 
     const more = screen.getByRole('navigation', { name: 'More' })
-    expect(within(more).getAllByRole('link').map((l) => l.textContent)).toEqual(['Forecast', 'Reports', 'Import', 'Accounts', 'Settings'])
+    expect(within(more).getAllByRole('link').map((l) => l.textContent)).toEqual(['Forecast', 'Reports', 'Import', 'Accounts', 'Categories', 'Settings'])
     expect(screen.getByRole('button', { name: /Switch to (dark|light) theme/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument()
   })

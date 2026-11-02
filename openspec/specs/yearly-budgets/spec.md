@@ -195,41 +195,14 @@ year SHALL show as one line with the last values.
 - **THEN** the category settings show its current amount without a
   history to open
 
-### Requirement: This year on the Budgets page
-The Budgets page SHALL show a "This year" section listing every yearly
-and yearly-on-a-date budget for the viewed month's year, below the
-monthly summary. Spending SHALL be counted from the later of 1 January
-and the start month through the end of the viewed month, and the
-section title SHALL say up to which day. Subcategories SHALL be grouped
-under their parent, and a parent's figures SHALL include them.
-
-#### Scenario: Viewing October
-- **WHEN** on 24 October 2026, with the start month October 2026,
-  "Clothing" has 1200.00 a year and spent 180.00 in October, and the
-  user views October 2026
-- **THEN** "This year (2026) · to 24 Oct" shows "Clothing" with 300.00
-  budget, 180.00 spent and 120.00 left
-
-#### Scenario: Viewing an earlier month of the year
-- **WHEN** "Clothing" spent 180.00 in October and 90.00 in November
-  2026, and the user views October 2026
-- **THEN** the title says "to 31 Oct" and "Clothing" shows 180.00 spent,
-  not 270.00
-
-#### Scenario: Viewing a month before the start
-- **WHEN** the start month is October 2026 and the user views September
-  2026
-- **THEN** the section says budgeting by year starts in October 2026 and
-  offers to go to October 2026, instead of listing budgets
-
 ### Requirement: Start month on the Budgets page
-The "This year" section SHALL show the start month and let the user set,
-change or clear it.
+The Budgets page SHALL show the start month at the end of the budget list and
+let the user set, change or clear it.
 
 #### Scenario: Set the start month
 - **WHEN** the user sets the start month to October 2026
-- **THEN** the section shows that yearly budgets count from October 2026
-  and its figures are recalculated
+- **THEN** the page shows that yearly budgets count from October 2026 and
+  its figures are recalculated
 
 #### Scenario: Clear the start month
 - **WHEN** the user clears the start month

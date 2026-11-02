@@ -6,11 +6,12 @@ import { BudgetsPage } from "./BudgetsPage";
 import { ToastProvider } from "../components/ui/Toast";
 import * as budgetsApi from "../api/budgets";
 import * as categoriesApi from "../api/categories";
-import * as tabsApi from "../api/tabs";
-import { formatMoney } from "../lib/money";
-import { formatDayMonth, formatDue } from "../lib/yearlyBudgets";
+import * as reportsApi from "../api/reports";
+import { formatMoneyWhole as whole } from "../lib/money";
+import { formatDayMonth } from "../lib/yearlyBudgets";
 
-vi.mock("../api/tabs", () => ({ listTabs: vi.fn() }));
+vi.mock("../api/reports", () => ({ getSpendingCell: vi.fn() }));
+vi.mock("../api/transactions", () => ({ updateTransaction: vi.fn(), getReviewCount: vi.fn() }));
 
 vi.mock("../api/budgets", async () => {
   const actual = await vi.importActual("../api/budgets");
@@ -19,194 +20,8 @@ vi.mock("../api/budgets", async () => {
 
 vi.mock("../api/categories", async () => {
   const actual = await vi.importActual("../api/categories");
-  return {
-    ...actual,
-    listCategories: vi.fn(),
-    createCategory: vi.fn(),
-    updateCategory: vi.fn(),
-    deleteCategory: vi.fn(),
-    setCategoryLimit: vi.fn(),
-    setCategoryBudget: vi.fn(),
-  };
+  return { ...actual, listCategories: vi.fn(), setCategoryLimit: vi.fn(), setCategoryBudget: vi.fn() };
 });
-
-const CATEGORIES = [
-  { id: 1, name: "Groceries", parent: null },
-  { id: 2, name: "Transport", parent: null },
-];
-
-const SUMMARY = {
-  categories: [
-    { category_id: 1, category_name: "Groceries", parent_id: null, limit_cents: 10000, spent_cents: 5000, remaining_cents: 5000, over_limit: false },
-    { category_id: 2, category_name: "Transport", parent_id: null, limit_cents: null, spent_cents: 0, remaining_cents: null, over_limit: false },
-  ],
-  uncategorized_spent_cents: 0,
-};
-
-function Where() {
-  const location = useLocation();
-  return <p data-testid="where">{location.search}</p>;
-}
-
-function renderPage(path = "/budgets") {
-  return render(
-    <MemoryRouter initialEntries={[path]}>
-      <ToastProvider>
-        <Routes>
-          <Route
-            path="/budgets"
-            element={
-              <>
-                <BudgetsPage />
-                <Where />
-              </>
-            }
-          />
-        </Routes>
-      </ToastProvider>
-    </MemoryRouter>,
-  );
-}
-
-beforeEach(() => {
-  vi.clearAllMocks();
-  categoriesApi.listCategories.mockResolvedValue(CATEGORIES);
-  budgetsApi.getBudgetSummary.mockResolvedValue(SUMMARY);
-  tabsApi.listTabs.mockResolvedValue([]);
-});
-
-describe("BudgetsPage", () => {
-  it("disables a category's Rename/Delete buttons immediately on Delete", async () => {
-    let resolveDelete;
-    categoriesApi.deleteCategory.mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          resolveDelete = resolve;
-        }),
-    );
-
-    renderPage();
-    await waitFor(() => expect(screen.getAllByText("Groceries").length).toBeGreaterThan(0));
-
-    const [deleteGroceries] = screen.getAllByRole("button", { name: "Delete" });
-    const [renameGroceries] = screen.getAllByRole("button", { name: "Rename" });
-    await userEvent.click(deleteGroceries);
-
-    expect(deleteGroceries).toBeDisabled();
-    expect(renameGroceries).toBeDisabled();
-
-    categoriesApi.listCategories.mockResolvedValue([CATEGORIES[1]]);
-    budgetsApi.getBudgetSummary.mockResolvedValue({ ...SUMMARY, categories: [SUMMARY.categories[1]] });
-    resolveDelete({});
-
-    await waitFor(() => expect(screen.queryAllByText("Groceries")).toHaveLength(0));
-  });
-});
-
-describe("BudgetsPage tab groups", () => {
-  const WITH_TABS = [
-    ...CATEGORIES,
-    { id: 10, name: "Tabs", parent: null, is_tab_group: true, is_tab: false, transaction_count: 0 },
-    { id: 11, name: "Jan", parent: 10, is_tab_group: false, is_tab: true, transaction_count: 2 },
-  ];
-
-  it("creates a tab group with the kind switch", async () => {
-    categoriesApi.createCategory.mockResolvedValue({});
-    renderPage();
-    await screen.findAllByText("Groceries");
-
-    await userEvent.type(screen.getAllByLabelText("Name")[0], "Owed");
-    await userEvent.click(screen.getByRole("button", { name: "Tab" }));
-    await userEvent.click(screen.getByRole("button", { name: "Add category" }));
-
-    expect(categoriesApi.createCategory).toHaveBeenCalledWith("Owed", null, true);
-  });
-
-  it("asks before switching a group whose tabs have transactions", async () => {
-    categoriesApi.listCategories.mockResolvedValue(WITH_TABS);
-    categoriesApi.updateCategory.mockResolvedValue({});
-    renderPage();
-    const tabsRow = (await screen.findByText("Tabs")).closest("li");
-
-    await userEvent.click(within(tabsRow).getAllByRole("button", { name: "Rename" })[0]);
-    const form = screen.getByRole("button", { name: "Save" }).closest("form");
-    await userEvent.click(within(form).getByRole("button", { name: "Budget" }));
-    await userEvent.click(within(form).getByRole("button", { name: "Save" }));
-
-    expect(categoriesApi.updateCategory).not.toHaveBeenCalled();
-    expect(within(form).getByText(/2 transactions in its subcategories will count again/)).toBeInTheDocument();
-
-    await userEvent.click(within(form).getByRole("button", { name: "Cancel" }));
-    expect(categoriesApi.updateCategory).not.toHaveBeenCalled();
-
-    await userEvent.click(within(form).getByRole("button", { name: "Save" }));
-    await userEvent.click(within(form).getByRole("button", { name: "Make it a budget group" }));
-    expect(categoriesApi.updateCategory).toHaveBeenCalledWith(10, { name: "Tabs", parent: null, is_tab_group: false });
-  });
-
-  it("marks tabs and shows their balance in words", async () => {
-    categoriesApi.listCategories.mockResolvedValue(WITH_TABS);
-    tabsApi.listTabs.mockResolvedValue([
-      { id: 11, name: "Jan", group_name: "Tabs", balance_cents: 3000, open_since: "2026-10-03", row_count: 2 },
-    ]);
-    renderPage();
-
-    expect(await screen.findByText(`Jan owes you ${formatMoney(3000)}`)).toBeInTheDocument();
-    expect(screen.getByText("Tab group · not budgeted")).toBeInTheDocument();
-    expect(screen.getAllByLabelText("Tab").length).toBe(2);
-  });
-
-  it("shows the inherited kind for a subcategory", async () => {
-    categoriesApi.listCategories.mockResolvedValue(WITH_TABS);
-    renderPage();
-    const janRow = (await screen.findByText("Jan")).closest("div");
-
-    await userEvent.click(within(janRow).getByRole("button", { name: "Rename" }));
-
-    expect(screen.getByText("Tab, from Tabs")).toBeInTheDocument();
-  });
-});
-
-describe("BudgetsPage month", () => {
-  afterEach(() => vi.useRealTimers());
-
-  it("opens on the month in the address", async () => {
-    renderPage("/budgets?month=2026-09");
-
-    await waitFor(() => expect(budgetsApi.getBudgetSummary).toHaveBeenCalledWith("2026-09"));
-    expect(screen.getByText(new Date(2026, 8, 1).toLocaleString(undefined, { month: "long", year: "numeric" }))).toBeInTheDocument();
-  });
-
-  it("writes the month back to the address when switching", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date(2026, 9, 24));
-    renderPage();
-    await waitFor(() => expect(budgetsApi.getBudgetSummary).toHaveBeenCalledWith("2026-10"));
-
-    await userEvent.click(screen.getByRole("button", { name: "Previous month" }));
-
-    await waitFor(() => expect(budgetsApi.getBudgetSummary).toHaveBeenLastCalledWith("2026-09"));
-    expect(screen.getByTestId("where")).toHaveTextContent("?month=2026-09");
-  });
-
-  it("takes the current month from local time", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date(2026, 10, 1, 0, 30)); // 1 Nov 00:30 local
-    renderPage();
-
-    await waitFor(() => expect(budgetsApi.getBudgetSummary).toHaveBeenCalledWith("2026-11"));
-  });
-});
-
-// jsdom has no matchMedia, so pages render their phone layout unless a
-// test asks for a wide screen.
-function wideScreen() {
-  window.matchMedia = (query) => ({
-    matches: query.includes("min-width"),
-    addEventListener: () => {},
-    removeEventListener: () => {},
-  });
-}
 
 const YEARLY_CATEGORIES = [
   {
@@ -245,341 +60,237 @@ const TAX_ROW = {
   due_date: "2026-11-01", state: "due_soon", difference_cents: -40000,
 };
 
-function yearlySummary(yearly = {}, extra = {}) {
+const GROCERIES_ROW = {
+  category_id: 1, category_name: "Groceries", parent_id: null, limit_cents: 10000, spent_cents: 5000,
+  remaining_cents: 5000, over_limit: false, covers_subcategories: false, covered_by_parent: false,
+  caps_cents: null, group_spent_cents: null, overridden: false,
+};
+const TRANSPORT_ROW = {
+  ...GROCERIES_ROW, category_id: 2, category_name: "Transport", limit_cents: null, spent_cents: 0, remaining_cents: null,
+};
+
+function summary(yearly = {}, extra = {}) {
   return {
-    ...SUMMARY,
+    categories: [GROCERIES_ROW, TRANSPORT_ROW],
+    uncategorized_spent_cents: 0,
     yearly_spent_cents: 0,
     yearly: {
       year: 2026, through: "2026-10-24", start_month: "2026-10-01", starts: null,
       categories: [CLOTHING_ROW, TAX_ROW],
       ...yearly,
     },
+    totals: {
+      has_limits: true, limit_cents: 10000, spent_cents: 5000, outside_cents: 3500,
+      yearly_spent_cents: 13000, uncategorized_cents: 4200,
+    },
+    pace: 0.77,
+    days_left: 8,
+    attention: { categories: [], yearly: [] },
     ...extra,
   };
 }
 
-describe("BudgetsPage budget editor", () => {
-  beforeEach(() => {
-    wideScreen();
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date(2026, 9, 24));
-    categoriesApi.listCategories.mockResolvedValue(YEARLY_CATEGORIES);
-    budgetsApi.getBudgetSummary.mockResolvedValue(yearlySummary());
-    categoriesApi.setCategoryBudget.mockResolvedValue({});
-    categoriesApi.setCategoryLimit.mockResolvedValue({});
-  });
-  afterEach(() => {
-    vi.useRealTimers();
-    delete window.matchMedia;
-  });
+function Where() {
+  const location = useLocation();
+  return <p data-testid="where">{location.search}</p>;
+}
 
-  async function openEditor(name) {
-    await userEvent.click(await screen.findByRole("button", { name: `Edit budget for ${name}` }));
-    return screen.getByRole("form", { name: `Budget for ${name}` });
-  }
+function renderPage(path = "/budgets") {
+  return render(
+    <MemoryRouter initialEntries={[path]}>
+      <ToastProvider>
+        <Routes>
+          <Route
+            path="/budgets"
+            element={
+              <>
+                <BudgetsPage />
+                <Where />
+              </>
+            }
+          />
+          <Route path="/categories" element={<p>Category settings</p>} />
+        </Routes>
+      </ToastProvider>
+    </MemoryRouter>,
+  );
+}
 
-  async function setAmount(form, value) {
-    const input = within(form).getByLabelText("Amount");
-    await userEvent.clear(input);
-    await userEvent.type(input, value);
-  }
+const CELL = {
+  name: "Groceries", month: "2026-10", total_cents: -5000, accounts: ["Crelan"], uncategorized: false,
+  rows: [
+    {
+      id: 5, date: "2026-10-12", payee: "Delhaize", amount_cents: -5000, account_id: 3, account_name: "Crelan",
+      category: 1, category_label: "Groceries", split_amount_cents: null,
+    },
+  ],
+};
 
-  it("sets a monthly limit from the monthly table", async () => {
-    renderPage();
-    const form = await openEditor("Groceries");
-    await setAmount(form, "450");
-    await userEvent.click(within(form).getByRole("button", { name: "Save" }));
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date(2026, 9, 24));
+  categoriesApi.listCategories.mockResolvedValue(YEARLY_CATEGORIES);
+  budgetsApi.getBudgetSummary.mockResolvedValue(summary());
+  budgetsApi.setBudgetStartMonth.mockResolvedValue({});
+  categoriesApi.setCategoryBudget.mockResolvedValue({});
+  categoriesApi.setCategoryLimit.mockResolvedValue({});
+  reportsApi.getSpendingCell.mockResolvedValue(CELL);
+});
+afterEach(() => vi.useRealTimers());
 
-    expect(categoriesApi.setCategoryLimit).toHaveBeenCalledWith(1, { month: null, limit_cents: 45000 });
-  });
-
-  it("asks before switching a monthly category to yearly, and saves nothing on cancel", async () => {
-    renderPage();
-    const form = await openEditor("Groceries");
-    await userEvent.click(within(form).getByRole("button", { name: "Yearly" }));
-    await setAmount(form, "1200");
-    await userEvent.click(within(form).getByRole("button", { name: "Save" }));
-
-    const dialog = await screen.findByRole("dialog");
-    expect(dialog).toHaveTextContent(
-      `Switching Groceries to yearly removes the ${formatMoney(10000)} monthly limit and 1 month override.`,
-    );
-    await userEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
-    expect(categoriesApi.setCategoryBudget).not.toHaveBeenCalled();
-
-    await userEvent.click(within(form).getByRole("button", { name: "Save" }));
-    await userEvent.click(await screen.findByRole("button", { name: "Switch to yearly" }));
-    expect(categoriesApi.setCategoryBudget).toHaveBeenCalledWith(1, { kind: "yearly", amount_cents: 120000, due: undefined });
-  });
-
-  it("asks before switching a yearly category to monthly", async () => {
-    categoriesApi.listCategories.mockResolvedValue(
-      YEARLY_CATEGORIES.map((c) =>
-        c.id === 3
-          ? { ...c, yearly_history: [{ from_year: 2027, amount_cents: 150000, due: null }, ...c.yearly_history] }
-          : c,
-      ),
+describe("BudgetsPage headline", () => {
+  it("shows the Overview's figures with a verdict", async () => {
+    budgetsApi.getBudgetSummary.mockResolvedValue(
+      summary({}, { attention: { categories: [{ id: 1, name: "Groceries", over: true, spent_cents: 5000, limit_cents: 100, share: 5000 }], yearly: [] } }),
     );
     renderPage();
-    const form = await openEditor("Clothing");
-    await userEvent.click(within(form).getByRole("button", { name: "Monthly" }));
-    await userEvent.click(within(form).getByRole("button", { name: "Save" }));
 
-    expect(await screen.findByRole("dialog")).toHaveTextContent(
-      "Switching Clothing to monthly removes its yearly amount and history.",
+    expect(await screen.findByText("1 needs a look")).toBeInTheDocument();
+    expect(screen.getByText(`${whole(5000)} left · ${whole(600)} a day`)).toBeInTheDocument();
+    expect(
+      screen.getByText(`${whole(13000)} on yearly budgets · +${whole(3500)} outside budgets · ${whole(4200)} uncategorized`),
+    ).toBeInTheDocument();
+  });
+
+  it("says when the month is on track, and leaves Needs a look out", async () => {
+    renderPage();
+    expect(await screen.findByText("On track")).toBeInTheDocument();
+    expect(screen.queryByText("Needs a look")).toBeNull();
+  });
+
+  it("has no per-day figure or marker in a past month", async () => {
+    budgetsApi.getBudgetSummary.mockResolvedValue(summary({ through: "2026-09-30" }, { pace: null, days_left: null }));
+    renderPage("/budgets?month=2026-09");
+
+    expect(await screen.findByText(`Finished ${whole(5000)} under`)).toBeInTheDocument();
+    expect(screen.queryByText(/a day/)).toBeNull();
+  });
+
+  it("asks to set a budget when there are no limits", async () => {
+    budgetsApi.getBudgetSummary.mockResolvedValue(
+      summary({}, { totals: { has_limits: false, limit_cents: 0, spent_cents: 0, outside_cents: 5000, yearly_spent_cents: 0, uncategorized_cents: 0 } }),
     );
-  });
-
-  it("doesn't carry a monthly amount over as a yearly one", async () => {
     renderPage();
-    const form = await openEditor("Groceries");
-    expect(within(form).getByLabelText("Amount")).toHaveValue(100);
-    await userEvent.click(within(form).getByRole("button", { name: "Yearly" }));
-    expect(within(form).getByLabelText("Amount")).toHaveValue(null);
-    await userEvent.click(within(form).getByRole("button", { name: "Monthly" }));
-    expect(within(form).getByLabelText("Amount")).toHaveValue(100);
-  });
 
-  it("switches without asking when there is nothing to drop", async () => {
-    renderPage();
-    const form = await openEditor("Transport");
-    await userEvent.click(within(form).getByRole("button", { name: "Yearly" }));
-    await setAmount(form, "500");
-    await userEvent.click(within(form).getByRole("button", { name: "Save" }));
-
-    expect(screen.queryByRole("dialog")).toBeNull();
-    expect(categoriesApi.setCategoryBudget).toHaveBeenCalledWith(2, { kind: "yearly", amount_cents: 50000, due: undefined });
-  });
-
-  it("switches yearly to on a date without asking, with a due date", async () => {
-    renderPage();
-    const form = await openEditor("Clothing");
-    await userEvent.click(within(form).getByRole("button", { name: "On a date" }));
-    await userEvent.type(within(form).getByLabelText("Due day"), "1");
-    await userEvent.click(within(form).getByRole("combobox", { name: "Due month" }));
-    await userEvent.click(await screen.findByRole("option", { name: "Nov" }));
-    await userEvent.click(within(form).getByRole("button", { name: "Save" }));
-
-    expect(screen.queryByRole("dialog")).toBeNull();
-    expect(categoriesApi.setCategoryBudget).toHaveBeenCalledWith(3, { kind: "target", amount_cents: 120000, due: "11-01" });
-  });
-
-  it("edits a yearly budget from This year and says which years it applies to", async () => {
-    renderPage();
-    const form = await openEditor("Clothing");
-    expect(within(form).getByText(/Applies to 2026 and later\./)).toBeInTheDocument();
-    await setAmount(form, "1500");
-    await userEvent.click(within(form).getByRole("button", { name: "Save" }));
-
-    expect(categoriesApi.setCategoryBudget).toHaveBeenCalledWith(3, { kind: "yearly", amount_cents: 150000, due: undefined });
-  });
-
-  it("states the scope when editing while viewing an earlier year", async () => {
-    vi.setSystemTime(new Date(2027, 0, 5));
-    budgetsApi.getBudgetSummary.mockResolvedValue(yearlySummary({ through: "2026-12-31" }));
-    renderPage("/budgets?month=2026-12");
-    const form = await openEditor("Clothing");
-
-    expect(within(form).getByText(`Applies to 2027 and later. 2026 stays ${formatMoney(120000)}.`)).toHaveClass(
-      "text-warning",
-    );
-  });
-
-  it("ends the monthly summary with the month's yearly spending", async () => {
-    budgetsApi.getBudgetSummary.mockResolvedValue(yearlySummary({}, { yearly_spent_cents: 58000 }));
-    renderPage();
-    const row = (await screen.findByText("Yearly budgets")).closest("tr");
-
-    expect(row).toHaveTextContent(formatMoney(58000));
-    expect(row).toHaveTextContent("this month · see This year");
+    expect(await screen.findByText("Click a category to set a budget.")).toBeInTheDocument();
+    expect(screen.getByText(whole(5000))).toBeInTheDocument();
   });
 });
 
-describe("BudgetsPage this year", () => {
-  beforeEach(() => {
-    wideScreen();
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(new Date(2026, 9, 24));
-    categoriesApi.listCategories.mockResolvedValue(YEARLY_CATEGORIES);
-    budgetsApi.getBudgetSummary.mockResolvedValue(yearlySummary());
-    budgetsApi.setBudgetStartMonth.mockResolvedValue({});
-  });
-  afterEach(() => {
-    vi.useRealTimers();
-    delete window.matchMedia;
-  });
-
-  async function yearlyRow(name) {
-    const panel = (await screen.findByText("This year (2026)", { exact: false })).closest("section");
-    return within(panel).getByText(name).closest("tr");
-  }
-
-  it("shows the year's figures as of the viewed day, with the pro-rating", async () => {
-    renderPage();
-    const row = await yearlyRow("Clothing");
-
-    expect(screen.getByText(`· to ${formatDayMonth("2026-10-24")}`)).toBeInTheDocument();
-    expect(row).toHaveTextContent(formatMoney(30000));
-    expect(row).toHaveTextContent(`of ${formatMoney(120000)} · from Oct`);
-    expect(row).toHaveTextContent(formatMoney(18000));
-    expect(row).toHaveTextContent(formatMoney(12000));
-    expect(row).toHaveTextContent("€40 a month to Dec");
-    expect(within(row).getByTestId("progress-marker")).toBeInTheDocument();
-  });
-
-  it("says how much a yearly budget is over", async () => {
+describe("BudgetsPage Needs a look", () => {
+  it("lists warnings in the Overview's words and opens the budget", async () => {
     budgetsApi.getBudgetSummary.mockResolvedValue(
-      yearlySummary({ categories: [{ ...CLOTHING_ROW, spent_cents: 33000, remaining_cents: -3000, over: true, runway_cents: null }] }),
+      summary({}, {
+        attention: {
+          categories: [{ id: 1, name: "Groceries", parent_name: null, over: true, spent_cents: 12000, limit_cents: 10000, share: 120 }],
+          yearly: [{ id: 4, name: "Property tax", parent_name: null, kind: "target", state: "due_soon", share: 0, spent_cents: 0, budget_cents: 40000, due_date: "2026-11-01" }],
+        },
+      }),
     );
     renderPage();
-    expect(await yearlyRow("Clothing")).toHaveTextContent("€30 over for 2026");
+
+    expect(await screen.findByText(`Groceries ${whole(2000)} over`)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Property tax due in 8 days/ }));
+    expect(await screen.findByRole("form", { name: "Budget for Property tax" })).toBeInTheDocument();
+  });
+});
+
+describe("BudgetsPage list", () => {
+  it("shows every kind in one list, with no table or category form", async () => {
+    renderPage();
+    const groceries = await screen.findByRole("button", { name: "Open budget for Groceries" });
+
+    expect(groceries).toHaveTextContent(`${whole(5000)} left`);
+    expect(screen.getByRole("button", { name: "Open budget for Clothing" })).toHaveTextContent("€40 a month to Dec");
+    expect(screen.getByRole("button", { name: "Open budget for Property tax" })).toHaveTextContent(`${whole(40000)} to pay`);
+    expect(within(screen.getByRole("button", { name: "Open budget for Clothing" })).getByTestId("progress-marker")).toBeInTheDocument();
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Add category" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Rename" })).toBeNull();
   });
 
-  it("shows no runway or pace for a past month", async () => {
-    budgetsApi.getBudgetSummary.mockResolvedValue(
-      yearlySummary({ through: "2026-09-30", categories: [{ ...CLOTHING_ROW, pace: null, runway_cents: null }] }),
-    );
+  it("collapses categories without a budget and expands them", async () => {
     renderPage();
-    const row = await yearlyRow("Clothing");
-    expect(row).not.toHaveTextContent("a month to Dec");
-    expect(within(row).queryByTestId("progress-marker")).toBeNull();
+    await userEvent.click(await screen.findByRole("button", { name: /No budget \(1\)/ }));
+    expect(screen.getByRole("button", { name: "Open budget for Transport" })).toBeInTheDocument();
   });
 
-  it("turns the bar amber when running ahead", async () => {
-    budgetsApi.getBudgetSummary.mockResolvedValue(
-      yearlySummary({ categories: [{ ...CLOTHING_ROW, spent_cents: 27000, remaining_cents: 3000, ahead: true, runway_cents: 1000 }] }),
-    );
+  it("links uncategorized spending to Review", async () => {
     renderPage();
-    expect(within(await yearlyRow("Clothing")).getByTestId("progress-fill")).toHaveClass("bg-warning");
+    expect(await screen.findByRole("link", { name: "Review →" })).toHaveAttribute("href", "/review");
+    expect(screen.getByText(`${whole(4200)} spent`)).toBeInTheDocument();
   });
 
-  it.each([
-    [{ state: "due_soon" }, `Due ${formatDayMonth("2026-11-01")}, in 8 days`],
-    [{ state: "not_seen" }, `Due ${formatDayMonth("2026-11-01")}, not seen yet`],
-    [{ state: "overdue" }, `Overdue since ${formatDayMonth("2026-11-01")}`],
-    [{ state: "partly_paid", spent_cents: 30000 }, "Partly paid · €100 short"],
-    [{ state: "paid_over", spent_cents: 45000 }, "Paid · €50 over"],
-    [{ state: "paid", spent_cents: 39812 }, `Paid · ${formatMoney(188)} under`],
-  ])("labels a target %o", async (fields, label) => {
-    budgetsApi.getBudgetSummary.mockResolvedValue(yearlySummary({ categories: [{ ...TAX_ROW, ...fields }] }));
+  it("links to the category settings", async () => {
     renderPage();
-    expect(await yearlyRow("Property tax")).toHaveTextContent(label);
+    await userEvent.click(await screen.findByRole("link", { name: "Categories" }));
+    expect(screen.getByText("Category settings")).toBeInTheDocument();
+  });
+
+  it("offers the category settings when there are no categories", async () => {
+    categoriesApi.listCategories.mockResolvedValue([]);
+    renderPage();
+    expect(await screen.findByText("No categories yet.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Add a category" })).toHaveAttribute("href", "/categories");
+  });
+});
+
+describe("BudgetsPage start month", () => {
+  it("says how far yearly figures count", async () => {
+    renderPage();
+    expect(
+      await screen.findByText(`Yearly budgets count from October 2026, to ${formatDayMonth("2026-10-24")}`),
+    ).toBeInTheDocument();
   });
 
   it("offers to go to the start month when viewing a month before it", async () => {
-    budgetsApi.getBudgetSummary.mockResolvedValue(yearlySummary({ starts: "2026-10-01", categories: [] }));
+    budgetsApi.getBudgetSummary.mockResolvedValue(summary({ starts: "2026-10-01", categories: [] }));
     renderPage("/budgets?month=2026-09");
 
     expect(await screen.findByText("Budgeting by year starts in October 2026.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Open budget for Groceries" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Go to October 2026" }));
     expect(screen.getByTestId("where")).toHaveTextContent("?month=2026-10");
   });
 
   it("sets and clears the start month", async () => {
-    budgetsApi.getBudgetSummary.mockResolvedValue(yearlySummary({ start_month: null }));
+    budgetsApi.getBudgetSummary.mockResolvedValue(summary({ start_month: null }));
     renderPage();
     await userEvent.click(await screen.findByRole("button", { name: "Set start month" }));
-    const strip = screen.getByText("Yearly budgets count from").closest("div");
-    budgetsApi.getBudgetSummary.mockResolvedValue(yearlySummary());
-    await userEvent.click(within(strip).getByRole("button", { name: "Save" }));
+    budgetsApi.getBudgetSummary.mockResolvedValue(summary());
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(budgetsApi.setBudgetStartMonth).toHaveBeenCalledWith("2026-10");
 
-    await waitFor(() => expect(screen.getByRole("button", { name: /From Oct 2026/ })).toBeInTheDocument());
-    await userEvent.click(screen.getByRole("button", { name: /From Oct 2026/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "Change" }));
     await userEvent.click(screen.getByRole("button", { name: "Clear" }));
     expect(budgetsApi.setBudgetStartMonth).toHaveBeenLastCalledWith(null);
   });
+});
 
-  it("shows a yearly category's history only once there are two lines", async () => {
-    categoriesApi.listCategories.mockResolvedValue(
-      YEARLY_CATEGORIES.map((c) =>
-        c.id === 3
-          ? { ...c, yearly: { amount_cents: 150000, due: null }, yearly_history: [{ from_year: 2027, amount_cents: 150000, due: null }, ...c.yearly_history] }
-          : c,
-      ),
-    );
+describe("BudgetsPage month", () => {
+  it("opens on the month in the address", async () => {
+    renderPage("/budgets?month=2026-09");
+
+    await waitFor(() => expect(budgetsApi.getBudgetSummary).toHaveBeenCalledWith("2026-09"));
+    expect(screen.getByText(new Date(2026, 8, 1).toLocaleString(undefined, { month: "long", year: "numeric" }))).toBeInTheDocument();
+  });
+
+  it("writes the month back to the address when switching", async () => {
     renderPage();
-    expect(await screen.findByText(`Yearly · ${formatMoney(150000)} a year`)).toBeInTheDocument();
-    expect(screen.getByText(`On a date · ${formatMoney(40000)} on ${formatDue("11-01")}`)).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "History" })).toHaveLength(1);
+    await waitFor(() => expect(budgetsApi.getBudgetSummary).toHaveBeenCalledWith("2026-10"));
 
-    await userEvent.click(screen.getByRole("button", { name: "History" }));
-    const history = screen.getByRole("list", { name: "Clothing history" });
-    expect(history).toHaveTextContent(`2027 onward${formatMoney(150000)}`);
-    expect(history).toHaveTextContent(`2026${formatMoney(120000)}`);
+    await userEvent.click(screen.getByRole("button", { name: "Previous month" }));
+
+    await waitFor(() => expect(budgetsApi.getBudgetSummary).toHaveBeenLastCalledWith("2026-09"));
+    expect(screen.getByTestId("where")).toHaveTextContent("?month=2026-09");
+  });
+
+  it("takes the current month from local time", async () => {
+    vi.setSystemTime(new Date(2026, 10, 1, 0, 30)); // 1 Nov 00:30 local
+    renderPage();
+
+    await waitFor(() => expect(budgetsApi.getBudgetSummary).toHaveBeenCalledWith("2026-11"));
   });
 });
 
-describe("BudgetsPage on a phone", () => {
-  beforeEach(() => {
-    categoriesApi.listCategories.mockResolvedValue(YEARLY_CATEGORIES);
-    budgetsApi.getBudgetSummary.mockResolvedValue(yearlySummary());
-  });
-
-  it("stacks the rows and opens the editor under the tapped one", async () => {
-    renderPage("/budgets?month=2026-10");
-    expect(await screen.findByText(`${formatMoney(12000)} left`)).toBeInTheDocument();
-    expect(screen.getByText(`${formatMoney(18000)} of ${formatMoney(30000)} · of ${formatMoney(120000)} · from Oct`)).toBeInTheDocument();
-    expect(screen.queryByRole("table")).toBeNull();
-
-    await userEvent.click(screen.getByRole("button", { name: "Edit budget for Clothing" }));
-    const form = screen.getByRole("form", { name: "Budget for Clothing" });
-    expect(form.closest("li")).toHaveTextContent("Clothing");
-  });
-});
-
-describe("BudgetsPage parents and subcategories", () => {
-  const FOOD = {
-    category_id: 10, category_name: "Food", parent_id: null, limit_cents: 40000, spent_cents: 30000,
-    remaining_cents: 10000, over_limit: false, covers_subcategories: true, covered_by_parent: false, caps_cents: 10000,
-  };
-  const TAKEOUT = {
-    category_id: 11, category_name: "Takeout", parent_id: 10, limit_cents: null, spent_cents: 5000,
-    remaining_cents: null, over_limit: false, covers_subcategories: false, covered_by_parent: true, caps_cents: null,
-  };
-  const FOOD_CATEGORIES = [
-    { id: 10, name: "Food", parent: null },
-    { id: 11, name: "Takeout", parent: 10 },
-    { id: 12, name: "Holidays", parent: null, budget_kind: "yearly" },
-    { id: 13, name: "Parking", parent: 12 },
-  ];
-
-  beforeEach(() => {
-    categoriesApi.listCategories.mockResolvedValue(FOOD_CATEGORIES);
-  });
-
-  it("says a parent includes its subcategories and a subcategory is covered", async () => {
-    budgetsApi.getBudgetSummary.mockResolvedValue({ ...SUMMARY, categories: [FOOD, TAKEOUT] });
-
-    renderPage();
-
-    expect(await screen.findByText("Includes subcategories")).toBeInTheDocument();
-    expect(await screen.findByText("Covered by Food")).toBeInTheDocument();
-    expect(screen.queryByText("No limit")).not.toBeInTheDocument();
-  });
-
-  it("notes caps that add up to more than the parent", async () => {
-    budgetsApi.getBudgetSummary.mockResolvedValue({
-      ...SUMMARY,
-      categories: [{ ...FOOD, caps_cents: 45000 }, TAKEOUT],
-    });
-
-    renderPage();
-
-    expect(
-      await screen.findByText(`Includes subcategories · caps add up to ${formatMoney(45000)}`),
-    ).toBeInTheDocument();
-  });
-
-  it("lists a monthly subcategory whose parent is yearly", async () => {
-    const parking = {
-      ...TAKEOUT, category_id: 13, category_name: "Parking", parent_id: 12,
-    };
-    budgetsApi.getBudgetSummary.mockResolvedValue({ ...SUMMARY, categories: [parking] });
-
-    renderPage();
-
-    expect(await screen.findByText("Holidays / Parking")).toBeInTheDocument();
-    expect(await screen.findByText("Covered by Holidays")).toBeInTheDocument();
-  });
-});
