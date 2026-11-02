@@ -29,8 +29,8 @@ def spent_by_category(categories, start, end):
 
 
 def monthly_limits(period_start):
-    """{category_id: limit} for the month: its override, else the default.
-    A category without either isn't in it."""
+    """({category_id: limit}, ids with an override) for the month: its
+    override, else the default. A category without either isn't in it."""
     defaults, overrides = {}, {}
     limits = CategoryLimit.objects.filter(category__in=budgeted_categories(), category__budget_kind=Category.BudgetKind.MONTHLY).filter(
         Q(month__isnull=True) | Q(month=period_start)
@@ -40,7 +40,7 @@ def monthly_limits(period_start):
             defaults[limit.category_id] = limit.limit_cents
         else:
             overrides[limit.category_id] = limit.limit_cents
-    return {**defaults, **overrides}
+    return {**defaults, **overrides}, set(overrides)
 
 
 def has_budget(category, limits):
@@ -65,7 +65,7 @@ def budget_rows(period_start):
     openspec/specs/budgets."""
     categories = list(budgeted_categories().select_related("parent"))
     spent = spent_by_category(categories, period_start, month_range(period_start))
-    limits = monthly_limits(period_start)
+    limits, overridden = monthly_limits(period_start)
     children = subcategories_by_parent(categories)
 
     rows = []
@@ -74,9 +74,9 @@ def budget_rows(period_start):
         limit_cents = limits.get(category.id)
         subcategories = children.get(category.id, [])
         covers = limit_cents is not None and bool(subcategories)
-        spent_cents = spent.get(category.id, 0)
-        if covers:
-            spent_cents += sum(spent.get(sub.id, 0) for sub in subcategories)
+        own_cents = spent.get(category.id, 0)
+        under_cents = own_cents + sum(spent.get(sub.id, 0) for sub in subcategories)
+        spent_cents = under_cents if covers else own_cents
         rows.append(
             {
                 "category_id": category.id,
@@ -89,6 +89,9 @@ def budget_rows(period_start):
                 "covers_subcategories": covers,
                 "covered_by_parent": category.parent is not None and has_budget(category.parent, limits),
                 "caps_cents": sum(limits.get(sub.id, 0) for sub in subcategories) if covers else None,
+                # What a parent without a budget shows: everything under it.
+                "group_spent_cents": under_cents if subcategories and limit_cents is None else None,
+                "overridden": category.id in overridden,
             }
         )
     return rows
@@ -114,7 +117,7 @@ def yearly_spent_cents(month):
     yearly subcategory under a monthly limit isn't counted here."""
     categories = list(budgeted_categories().select_related("parent"))
     spent = spent_by_category(categories, month, month_range(month))
-    limits = monthly_limits(month)
+    limits, _ = monthly_limits(month)
 
     def owner(category):
         return category.parent if category.parent is not None and has_budget(category.parent, limits) else category
