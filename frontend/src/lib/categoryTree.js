@@ -1,8 +1,7 @@
-// Shared by CategoryCombobox and BudgetsPage - groups a flat category
+// Shared by the category picker and settings - groups a flat category
 // list (each row carrying parent/parent_id) into top-level categories
 // each followed by their own subcategories, alphabetical at both
-// levels. Pure display grouping - never changes what a category's
-// figures are, per design.md's "no rollup" decision.
+// levels. Pure display grouping - a category's figures come from the API.
 export function buildCategoryTree(categories) {
   const getParentId = (c) => (c.parent_id !== undefined ? c.parent_id : c.parent);
   const topLevel = categories

@@ -8,8 +8,8 @@ from rest_framework.views import APIView
 from . import utils
 from .models import BudgetSettings, Category, CategoryLimit, YearlyBudget
 from .serializers import CategorySerializer
-from .summary import budget_rows, uncategorized_spent
-from .yearly import yearly_rows, yearly_spent_cents
+from .summary import budget_rows, uncategorized_spent, yearly_spent_cents
+from .yearly import yearly_rows
 from .utils import parse_due, parse_month
 
 YEARLY_KINDS = {Category.BudgetKind.YEARLY, Category.BudgetKind.TARGET}

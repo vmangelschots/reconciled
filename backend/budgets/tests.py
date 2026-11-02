@@ -12,6 +12,7 @@ from transactions.splits import SplitLine, save_split
 from transactions.transfers import link_transfer
 
 from .models import BudgetSettings, Category, CategoryLimit, YearlyBudget
+from .summary import budget_rows, budget_totals, yearly_spent_cents
 
 
 class CategoryTests(TestCase):
@@ -147,7 +148,7 @@ class SubcategoryTests(TestCase):
         response = self.client.delete(reverse("category-detail", args=[self.groceries.id]))
         self.assertEqual(response.status_code, 204)
 
-    def test_summary_keeps_parent_and_subcategory_figures_independent(self):
+    def test_a_parent_without_a_budget_keeps_its_own_figures(self):
         supermarket = Category.objects.create(name="Supermarket", parent=self.groceries)
         Transaction.objects.create(
             account=self.account, date="2026-01-10", amount_cents=-32000, payee="Direct groceries",
@@ -162,8 +163,140 @@ class SubcategoryTests(TestCase):
 
         self.assertEqual(rows[self.groceries.id]["spent_cents"], 32000)
         self.assertEqual(rows[self.groceries.id]["parent_id"], None)
+        self.assertFalse(rows[self.groceries.id]["covers_subcategories"])
         self.assertEqual(rows[supermarket.id]["spent_cents"], 9000)
         self.assertEqual(rows[supermarket.id]["parent_id"], self.groceries.id)
+        self.assertFalse(rows[supermarket.id]["covered_by_parent"])
+
+
+class UmbrellaBudgetTests(TestCase):
+    """A parent's budget covers everything under it - see specs/budgets."""
+
+    MONTH = date(2026, 10, 1)
+
+    def setUp(self):
+        self.account = Account.objects.create(name="Main", account_type="checking", starting_balance_cents=0)
+        self.food = Category.objects.create(name="Food")
+        self.groceries = Category.objects.create(name="Groceries", parent=self.food)
+        self.restaurant = Category.objects.create(name="Restaurant", parent=self.food)
+
+    def _limit(self, category, cents, month=None):
+        CategoryLimit.objects.create(category=category, limit_cents=cents, month=month)
+
+    def _spend(self, category, cents, month=10):
+        Transaction.objects.create(
+            account=self.account, date=date(2026, month, 5), amount_cents=-cents, payee="x", category=category
+        )
+
+    def _yearly(self, category, cents=120000):
+        Category.objects.filter(id=category.id).update(budget_kind=Category.BudgetKind.YEARLY)
+        YearlyBudget.objects.create(category=category, from_year=2026, amount_cents=cents)
+
+    def _rows(self):
+        return {row["category_name"]: row for row in budget_rows(self.MONTH)}
+
+    def test_subcategories_count_against_the_parent(self):
+        self._limit(self.food, 100000)
+        self._spend(self.food, 5000)
+        self._spend(self.groceries, 48000)
+        self._spend(self.restaurant, 25000)
+
+        food = self._rows()["Food"]
+
+        self.assertEqual((food["spent_cents"], food["remaining_cents"]), (78000, 22000))
+        self.assertTrue(food["covers_subcategories"])
+
+    def test_a_month_override_on_the_parent_applies(self):
+        self._limit(self.food, 100000)
+        self._limit(self.food, 20000, month=self.MONTH)
+        self._spend(self.groceries, 30000)
+
+        food = self._rows()["Food"]
+
+        self.assertEqual((food["limit_cents"], food["over_limit"]), (20000, True))
+
+    def test_over_the_cap_within_the_parent(self):
+        self._limit(self.food, 100000)
+        self._limit(self.restaurant, 10000)
+        self._spend(self.groceries, 65000)
+        self._spend(self.restaurant, 13000)
+
+        rows = self._rows()
+
+        self.assertEqual((rows["Restaurant"]["remaining_cents"], rows["Restaurant"]["over_limit"]), (-3000, True))
+        self.assertEqual((rows["Food"]["remaining_cents"], rows["Food"]["over_limit"]), (22000, False))
+
+    def test_caps_may_exceed_the_parent(self):
+        self._limit(self.food, 40000)
+        self._limit(self.groceries, 30000)
+        self._limit(self.restaurant, 15000)
+
+        self.assertEqual(self._rows()["Food"]["caps_cents"], 45000)
+
+    def test_a_subcategory_without_a_limit_is_covered(self):
+        self._limit(self.food, 100000)
+
+        self.assertTrue(self._rows()["Groceries"]["covered_by_parent"])
+
+    def test_a_parent_without_a_budget_is_a_group(self):
+        self._limit(self.restaurant, 5000)
+        self._spend(self.restaurant, 2000)
+
+        rows = self._rows()
+
+        self.assertIsNone(rows["Food"]["limit_cents"])
+        self.assertFalse(rows["Restaurant"]["covered_by_parent"])
+
+    def test_a_cap_under_a_limited_parent_counts_once(self):
+        self._limit(self.food, 100000)
+        self._limit(self.restaurant, 10000)
+        self._spend(self.restaurant, 13000)
+        self._spend(self.groceries, 65000)
+
+        totals = budget_totals(budget_rows(self.MONTH))
+
+        self.assertEqual((totals["limit_cents"], totals["spent_cents"], totals["outside_cents"]), (100000, 78000, 0))
+
+    def test_limits_count_when_the_parent_has_no_budget(self):
+        self._limit(self.groceries, 5000)
+        self._limit(self.restaurant, 7000)
+        self._spend(self.groceries, 1000)
+        self._spend(self.food, 300)
+
+        totals = budget_totals(budget_rows(self.MONTH))
+
+        self.assertEqual((totals["limit_cents"], totals["spent_cents"], totals["outside_cents"]), (12000, 1000, 300))
+
+    def test_a_yearly_subcategory_counts_in_a_monthly_parent_once(self):
+        self._limit(self.food, 100000)
+        self._yearly(self.restaurant)
+        self._spend(self.restaurant, 40000)
+
+        totals = budget_totals(budget_rows(self.MONTH))
+
+        self.assertEqual(totals["spent_cents"], 40000)
+        self.assertEqual(yearly_spent_cents(self.MONTH), 0)
+
+    def test_a_yearly_subcategory_without_a_parent_budget_stays_yearly(self):
+        self._yearly(self.restaurant)
+        self._spend(self.restaurant, 40000)
+
+        self.assertEqual(budget_totals(budget_rows(self.MONTH))["outside_cents"], 0)
+        self.assertEqual(yearly_spent_cents(self.MONTH), 40000)
+
+    def test_a_monthly_subcategory_under_a_yearly_parent_follows_the_parent(self):
+        self._yearly(self.food)
+        self._limit(self.groceries, 5000)
+        self._spend(self.groceries, 4000)
+        self._spend(self.restaurant, 1000)
+
+        rows = self._rows()
+        totals = budget_totals(budget_rows(self.MONTH))
+
+        self.assertNotIn("Food", rows)
+        self.assertTrue(rows["Groceries"]["covered_by_parent"])
+        self.assertEqual((totals["limit_cents"], totals["spent_cents"], totals["outside_cents"]), (0, 0, 0))
+        self.assertEqual(yearly_spent_cents(self.MONTH), 5000)
 
 
 class BudgetSummaryTests(TestCase):
@@ -404,9 +537,9 @@ class BudgetSummaryQueryTests(TestCase):
             Transaction.objects.create(account=account, date="2026-01-05", amount_cents=-100, payee="x", category=yearly)
 
         # One for the user's household, four for the monthly rows and
-        # uncategorized, one for the month's yearly spending, four for the
+        # uncategorized, three for the month's yearly spending, four for the
         # yearly rows.
-        with self.assertNumQueries(10):
+        with self.assertNumQueries(12):
             response = client.get(reverse("budget-summary"), {"month": "2026-01"})
 
         self.assertEqual([c["spent_cents"] for c in response.json()["categories"]], [100] * 6)

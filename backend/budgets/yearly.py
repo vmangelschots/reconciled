@@ -6,15 +6,9 @@ tested without the database.
 
 from datetime import date, timedelta
 
-from django.db.models import Sum
-
-from transactions.models import Transaction
-
 from .models import BudgetSettings, Category
-from .summary import budgeted_categories
+from .summary import YEARLY_KINDS, budgeted_categories, spent_by_category, subcategories_by_parent
 from .utils import month_range
-
-YEARLY_KINDS = [Category.BudgetKind.YEARLY, Category.BudgetKind.TARGET]
 
 # A target this many days or fewer before its due date is due soon.
 DUE_SOON_DAYS = 14
@@ -117,23 +111,6 @@ def is_ahead(spent_cents, budget_cents, pace_share):
     return spent_cents <= budget_cents and share >= WARNING_SHARE and share > pace_share * 100
 
 
-def _spent_by_category(categories, start, end):
-    """{category_id: net outflow} in [start, end), counted the way
-    budget_rows counts a month."""
-    return {
-        row["category_id"]: -row["total"]
-        for row in Transaction.objects.filter(category__in=categories, date__gte=start, date__lt=end)
-        .values("category_id")
-        .annotate(total=Sum("amount_cents"))
-    }
-
-
-def yearly_spent_cents(month):
-    """The month's spending in yearly and yearly-on-a-date categories."""
-    categories = budgeted_categories().filter(budget_kind__in=YEARLY_KINDS)
-    return sum(_spent_by_category(categories, month, month_range(month)).values())
-
-
 def yearly_rows(month, today):
     """The "This year" figures for the year of `month`, as of the end of
     that month (today for the current month).
@@ -158,14 +135,18 @@ def yearly_rows(month, today):
     current = month == today.replace(day=1)
     pace_share = pace(period, today) if current else None
     ref_day = result["through"]
-    categories = list(budgeted_categories().filter(budget_kind__in=YEARLY_KINDS).prefetch_related("yearly_budgets"))
-    spent = _spent_by_category(categories, period[0], month_range(month))
+    all_categories = list(budgeted_categories().prefetch_related("yearly_budgets"))
+    categories = [c for c in all_categories if c.budget_kind in YEARLY_KINDS]
+    spent = spent_by_category(all_categories, period[0], month_range(month))
+    children = subcategories_by_parent(all_categories)
 
     for category in categories:
         values = values_for_year(category.yearly_budgets.all(), year)
         if values is None:
             continue
-        spent_cents = spent.get(category.id, 0)
+        # A parent's budget covers everything under it, whatever the kind.
+        subcategories = children.get(category.id, [])
+        spent_cents = spent.get(category.id, 0) + sum(spent.get(sub.id, 0) for sub in subcategories)
         row = {
             "category_id": category.id,
             "category_name": category.name,
@@ -173,6 +154,8 @@ def yearly_rows(month, today):
             "kind": category.budget_kind,
             "amount_cents": values.amount_cents,
             "spent_cents": spent_cents,
+            "covers_subcategories": bool(subcategories),
+            "caps_cents": None,
         }
         if category.budget_kind == Category.BudgetKind.TARGET:
             due = date(year, values.due_month, values.due_day)
@@ -206,4 +189,9 @@ def yearly_rows(month, today):
             )
         row["remaining_cents"] = row["budget_cents"] - spent_cents
         result["categories"].append(row)
+
+    rows = result["categories"]
+    for row in rows:
+        if row["covers_subcategories"]:
+            row["caps_cents"] = sum(r["budget_cents"] for r in rows if r["parent_id"] == row["category_id"])
     return result

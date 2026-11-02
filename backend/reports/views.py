@@ -8,9 +8,9 @@ from rest_framework.views import APIView
 from accounts.models import TIER_ORDER, Account, Loan, tier_position
 from banksync.models import BankAccountLink, BankConnection, BankCredentials
 from budgets.models import Category
-from budgets.summary import budget_rows
+from budgets.summary import budget_rows, budget_totals, yearly_spent_cents
 from budgets.utils import month_range, parse_month
-from budgets.yearly import yearly_rows, yearly_spent_cents
+from budgets.yearly import yearly_rows
 from forecasting.utils import generate_forecast
 from imports.models import ImportSession
 from transactions.categorize import needs_review, uncategorized
@@ -444,7 +444,6 @@ class OverviewView(APIView):
         rows = budget_rows(month)
         yearly = yearly_rows(month, today)
         yearly_spent = yearly_spent_cents(month)
-        limited = [r for r in rows if r["limit_cents"] is not None]
         _, uncategorized_cents = month_spending(month)
         days_in_month = (month_end - month).days
         pace = today.day / days_in_month if current else None
@@ -475,12 +474,7 @@ class OverviewView(APIView):
                     "out_cents": -(totals["money_out"] or 0),
                 },
                 "budget": {
-                    "has_limits": bool(limited),
-                    "limit_cents": sum(r["limit_cents"] for r in limited),
-                    "spent_cents": sum(r["spent_cents"] for r in limited),
-                    "outside_cents": sum(
-                        r["spent_cents"] for r in rows if r["limit_cents"] is None and r["spent_cents"] > 0
-                    ),
+                    **budget_totals(rows),
                     "uncategorized_cents": uncategorized_cents,
                     "yearly_spent_cents": yearly_spent,
                     "pace": pace,
