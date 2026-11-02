@@ -59,8 +59,8 @@ function droppedSentence(category, kind) {
 
 /**
  * Sets one category's budget: its kind (Monthly · Yearly · On a date) and
- * the amount, plus the due date for a target. Shown as an expansion row
- * under the category's line. `limitCents` is the limit shown for the
+ * the amount, plus the due date for a target. Shown in the budget sheet.
+ * `limitCents` is the limit shown for the
  * viewed `month`; `startMonth` is the budgeting start month (ISO date).
  */
 export function BudgetEditor({ category, month, limitCents, startMonth, onSaved, onCancel }) {
@@ -137,8 +137,7 @@ export function BudgetEditor({ category, month, limitCents, startMonth, onSaved,
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-3" aria-label={`Budget for ${category.name}`}>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
-        <span className="text-sm text-ink-secondary">Budget</span>
+      <div className="flex flex-col items-start gap-3">
         <SegmentedControl label="Budget" options={KINDS} value={kind} onChange={changeKind} />
         <label className="flex items-center gap-2 text-sm text-ink-secondary">
           <Input
@@ -185,14 +184,6 @@ export function BudgetEditor({ category, month, limitCents, startMonth, onSaved,
             </Select>
           </span>
         )}
-        <span className="flex gap-2 sm:ml-auto">
-          <Button type="submit" size="sm" disabled={submitting}>
-            Save
-          </Button>
-          <Button type="button" size="sm" variant="ghost" onClick={onCancel}>
-            Cancel
-          </Button>
-        </span>
       </div>
       {yearly && (
         <p className={cn("text-xs", pastValues ? "text-warning" : "text-ink-muted")}>
@@ -202,6 +193,14 @@ export function BudgetEditor({ category, month, limitCents, startMonth, onSaved,
           {pastValues && ` ${viewedYear} stays ${formatMoney(pastValues.amount_cents)}.`}
         </p>
       )}
+      <span className="flex justify-end gap-2">
+        <Button type="button" size="sm" variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button type="submit" size="sm" disabled={submitting}>
+          Save
+        </Button>
+      </span>
 
       <Dialog open={confirming != null} onOpenChange={(open) => !open && setConfirming(null)}>
         <DialogContent>

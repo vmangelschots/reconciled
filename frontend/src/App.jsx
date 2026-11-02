@@ -6,6 +6,7 @@ import { Layout } from "./components/Layout";
 import { useToast } from "./components/ui/Toast";
 import { AccountsPage } from "./pages/AccountsPage";
 import { BudgetsPage } from "./pages/BudgetsPage";
+import { CategoriesPage } from "./pages/CategoriesPage";
 import { ForecastingPage } from "./pages/ForecastingPage";
 import { ImportPage } from "./pages/ImportPage";
 import { InvitePage } from "./pages/InvitePage";
@@ -48,6 +49,7 @@ export default function App() {
         <Route path="transactions/:accountId/schedule" element={<LoanSchedulePage />} />
         <Route path="review" element={<ReviewPage />} />
         <Route path="budgets" element={<BudgetsPage />} />
+        <Route path="categories" element={<CategoriesPage />} />
         <Route path="import" element={<ImportPage />} />
         <Route path="forecast" element={<ForecastingPage />} />
         <Route path="reports" element={<ReportsPage />} />

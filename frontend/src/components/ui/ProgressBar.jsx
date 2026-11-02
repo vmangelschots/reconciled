@@ -1,14 +1,17 @@
 import { cn } from "../../lib/cn";
 
+const FILL = { warning: "bg-warning", positive: "bg-positive" };
+
 /**
  * A bar for value out of max: capped at full, critical when over.
  * `marker` (0-1) draws a tick, e.g. how much of the month has passed.
  * `tone="warning"` fills it amber while it isn't over, e.g. when spending
- * runs ahead of pace.
+ * runs ahead of pace. `tone="positive"` fills it green and never turns
+ * critical, e.g. a target paid slightly over its amount.
  */
 export function ProgressBar({ value, max, marker = null, tone, className, label }) {
   const share = max > 0 ? value / max : 0;
-  const over = share > 1;
+  const over = share > 1 && tone !== "positive";
   const width = `${Math.min(Math.max(share, 0), 1) * 100}%`;
   return (
     <div
@@ -21,7 +24,7 @@ export function ProgressBar({ value, max, marker = null, tone, className, label 
     >
       <div
         data-testid="progress-fill"
-        className={cn("h-full rounded-full", over ? "bg-critical" : tone === "warning" ? "bg-warning" : "bg-accent")}
+        className={cn("h-full rounded-full", over ? "bg-critical" : FILL[tone] ?? "bg-accent")}
         style={{ width }}
       />
       {marker != null && (
