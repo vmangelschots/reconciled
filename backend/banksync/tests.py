@@ -1,5 +1,5 @@
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone as dt_timezone
 from io import BytesIO, StringIO
 from unittest import mock
 from urllib.error import HTTPError
@@ -9,6 +9,7 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption, PrivateFormat
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ImproperlyConfigured
 from django.core.management import call_command
 from django.test import override_settings
 from households.testing import TestCase
@@ -17,6 +18,7 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from accounts.models import Account
+from config.settings import _sync_times
 from backup.format import build_backup, dump_backup, read_backup, restore_backup
 from budgets.models import Category
 from households.context import current_household, household_context
@@ -29,7 +31,7 @@ from transactions.transfers import link_transfer
 from . import client
 from .lines import to_candidate, with_references
 from .models import BankAccountLink, BankConnection, BankCredentials, SeenBankLine
-from .sync import household_lock, sync_all, sync_every_household
+from .sync import household_lock, next_sync_at, sync_all, sync_every_household, sync_running
 from .views import _store_session
 
 
@@ -501,6 +503,22 @@ class ApiTests(SyncCase):
         self.assertEqual(body["credentials"]["state"], "not_set_up")
         self.assertEqual(self.api.post("/api/bank-sync/run/").status_code, 400)
 
+    def test_status_says_whether_a_sync_is_running(self):
+        self.assertFalse(self.api.get("/api/bank-sync/").json()["running"])
+        with household_lock() as acquired:
+            self.assertTrue(acquired)
+            self.assertTrue(self.api.get("/api/bank-sync/").json()["running"])
+        self.assertFalse(self.api.get("/api/bank-sync/").json()["running"])
+
+    @override_settings(BANK_SYNC_TIMES=[(6, 30), (18, 30)])
+    def test_status_gives_the_next_scheduled_sync(self):
+        with mock.patch("banksync.sync.timezone.now", return_value=datetime(2026, 11, 11, 10, 0, tzinfo=dt_timezone.utc)):
+            body = self.api.get("/api/bank-sync/").json()
+        self.assertEqual(body["next_sync_at"], "2026-11-11T18:30:00Z")
+
+    def test_no_schedule_means_no_next_sync(self):
+        self.assertIsNone(self.api.get("/api/bank-sync/").json()["next_sync_at"])
+
     def test_authorize_crelan(self):
         BankConnection.objects.all().delete()
         BankAccountLink.objects.all().delete()
@@ -812,6 +830,13 @@ class TwoHouseholdSyncTests(SyncCase):
             with household_context(self.other), household_lock() as theirs:
                 self.assertTrue(theirs)
 
+    def test_another_households_sync_isnt_running_here(self):
+        with household_context(self.other), household_lock() as theirs:
+            self.assertTrue(theirs)
+            self.assertTrue(sync_running())
+            with household_context(self.default_household):
+                self.assertFalse(sync_running())
+
     def test_reconnecting_leaves_the_other_household_alone(self):
         session = {
             "session_id": "fresh",
@@ -894,3 +919,30 @@ class BootstrapTests(TestCase):
     def test_nothing_to_move(self):
         self.run_it()
         self.assertFalse(BankCredentials.objects.all_households().exists())
+
+
+class ScheduleTests(TestCase):
+    def at(self, hours, minutes):
+        return datetime(2026, 11, 11, hours, minutes, tzinfo=dt_timezone.utc)
+
+    @override_settings(BANK_SYNC_TIMES=[(6, 30), (18, 30)])
+    def test_next_time_later_today(self):
+        self.assertEqual(next_sync_at(self.at(7, 0)), self.at(18, 30))
+        self.assertEqual(next_sync_at(self.at(6, 0)), self.at(6, 30))
+
+    @override_settings(BANK_SYNC_TIMES=[(6, 30), (18, 30)])
+    def test_after_the_last_time_it_is_tomorrow(self):
+        self.assertEqual(next_sync_at(self.at(18, 30)), datetime(2026, 11, 12, 6, 30, tzinfo=dt_timezone.utc))
+
+    @override_settings(BANK_SYNC_TIMES=[])
+    def test_no_schedule(self):
+        self.assertIsNone(next_sync_at(self.at(7, 0)))
+
+    def test_reading_the_setting(self):
+        self.assertEqual(_sync_times(" 18:30, 06:30 ,"), [(6, 30), (18, 30)])
+        self.assertEqual(_sync_times(""), [])
+
+    def test_an_invalid_time_fails_clearly(self):
+        for value in ("25:00", "6.30", "06:60", "soon"):
+            with self.assertRaisesMessage(ImproperlyConfigured, "isn't a time like 06:30"):
+                _sync_times(value)

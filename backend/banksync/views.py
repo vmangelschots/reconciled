@@ -17,7 +17,7 @@ from transactions.models import Transaction
 from . import client
 from .credentials import NoEncryptionKey, encrypt, is_private_key
 from .models import BankAccountLink, BankConnection, BankCredentials
-from .sync import sync_all
+from .sync import next_sync_at, sync_all, sync_running
 
 DEFAULT_COUNTRY = "BE"
 # Where the bank sends the user back to; must be registered with Enable
@@ -143,6 +143,8 @@ class StatusView(APIView):
             {
                 "enabled": True,
                 "credentials": credentials,
+                "running": sync_running(),
+                "next_sync_at": next_sync_at(),
                 "connections": [_connection_row(c, links_by_hash) for c in BankConnection.objects.all()],
                 # After a restore: links with no connection yet.
                 "waiting_links": [_link_row(link) for link in links if link.connection_id is None],

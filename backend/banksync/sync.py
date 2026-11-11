@@ -2,8 +2,9 @@
 
 import logging
 from contextlib import contextmanager
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta, timezone as dt_timezone
 
+from django.conf import settings
 from django.db import connection, transaction as db_transaction
 from django.utils import timezone
 
@@ -46,6 +47,34 @@ def household_lock():
         if acquired:
             with connection.cursor() as cursor:
                 cursor.execute("SELECT pg_advisory_unlock(%s::int, %s::int)", lock)
+
+
+def sync_running():
+    """Whether a session holds the current household's lock: a sync, or a
+    restore, is running. PostgreSQL drops the lock with its session, so this
+    can't go stale."""
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT EXISTS (SELECT 1 FROM pg_locks WHERE locktype = 'advisory' AND granted"
+            " AND classid = %s::int::oid AND objid = %s::int::oid AND objsubid = 2)",
+            [SYNC_LOCK, current_household().pk],
+        )
+        return cursor.fetchone()[0]
+
+
+def next_sync_at(now=None):
+    """The next scheduled sync after `now`, from BANK_SYNC_TIMES (UTC), or
+    None when the instance has no schedule."""
+    if not settings.BANK_SYNC_TIMES:
+        return None
+    now = now or timezone.now()
+    today = now.astimezone(dt_timezone.utc).date()
+    for day in (today, today + timedelta(days=1)):
+        for hours, minutes in settings.BANK_SYNC_TIMES:
+            at = datetime.combine(day, time(hours, minutes), tzinfo=dt_timezone.utc)
+            if at > now:
+                return at
+    return None
 
 
 def _syncable_links():

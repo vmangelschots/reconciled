@@ -14,3 +14,6 @@ data:
   DB_HOST: db
   DB_PORT: "5432"
   DB_NAME: reconciled
+  # When the bank-sync CronJob runs, in UTC: keep it equal to the schedule in
+  # 35-bank-sync.yaml. Only used to tell members when the next sync is.
+  BANK_SYNC_TIMES: "06:30,18:30"
