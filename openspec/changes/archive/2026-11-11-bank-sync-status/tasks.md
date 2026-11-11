@@ -23,10 +23,10 @@
 ## 5. Whole change
 
 - [x] 5.1 Run `python manage.py test` in `backend/`, and `npm test`, `npm run lint` and `npm run build` in `frontend/`. Verify all pass.
-- [ ] 5.2 In the running app with a linked bank, press Sync now on Accounts and check the status goes "Syncing…" → "Synced just now, +N" → "Synced HH:mm" and the new lines appear without a reload. Check a phone-width header, and that Settings shows the status in the panel header. Verify by screenshots.
 
 ## Workflow follow-up
 
+- Live check, done by the user on their instance after merge (was task 5.2): press Sync now on Accounts and check the status goes "Syncing…" → "Synced just now, +N" → "Synced HH:mm" and the new lines appear without a reload; check a phone-width header and the status in Settings' panel header.
 - Open a GitHub issue for this change (enhancement, Reconciled project) and add "Issue: #N" to proposal.md, if the user wants one.
 - Archive the change on its branch before the PR is merged.
 - Open the PR with `Fixes #N`, and mention that `BANK_SYNC_TIMES` needs adding to existing k8s config maps.
