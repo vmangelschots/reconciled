@@ -5,11 +5,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as accountsApi from '../api/accounts'
 import * as transactionsApi from '../api/transactions'
 import { ThemeProvider } from '../theme/ThemeProvider'
+import { ToastProvider } from './ui/Toast'
 import { formatMoney } from '../lib/money'
 import { Layout } from './Layout'
 
 vi.mock('../api/transactions', () => ({ getReviewCount: vi.fn() }))
 vi.mock('../api/accounts', () => ({ listAccounts: vi.fn() }))
+vi.mock('../api/bankSync', () => ({
+  getBankSync: vi.fn(() => Promise.resolve({ enabled: false, credentials: { state: 'not_set_up' } })),
+  syncNow: vi.fn(),
+}))
 
 vi.mock('../auth/AuthContext', () => ({
   useAuth: () => ({ user: { username: 'vincent' }, logout: vi.fn() }),
@@ -32,16 +37,18 @@ function mockViewport(isWide) {
 function renderLayout(path = '/') {
   return render(
     <ThemeProvider>
-      <MemoryRouter initialEntries={[path]}>
-        <Routes>
-          <Route element={<Layout />}>
-            <Route index element={<p>Overview content</p>} />
-            <Route path="transactions/:accountId" element={<p>Ledger content</p>} />
-            <Route path="budgets" element={<p>Budgets content</p>} />
-            <Route path="forecast" element={<p>Forecast content</p>} />
-          </Route>
-        </Routes>
-      </MemoryRouter>
+      <ToastProvider>
+        <MemoryRouter initialEntries={[path]}>
+          <Routes>
+            <Route element={<Layout />}>
+              <Route index element={<p>Overview content</p>} />
+              <Route path="transactions/:accountId" element={<p>Ledger content</p>} />
+              <Route path="budgets" element={<p>Budgets content</p>} />
+              <Route path="forecast" element={<p>Forecast content</p>} />
+            </Route>
+          </Routes>
+        </MemoryRouter>
+      </ToastProvider>
     </ThemeProvider>,
   )
 }

@@ -15,6 +15,7 @@ import {
 import { useState } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { AccountsProvider, useAccounts } from '../accounts/AccountsContext'
+import { BankSyncProvider, useBankSync } from '../bankSync/BankSyncContext'
 import { useAuth } from '../auth/AuthContext'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { cn } from '../lib/cn'
@@ -289,13 +290,26 @@ function TabBar() {
 }
 
 export function Layout() {
-  const isWide = useMediaQuery('(min-width: 1024px)')
-  // The Review count and the accounts are refetched on every route change.
   const { pathname } = useLocation()
 
   return (
-    <ReviewCountProvider refreshKey={pathname}>
-      <AccountsProvider refreshKey={pathname}>
+    <BankSyncProvider refreshKey={pathname}>
+      <Shell />
+    </BankSyncProvider>
+  )
+}
+
+function Shell() {
+  const isWide = useMediaQuery('(min-width: 1024px)')
+  // The Review count and the accounts are refetched on every route change,
+  // and when a bank sync ends.
+  const { pathname } = useLocation()
+  const { version } = useBankSync()
+  const refreshKey = `${pathname}#${version}`
+
+  return (
+    <ReviewCountProvider refreshKey={refreshKey}>
+      <AccountsProvider refreshKey={refreshKey}>
         <div className="min-h-screen bg-background">
           {isWide ? <Sidebar /> : <TabBar />}
           <main className={cn(isWide ? 'pl-56' : 'pb-[calc(4.5rem+env(safe-area-inset-bottom))]')}>

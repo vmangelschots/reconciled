@@ -27,6 +27,8 @@ import { EmptyState } from "../components/ui/EmptyState";
 import { ListRow } from "../components/ui/ListRow";
 import { MonthSwitcher } from "../components/ui/MonthSwitcher";
 import { PageHeader } from "../components/ui/PageHeader";
+import { BankSyncStatus } from "../components/BankSyncStatus";
+import { useBankSync } from "../bankSync/BankSyncContext";
 import { Panel } from "../components/ui/Panel";
 import { PillSwitch } from "../components/ui/PillSwitch";
 import { ProgressBar } from "../components/ui/ProgressBar";
@@ -445,20 +447,26 @@ export function OverviewPage() {
   const [categoryView, setCategoryView] = useState(getStoredCategoryChart);
   const [everydayTable, setEverydayTable] = useState(false);
 
-  const overview = useReport(() => getOverview(month), loaded && accounts.length > 0 ? month : null);
-  const spending = useReport(() => getCategorySpending(month), month);
-  const everyday = useReport(() => getEverydayBalance(month), month);
-  const netWorth = useReport(getNetWorth, "net-worth");
-  const tabs = useReport(listTabs, "tabs");
+  // Every panel reloads when a bank sync ends.
+  const { version } = useBankSync();
+  const key = `${month}#${version}`;
+  const overview = useReport(() => getOverview(month), loaded && accounts.length > 0 ? key : null);
+  const spending = useReport(() => getCategorySpending(month), key);
+  const everyday = useReport(() => getEverydayBalance(month), key);
+  const netWorth = useReport(getNetWorth, `net-worth#${version}`);
+  const tabs = useReport(listTabs, `tabs#${version}`);
 
   const header = (
     <PageHeader
       title="Overview"
       actions={
-        <Link to="/import" className={buttonVariants({ variant: "outline" })}>
-          <Upload className="h-4 w-4" aria-hidden="true" />
-          Import
-        </Link>
+        <>
+          <BankSyncStatus />
+          <Link to="/import" className={buttonVariants({ variant: "outline" })}>
+            <Upload className="h-4 w-4" aria-hidden="true" />
+            Import
+          </Link>
+        </>
       }
     >
       <MonthSwitcher month={month} onChange={setMonth} short={!isWide} />

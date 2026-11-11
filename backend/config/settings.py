@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 
 from corsheaders.defaults import default_headers
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -232,6 +233,24 @@ AI_CATEGORIZATION_DEADLINE = float(os.environ.get("AI_CATEGORIZATION_DEADLINE", 
 HOUSEHOLD_ENCRYPTION_KEYS = [k.strip() for k in os.environ.get("HOUSEHOLD_ENCRYPTION_KEYS", "").split(",") if k.strip()]
 ENABLE_BANKING_APP_ID = os.environ.get("ENABLE_BANKING_APP_ID", "")
 ENABLE_BANKING_PRIVATE_KEY = os.environ.get("ENABLE_BANKING_PRIVATE_KEY", "").replace("\\n", "\n")
+
+
+def _sync_times(value):
+    """`BANK_SYNC_TIMES`: when the scheduled sync runs, as "HH:MM" in UTC,
+    comma-separated. It must match the bank-sync CronJob's schedule, and only
+    tells members when the next sync is. Empty when nothing is scheduled."""
+    times = []
+    for entry in (e.strip() for e in value.split(",")):
+        if not entry:
+            continue
+        hours, _, minutes = entry.partition(":")
+        if not (hours.isdigit() and minutes.isdigit() and int(hours) < 24 and int(minutes) < 60):
+            raise ImproperlyConfigured(f'BANK_SYNC_TIMES: "{entry}" isn\'t a time like 06:30.')
+        times.append((int(hours), int(minutes)))
+    return sorted(set(times))
+
+
+BANK_SYNC_TIMES = _sync_times(os.environ.get("BANK_SYNC_TIMES", ""))
 
 
 # Logging - Django's own default config only sends 500 tracebacks to
