@@ -20,6 +20,8 @@ import { useToast } from "../components/ui/Toast";
 import { Amount } from "../components/ui/Amount";
 import { EmptyState } from "../components/ui/EmptyState";
 import { PageHeader } from "../components/ui/PageHeader";
+import { BankSyncStatus } from "../components/BankSyncStatus";
+import { useBankSync } from "../bankSync/BankSyncContext";
 import { Panel } from "../components/ui/Panel";
 
 function typeLabel(value) {
@@ -58,10 +60,12 @@ export function AccountsPage() {
       .finally(() => setLoading(false));
   }
 
+  // Also when a bank sync ends.
+  const { version } = useBankSync();
   useEffect(() => {
     reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [version]);
 
   async function handleCreate(values) {
     await createAccount(values);
@@ -98,7 +102,12 @@ export function AccountsPage() {
     <section className="flex flex-col gap-6">
       <PageHeader
         title="Accounts"
-        actions={!showAddForm && <Button onClick={() => setAdding(true)}>Add account</Button>}
+        actions={
+          <>
+            <BankSyncStatus />
+            {!showAddForm && <Button onClick={() => setAdding(true)}>Add account</Button>}
+          </>
+        }
       />
 
       {showAddForm && (

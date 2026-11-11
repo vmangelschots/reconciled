@@ -1,11 +1,13 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { AccountsPage } from "./AccountsPage";
 import { ToastProvider } from "../components/ui/Toast";
 import * as accountsApi from "../api/accounts";
+import { linkedBankSync, resetBankSync, setBankSync } from "../test/bankSyncMock";
 
+vi.mock("../bankSync/BankSyncContext", () => import("../test/bankSyncMock"));
 vi.mock("../api/accounts", async () => {
   const actual = await vi.importActual("../api/accounts");
   return {
@@ -214,5 +216,37 @@ describe("AccountsPage", () => {
       account_type: "loan",
       starting_balance_cents: -24000000,
     });
+  });
+});
+
+describe("AccountsPage bank sync", () => {
+  beforeEach(() => resetBankSync());
+
+  it("shows no sync status without linked bank accounts", async () => {
+    accountsApi.listAccounts.mockResolvedValue(ACCOUNTS);
+    renderPage();
+    await findTable();
+    expect(screen.queryByRole("button", { name: /Bank sync/ })).not.toBeInTheDocument();
+  });
+
+  it("shows the sync status beside Add account and reloads when a sync ends", async () => {
+    let resolveSecondLoad;
+    accountsApi.listAccounts.mockResolvedValueOnce(ACCOUNTS).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveSecondLoad = resolve;
+        }),
+    );
+    setBankSync(linkedBankSync());
+    renderPage();
+    await findTable();
+    expect(screen.getByRole("button", { name: /Bank sync/ })).toHaveTextContent("Not synced yet");
+    expect(screen.getByRole("button", { name: "Add account" })).toBeInTheDocument();
+
+    act(() => setBankSync(linkedBankSync(1)));
+    await waitFor(() => expect(accountsApi.listAccounts).toHaveBeenCalledTimes(2));
+    expect(screen.getByText("Side Savings")).toBeInTheDocument();
+    expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
+    await act(async () => resolveSecondLoad(ACCOUNTS));
   });
 });

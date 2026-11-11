@@ -1,14 +1,15 @@
-import { Landmark, Loader2, RefreshCw, TriangleAlert, Unlink } from "lucide-react";
+import { Landmark, TriangleAlert, Unlink } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   authorizeBank,
   disconnectBank,
   getBanks,
-  getBankSync,
   linkBankAccount,
-  syncNow,
   unlinkBankAccount,
 } from "../api/bankSync";
+import { useBankSync } from "../bankSync/BankSyncContext";
+import { formatSyncTime } from "../lib/bankSync";
+import { BankSyncStatus } from "./BankSyncStatus";
 import { plural } from "../lib/importFreshness";
 import { BankCredentials, credentialsBadge } from "./BankCredentials";
 import { formatDayMonth } from "../lib/yearlyBudgets";
@@ -17,6 +18,7 @@ import { Panel } from "./ui/Panel";
 import { Input } from "./ui/Input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/Select";
 import { useToast } from "./ui/Toast";
+import { cn } from "../lib/cn";
 
 function maskedIban(iban) {
   return iban ? `•••• ${iban.slice(-4)}` : "";
@@ -24,7 +26,7 @@ function maskedIban(iban) {
 
 function LinkStatus({ link, onUnlink }) {
   const synced = link.last_synced_at
-    ? `Last sync ${formatDayMonth(link.last_synced_at.slice(0, 10))}, ${plural(link.last_added_count, "line", "lines")} added`
+    ? `Last sync ${formatSyncTime(link.last_synced_at)}, ${plural(link.last_added_count, "line", "lines")} added`
     : "Not synced yet";
   return (
     <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -159,18 +161,18 @@ export function BankConnections() {
   const toast = useToast();
   // A new object on every toast; loading must not depend on it.
   const toastRef = useRef(toast);
-  const [status, setStatus] = useState(null);
+  // Shared with the page headers' sync status - see bankSync/BankSyncContext.
+  const { status, reload } = useBankSync();
   const [banks, setBanks] = useState([]);
   const [bank, setBank] = useState("");
-  const [syncing, setSyncing] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      setStatus(await getBankSync());
+      await reload();
     } catch (e) {
       toastRef.current.error(e.message);
     }
-  }, []);
+  }, [reload]);
 
   useEffect(() => {
     load();
@@ -197,23 +199,14 @@ export function BankConnections() {
     }
   }
 
-  async function handleSync() {
-    setSyncing(true);
-    try {
-      const result = await syncNow();
-      toast.success(
-        result.running ? "A sync is already running." : `Sync done, ${plural(result.added, "line", "lines")} added.`,
-      );
-      await load();
-    } catch (e) {
-      toast.error(e.data?.detail ?? e.message);
-    } finally {
-      setSyncing(false);
-    }
-  }
-
   return (
-    <Panel id="bank-connections" title="Bank connections" loading={status === null} actions={credentialsBadge(credentials)}>
+    <Panel id="bank-connections" title="Bank connections" loading={status === null} actions={
+        <>
+          <BankSyncStatus />
+          {credentialsBadge(credentials)}
+        </>
+      }
+    >
       <div className="flex flex-col gap-4">
         {credentials && <BankCredentials credentials={credentials} onChange={load} />}
         {showBanks && (
@@ -242,7 +235,13 @@ export function BankConnections() {
                 ))}
               </div>
             )}
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div
+              className={cn(
+                "flex flex-col gap-2 sm:flex-row sm:items-center",
+                status.connections.length > 0 && "border-t border-border pt-4",
+              )}
+            >
+              <span className="text-sm text-ink-secondary">Add a bank</span>
               <div className="flex gap-2">
                 <Select value={bank} onValueChange={setBank}>
                   <SelectTrigger className="w-56" aria-label="Bank">
@@ -261,12 +260,6 @@ export function BankConnections() {
                   Connect
                 </Button>
               </div>
-              {status.connections.length > 0 && (
-                <Button onClick={handleSync} disabled={syncing}>
-                  {syncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-                  Sync now
-                </Button>
-              )}
             </div>
           </>
         )}

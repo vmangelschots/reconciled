@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
@@ -9,6 +9,7 @@ import * as accountsApi from "../api/accounts";
 import * as categoriesApi from "../api/categories";
 import * as transactionsApi from "../api/transactions";
 import { ReviewCountProvider } from "../review/ReviewCountContext";
+import { linkedBankSync, resetBankSync, setBankSync } from "../test/bankSyncMock";
 
 function Where() {
   const location = useLocation();
@@ -32,6 +33,7 @@ function renderAt(path) {
   );
 }
 
+vi.mock("../bankSync/BankSyncContext", () => import("../test/bankSyncMock"));
 vi.mock("../api/accounts", async () => {
   const actual = await vi.importActual("../api/accounts");
   return { ...actual, listAccounts: vi.fn(), getAccount: vi.fn() };
@@ -683,5 +685,39 @@ describe("Opening a ledger on a date range", () => {
     renderPage("/transactions/1?from=september&to=2026-09-30");
     expect(await screen.findByLabelText("From")).toHaveValue("");
     expect(screen.getByLabelText("To")).toHaveValue("2026-09-30");
+  });
+});
+
+describe("TransactionsPage bank sync", () => {
+  beforeEach(() => {
+    resetBankSync();
+    transactionsApi.getReviewCount.mockResolvedValue({ count: 0 });
+  });
+
+  it("shows no sync status without linked bank accounts", async () => {
+    transactionsApi.listTransactions.mockResolvedValue(TRANSACTIONS);
+    renderPage();
+    await findTable();
+    expect(screen.queryByRole("button", { name: /Bank sync/ })).not.toBeInTheDocument();
+  });
+
+  it("shows the sync status and reloads the ledger when a sync ends", async () => {
+    let resolveSecondLoad;
+    transactionsApi.listTransactions.mockResolvedValueOnce(TRANSACTIONS).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveSecondLoad = resolve;
+        }),
+    );
+    setBankSync(linkedBankSync());
+    renderPage();
+    await findTable();
+    expect(screen.getByRole("button", { name: /Bank sync/ })).toBeInTheDocument();
+
+    act(() => setBankSync(linkedBankSync(1)));
+    await waitFor(() => expect(transactionsApi.listTransactions).toHaveBeenCalledTimes(2));
+    expect(screen.getByText("Store B")).toBeInTheDocument();
+    expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
+    await act(async () => resolveSecondLoad(TRANSACTIONS));
   });
 });

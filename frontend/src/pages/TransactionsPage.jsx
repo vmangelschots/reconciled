@@ -21,6 +21,8 @@ import { Button, buttonVariants } from "../components/ui/Button";
 import { Amount } from "../components/ui/Amount";
 import { EmptyState } from "../components/ui/EmptyState";
 import { PageHeader } from "../components/ui/PageHeader";
+import { BankSyncStatus } from "../components/BankSyncStatus";
+import { useBankSync } from "../bankSync/BankSyncContext";
 import { Panel } from "../components/ui/Panel";
 import { Input } from "../components/ui/Input";
 import { Label } from "../components/ui/Label";
@@ -186,10 +188,12 @@ export function TransactionsPage() {
       .finally(() => setLoading(false));
   }
 
+  // Also when a bank sync ends.
+  const { version } = useBankSync();
   useEffect(() => {
     reload();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [account?.id, filters]);
+  }, [account?.id, filters, version]);
 
   // The form reports a transfer target separately from the category: a
   // new transaction is created first, then linked (matching or creating
@@ -421,21 +425,20 @@ export function TransactionsPage() {
       <PageHeader
         title="Transactions"
         actions={
-          (canSetValue || scheduleLink) && (
-            <>
-              {canSetValue && (
-                <Button variant="outline" size="sm" onClick={() => setSettingValue(true)}>
-                  Set value
-                </Button>
-              )}
-              {canImportPortfolio && (
-                <Button variant="outline" size="sm" onClick={() => setImportingPortfolio(true)}>
-                  Import portfolio
-                </Button>
-              )}
-              {scheduleLink}
-            </>
-          )
+          <>
+            <BankSyncStatus />
+            {canSetValue && (
+              <Button variant="outline" size="sm" onClick={() => setSettingValue(true)}>
+                Set value
+              </Button>
+            )}
+            {canImportPortfolio && (
+              <Button variant="outline" size="sm" onClick={() => setImportingPortfolio(true)}>
+                Import portfolio
+              </Button>
+            )}
+            {scheduleLink}
+          </>
         }
       >
         <span className="flex items-center gap-2 text-sm text-ink-secondary">

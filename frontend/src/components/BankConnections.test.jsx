@@ -1,8 +1,9 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as api from "../api/bankSync";
+import { BankSyncProvider } from "../bankSync/BankSyncContext";
 import { BankRedirectPage } from "../pages/BankRedirectPage";
 import { BankConnections } from "./BankConnections";
 import { ToastProvider } from "./ui/Toast";
@@ -14,7 +15,7 @@ const LINK = {
   bank_name: "Crelan",
   account_name: "Joint",
   start_date: "2026-10-21",
-  last_synced_at: "2026-10-25T06:30:00Z",
+  last_synced_at: new Date(2026, 10, 11, 18, 32).toISOString(),
   last_added_count: 3,
   last_error: "",
 };
@@ -37,7 +38,11 @@ function status(extra) {
 function renderIt() {
   return render(
     <ToastProvider>
-      <BankConnections />
+      <MemoryRouter>
+        <BankSyncProvider refreshKey="/settings">
+          <BankConnections />
+        </BankSyncProvider>
+      </MemoryRouter>
     </ToastProvider>,
   );
 }
@@ -61,18 +66,23 @@ describe("BankConnections", () => {
       status({ connections: [{ ...CONNECTION, accounts: [{ ...CONNECTION.accounts[0], link: failing }] }] }),
     );
     renderIt();
-    expect(await screen.findByText(/3 lines added/)).toBeInTheDocument();
+    expect(await screen.findByText(/^Last sync (11 Nov|Nov 11) 18:32, 3 lines added$/)).toBeInTheDocument();
     expect(screen.getByText("Enable Banking couldn't be reached.")).toBeInTheDocument();
     expect(screen.getByText(/•••• 9012/)).toBeInTheDocument();
   });
 
-  it("syncs now and reports what was added", async () => {
+  it("shows the sync status in the panel header, not on the Connect row", async () => {
     api.getBankSync.mockResolvedValue(status());
     api.syncNow.mockResolvedValue({ running: false, added: 3 });
     renderIt();
-    await userEvent.click(await screen.findByRole("button", { name: "Sync now" }));
-    expect(await screen.findByText("Sync done, 3 lines added.")).toBeInTheDocument();
-    expect(api.getBankSync).toHaveBeenCalledTimes(2);
+    const panel = await screen.findByRole("region", { name: "Bank connections" });
+    expect(await within(panel).findByRole("button", { name: "Connect" })).toBeInTheDocument();
+    expect(within(panel).queryByRole("button", { name: "Sync now" })).not.toBeInTheDocument();
+
+    await userEvent.click(within(panel).getByRole("button", { name: /Bank sync/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Sync now" }));
+    expect(await within(panel).findByRole("button", { name: /Bank sync/ })).toHaveTextContent("Synced just now, +3");
+    expect(screen.queryByText(/Sync done/)).not.toBeInTheDocument();
   });
 
   it("offers to reconnect an ended consent", async () => {

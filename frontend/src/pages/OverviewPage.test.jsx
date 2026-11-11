@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
@@ -11,7 +11,9 @@ import * as reportsApi from "../api/reports";
 import * as tabsApi from "../api/tabs";
 import { formatMoney } from "../lib/money";
 import { formatDayMonth } from "../lib/yearlyBudgets";
+import { linkedBankSync, resetBankSync, setBankSync } from "../test/bankSyncMock";
 
+vi.mock("../bankSync/BankSyncContext", () => import("../test/bankSyncMock"));
 vi.mock("../api/accounts", () => ({ listAccounts: vi.fn() }));
 vi.mock("../api/overview", () => ({ getOverview: vi.fn() }));
 vi.mock("../api/reports", () => ({
@@ -852,5 +854,33 @@ describe("bank sync in needs attention", () => {
     renderPage();
     await screen.findByText("Needs attention");
     expect(screen.queryByText(/last sync/)).not.toBeInTheDocument();
+  });
+});
+
+describe("Overview bank sync", () => {
+  beforeEach(() => resetBankSync());
+
+  it("shows no sync status without linked bank accounts", async () => {
+    renderPage();
+    await waitFor(() => expect(overviewApi.getOverview).toHaveBeenCalled());
+    expect(screen.queryByRole("button", { name: /Bank sync/ })).not.toBeInTheDocument();
+  });
+
+  it("shows the sync status beside Import and reloads every panel when a sync ends", async () => {
+    setBankSync(linkedBankSync());
+    renderPage();
+    expect(await screen.findByText("Groceries 2026-10")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Bank sync/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Import" })).toBeInTheDocument();
+    const calls = (api) => api.mock.calls.length;
+    const before = [overviewApi.getOverview, reportsApi.getCategorySpending, reportsApi.getNetWorth, tabsApi.listTabs].map(calls);
+
+    act(() => setBankSync(linkedBankSync(1)));
+    expect(screen.getByText("Groceries 2026-10")).toBeInTheDocument();
+    await waitFor(() =>
+      expect([overviewApi.getOverview, reportsApi.getCategorySpending, reportsApi.getNetWorth, tabsApi.listTabs].map(calls)).toEqual(
+        before.map((n) => n + 1),
+      ),
+    );
   });
 });
