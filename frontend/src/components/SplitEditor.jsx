@@ -2,17 +2,10 @@ import { Plus, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { categoryDisplayLabel } from "../lib/categoryTree";
 import { cn } from "../lib/cn";
-import { formatMoney } from "../lib/money";
+import { formatMoney, parseCents } from "../lib/money";
 import { CategoryCombobox } from "./CategoryCombobox";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
-
-// "30", "30.5" or "30,50" -> 3050; anything else (or nothing) -> null.
-function parseCents(text) {
-  const normalized = text.trim().replace(",", ".");
-  if (!/^\d+(\.\d{0,2})?$/.test(normalized)) return null;
-  return Math.round(parseFloat(normalized) * 100);
-}
 
 function centsText(cents) {
   return (cents / 100).toFixed(2);

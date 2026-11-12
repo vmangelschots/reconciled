@@ -66,6 +66,21 @@ beforeEach(() => {
 });
 
 describe("SpendingSheet", () => {
+  it("shows a covered entry as Paid by its tab, linked to the tab and without a picker", async () => {
+    reportsApi.getSpendingCell.mockResolvedValue(
+      cell({
+        accounts: ["Paid by Sarah"],
+        rows: [{ ...ROW, payee: "Sushi Palace", account_id: 99, account_name: "Paid by Sarah", paid_by_tab: 11 }],
+      }),
+    );
+    renderSheet();
+
+    expect(await screen.findByRole("link", { name: "Sushi Palace" })).toHaveAttribute("href", "/tabs/11");
+    expect(screen.getAllByText(/Paid by Sarah/).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: /Category for Sushi Palace/ })).toBeNull();
+    expect(screen.queryByText(/Part of/)).toBeNull();
+  });
+
   it("heads the rows with the figure, and adds them up", async () => {
     renderSheet();
     expect(await screen.findByRole("heading", { name: /Groceries · September 2026/ })).toBeInTheDocument();

@@ -28,7 +28,7 @@ class ForecastView(APIView):
         if not account_id:
             return Response({"detail": "account query param is required."}, status=400)
         try:
-            account = Account.objects.get(pk=account_id)
+            account = Account.objects.visible().get(pk=account_id)
         except (Account.DoesNotExist, ValueError):
             return Response({"detail": "Account not found."}, status=404)
 

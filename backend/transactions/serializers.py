@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from accounts.models import Account
+from accounts.serializers import VisibleAccountField
 from budgets.models import Category
 from budgets.tabs import check_assignable
 
@@ -45,6 +46,8 @@ class PartSerializer(serializers.ModelSerializer):
 
 
 class TransactionSerializer(serializers.ModelSerializer):
+    account = VisibleAccountField(required=False)
+
     class Meta:
         model = Transaction
         fields = [
@@ -205,9 +208,7 @@ class SplitLineSerializer(serializers.Serializer):
     id = serializers.IntegerField(required=False, allow_null=True)
     amount_cents = serializers.IntegerField()
     category = serializers.PrimaryKeyRelatedField(queryset=Category.objects, required=False, allow_null=True)
-    transfer_account = serializers.PrimaryKeyRelatedField(
-        queryset=Account.objects, required=False, allow_null=True
-    )
+    transfer_account = VisibleAccountField(required=False, allow_null=True)
     notes = serializers.CharField(required=False, allow_blank=True, default="")
 
     def validate_category(self, category):

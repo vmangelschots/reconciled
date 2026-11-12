@@ -1,7 +1,7 @@
 from django.db import transaction as db_transaction
 from django.db.models import Prefetch, Q
 from django.utils import timezone
-from rest_framework import status, viewsets
+from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
@@ -9,7 +9,7 @@ from accounts.models import Account
 from budgets.models import Category
 from budgets.tabs import TAB_GROUP_ERROR
 
-from . import tabs
+from . import covered, tabs
 from .ai import ai_available, get_guesser
 from .categorize import categorize, needs_review, review_groups, uncategorized
 from .loans import sync_loans
@@ -23,7 +23,9 @@ class TransactionViewSet(viewsets.ModelViewSet):
     serializer_class = TransactionSerializer
 
     def get_queryset(self):
-        queryset = Transaction.objects.select_related(
+        # Covered entries are only changed on their tab (covered.py), so
+        # the rows of the off-bank account are out of reach here.
+        queryset = Transaction.objects.exclude(account__is_off_bank=True).select_related(
             "account", "category", "transfer_counterpart__account", "loan", "loan_adjustment__account"
         ).prefetch_related(
             Prefetch(
@@ -140,7 +142,7 @@ class TransactionViewSet(viewsets.ModelViewSet):
             return Response({"transaction": self._serialized(txn.pk)})
 
         try:
-            target = Account.objects.get(pk=request.data.get("account"))
+            target = Account.objects.visible().get(pk=request.data.get("account"))
         except (Account.DoesNotExist, ValueError, TypeError):
             return Response({"account": ["Unknown account."]}, status=status.HTTP_400_BAD_REQUEST)
         try:
@@ -179,7 +181,9 @@ class TransactionViewSet(viewsets.ModelViewSet):
             return Response({"ids": ["A list of transaction ids is required."]}, status=status.HTTP_400_BAD_REQUEST)
         # A transfer never has a category, so it's never confirmed this way,
         # and neither is a value adjustment.
-        rows = Transaction.objects.excluding_adjustments().filter(pk__in=ids, transfer_counterpart__isnull=True)
+        rows = Transaction.objects.excluding_adjustments().filter(
+            pk__in=ids, transfer_counterpart__isnull=True, account__is_off_bank=False
+        )
 
         if "category" not in request.data:
             confirmed = rows.filter(category__isnull=False, category_confirmed=False).update(
@@ -214,7 +218,7 @@ class TransactionViewSet(viewsets.ModelViewSet):
         account_id = request.data.get("account")
         if account_id is not None:
             try:
-                account = Account.objects.get(pk=account_id)
+                account = Account.objects.visible().get(pk=account_id)
             except (Account.DoesNotExist, ValueError, TypeError):
                 return Response({"account": ["Unknown account."]}, status=status.HTTP_400_BAD_REQUEST)
             rows = rows.filter(account=account)
@@ -246,10 +250,37 @@ def _tab_body(summary, with_rows=False):
                 "running_balance_cents": running,
                 "split_parent": row.split_parent_id,
                 "parent_amount_cents": row.split_parent.amount_cents if row.split_parent_id else None,
+                "kind": tabs.row_kind(row),
+                "covered_category": _covered_category(row),
             }
             for row, running in summary.rows
         ]
     return body
+
+
+def _covered_category(row):
+    cost = tabs.covered_cost(row)
+    if cost is None or cost.category is None:
+        return None
+    category = cost.category
+    label = f"{category.parent.name} / {category.name}" if category.parent_id else category.name
+    return {"id": category.id, "label": label}
+
+
+class CoveredEntrySerializer(serializers.Serializer):
+    date = serializers.DateField()
+    payee = serializers.CharField(max_length=255, allow_blank=True)
+    amount_cents = serializers.IntegerField()
+    category = serializers.PrimaryKeyRelatedField(queryset=Category.objects, allow_null=True)
+    notes = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+def _covered_input(request):
+    """(CoveredInput, None) from the request, or (None, error response)."""
+    serializer = CoveredEntrySerializer(data=request.data)
+    if not serializer.is_valid():
+        return None, Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    return covered.CoveredInput(**serializer.validated_data), None
 
 
 class TabViewSet(viewsets.ViewSet):
@@ -258,8 +289,55 @@ class TabViewSet(viewsets.ViewSet):
     def list(self, request):
         return Response([_tab_body(s) for s in tabs.balances()])
 
+    def _tab(self, pk):
+        return tabs.tabs().filter(pk=pk).first() if str(pk).isdigit() else None
+
     def retrieve(self, request, pk=None):
-        category = tabs.tabs().filter(pk=pk).first() if str(pk).isdigit() else None
+        category = self._tab(pk)
         if category is None:
             return Response({"detail": "Tab not found."}, status=status.HTTP_404_NOT_FOUND)
         return Response(_tab_body(tabs.tab_detail(category), with_rows=True))
+
+    def _saved(self, category, tab_row, code=status.HTTP_200_OK):
+        """The tab with its rows after a covered entry was saved, and which
+        row it was, so the page can show it."""
+        return Response(
+            {**_tab_body(tabs.tab_detail(category), with_rows=True), "saved_row": tab_row.pk if tab_row else None},
+            status=code,
+        )
+
+    @action(detail=True, methods=["post"], url_path="covered")
+    def covered_create(self, request, pk=None):
+        """POST {date, payee, amount_cents, category, notes?} records that
+        the tab's person paid for something; see transactions/covered.py."""
+        category = self._tab(pk)
+        if category is None:
+            return Response({"detail": "Tab not found."}, status=status.HTTP_404_NOT_FOUND)
+        data, error = _covered_input(request)
+        if error:
+            return error
+        try:
+            tab_row = covered.create(category, data)
+        except covered.CoveredError as exc:
+            return Response({exc.field: [exc.message]}, status=status.HTTP_400_BAD_REQUEST)
+        return self._saved(category, tab_row, status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["patch", "delete"], url_path=r"covered/(?P<row_id>\d+)")
+    def covered_entry(self, request, pk=None, row_id=None):
+        """PATCH changes both halves of a covered entry, DELETE removes
+        them; row_id is the entry's tab half."""
+        category = self._tab(pk)
+        tab_row = covered.covered_rows(category).filter(pk=row_id).first() if category else None
+        if tab_row is None:
+            return Response({"detail": "Covered entry not found."}, status=status.HTTP_404_NOT_FOUND)
+        if request.method == "DELETE":
+            covered.delete(tab_row)
+            return self._saved(category, None)
+        data, error = _covered_input(request)
+        if error:
+            return error
+        try:
+            covered.update(tab_row, data)
+        except covered.CoveredError as exc:
+            return Response({exc.field: [exc.message]}, status=status.HTTP_400_BAD_REQUEST)
+        return self._saved(category, tab_row)

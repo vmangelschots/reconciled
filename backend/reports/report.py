@@ -183,4 +183,4 @@ def spending_cell(month, category=None, direct=False, income=False):
         ids = [category.id, *category.subcategories.values_list("id", flat=True)]
         rows = rows.filter(category_id__in=ids)
     order = "-amount_cents" if income else "amount_cents"
-    return rows.select_related("account", "category__parent", "split_parent").order_by(order, "-date", "-id")
+    return rows.select_related("account", "category__parent", "split_parent", "covered_tab_row__category").order_by(order, "-date", "-id")

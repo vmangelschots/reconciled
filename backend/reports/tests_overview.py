@@ -9,6 +9,7 @@ from rest_framework.test import APIClient
 from accounts.models import Account
 from budgets.models import BudgetSettings, Category, CategoryLimit, YearlyBudget
 from imports.models import ImportSession
+from transactions import covered
 from transactions.models import Transaction
 from transactions.splits import SplitLine, save_split
 from transactions.transfers import link_transfer
@@ -514,3 +515,32 @@ class OverviewTierTests(TestCase):
         set_value(house, date(2026, 10, 20), 31000000)
         recent = self.body()["recent"]
         self.assertEqual([r["payee"] for r in recent], ["Bakery"])
+
+
+@patch("reports.views._today", lambda: TODAY)
+class CoveredEntryRecentTests(TestCase):
+    """"A covered entry shows once" in the overview spec."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(get_user_model().objects.create_user(username="u", password="x"))
+        self.joint = Account.objects.create(name="Joint", account_type="checking", starting_balance_cents=0)
+        Transaction.objects.create(account=self.joint, date=date(2026, 10, 3), amount_cents=-1000, payee="Pizzeria")
+        takeout = Category.objects.create(name="Takeout")
+        tabs = Category.objects.create(name="Tabs", is_tab_group=True)
+        self.sarah = Category.objects.create(name="Sarah", parent=tabs)
+        covered.create(self.sarah, covered.CoveredInput(date(2026, 10, 11), "Sushi Palace", 1500, takeout))
+
+    def test_listed_once_by_its_cost(self):
+        recent = self.client.get(reverse("report-overview"), {"month": "2026-10"}).json()["recent"]
+
+        self.assertEqual(
+            [(r["payee"], r["amount_cents"], r["account_name"], r["paid_by_tab"], r["category_label"]) for r in recent],
+            [("Sushi Palace", -1500, "Paid by Sarah", self.sarah.pk, "Takeout"), ("Pizzeria", -1000, "Joint", None, None)],
+        )
+
+    def test_counts_as_money_out(self):
+        body = self.client.get(reverse("report-overview"), {"month": "2026-10"}).json()
+
+        self.assertEqual(body["in_out"], {"in_cents": 0, "out_cents": 2500})
+        self.assertEqual(body["balance_cents"], -1000)

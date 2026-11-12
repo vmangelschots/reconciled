@@ -40,7 +40,7 @@ def _changes(end):
 def history_tier():
     """The tier the everyday series covers: the only one in use, or
     Everyday. Matches the overview's Balance tile."""
-    tiers = {a.tier for a in Account.objects.filter(archived=False)}
+    tiers = {a.tier for a in Account.objects.visible().filter(archived=False)}
     return tiers.pop() if len(tiers) == 1 else "everyday"
 
 

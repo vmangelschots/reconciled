@@ -157,6 +157,20 @@ async function setAmount(form, value) {
 }
 
 describe("BudgetSheet", () => {
+  it("lists a covered entry as Paid by its tab, without a picker", async () => {
+    reportsApi.getSpendingCell.mockResolvedValue({
+      ...CELL,
+      accounts: ["Paid by Sarah"],
+      rows: [{ ...CELL.rows[0], payee: "Sushi Palace", account_id: 99, account_name: "Paid by Sarah", paid_by_tab: 11 }],
+    });
+    renderPage();
+    await openEditor("Groceries");
+    const sheet = screen.getByRole("dialog");
+
+    expect(await within(sheet).findByRole("link", { name: "Sushi Palace" })).toHaveAttribute("href", "/tabs/11");
+    expect(within(sheet).queryByRole("button", { name: /Category for Sushi Palace/ })).toBeNull();
+  });
+
   it("shows the budget's figures and the viewed month's transactions", async () => {
     renderPage();
     await openEditor("Groceries");

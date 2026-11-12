@@ -12,13 +12,17 @@ function monthRange(month) {
   return `from=${month}-01&to=${month}-${String(last).padStart(2, "0")}`;
 }
 
+// A covered entry (paid_by_tab set: what a tab's person paid for the
+// user) opens its tab and is changed there, so it shows its category
+// without a picker.
 function Row({ row, month, categories, saving, onPick }) {
   const refund = row.amount_cents > 0;
+  const paidBy = row.paid_by_tab != null;
   return (
     <li className={cn("flex flex-col gap-1.5 border-b border-border px-5 py-3 last:border-0", saving && "opacity-60")}>
       <div className="flex items-baseline justify-between gap-3">
         <Link
-          to={`/transactions/${row.account_id}?${monthRange(month)}`}
+          to={paidBy ? `/tabs/${row.paid_by_tab}` : `/transactions/${row.account_id}?${monthRange(month)}`}
           className="min-w-0 truncate text-sm font-medium text-ink-primary hover:underline"
           title={row.payee}
         >
@@ -37,7 +41,7 @@ function Row({ row, month, categories, saving, onPick }) {
           <span className="shrink-0">Part of {formatMoney(Math.abs(row.split_amount_cents))}</span>
         )}
       </div>
-      {row.split_amount_cents != null ? (
+      {row.split_amount_cents != null || paidBy ? (
         <span className="text-xs text-ink-secondary">{row.category_label}</span>
       ) : (
         <CategoryCombobox

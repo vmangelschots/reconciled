@@ -239,6 +239,7 @@ class ForeignIdTests(Case):
         return {
             "pk": source,
             "correction_id": self.theirs["correction"].pk if source != MISSING else MISSING,
+            "row_id": self.theirs["txn"].pk if source != MISSING else MISSING,
             "number": 1,
         }
 
@@ -391,6 +392,15 @@ class ForeignBodyTests(Case):
                 refused = response.status_code in (400, 404) or response.json() == {"confirmed_count": 0}
                 self.assertTrue(refused, response.content)
                 self.assertUntouched(f"{method} {path}")
+
+    def test_a_covered_entry_cant_use_their_category(self):
+        with household_context(self.a):
+            group = Category.objects.create(name="Tabs", is_tab_group=True)
+            tab = Category.objects.create(name="Sarah", parent=group)
+        body = {"date": "2026-01-01", "payee": "x", "amount_cents": 100, "category": self.theirs["category"].pk}
+        response = self.api.post(f"/api/tabs/{tab.pk}/covered/", body, format="json")
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertUntouched("recording a covered entry")
 
     def test_an_import_cant_target_their_account(self):
         upload = SimpleUploadedFile("a.csv", b"date,amount\n2026-01-01,1\n")

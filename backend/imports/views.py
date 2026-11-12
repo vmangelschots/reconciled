@@ -68,7 +68,7 @@ class ImportSessionViewSet(
         if not file_obj:
             return Response({"file": "A file is required."}, status=400)
         try:
-            account = Account.objects.get(pk=request.data.get("account"))
+            account = Account.objects.visible().get(pk=request.data.get("account"))
         except (Account.DoesNotExist, TypeError, ValueError):
             return Response({"account": "A valid account is required."}, status=400)
 
@@ -168,7 +168,7 @@ class ImportSessionViewSet(
         if missing:
             return Response({"detail": "Choose an account or skip: " + ", ".join(missing)}, status=400)
         chosen_ids = {v for v in choices.values() if v is not None}
-        accounts = Account.objects.in_bulk(chosen_ids)
+        accounts = Account.objects.visible().in_bulk(chosen_ids)
         if any(i not in accounts or accounts[i].archived for i in chosen_ids):
             return Response({"detail": "Products can only go to active accounts."}, status=400)
 
@@ -281,7 +281,7 @@ class ImportSessionViewSet(
         is left out, so the user has to choose."""
         settings = self._settings(account)
         remembered = settings.product_accounts if settings else {}
-        active = set(Account.objects.filter(archived=False).values_list("pk", flat=True))
+        active = set(Account.objects.visible().filter(archived=False).values_list("pk", flat=True))
         choices = {}
         for product in products:
             if product == REVOLUT_MAIN_PRODUCT:

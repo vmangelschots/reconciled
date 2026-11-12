@@ -112,6 +112,13 @@ class Transaction(HouseholdOwned):
     loan_correction = models.OneToOneField(
         "accounts.LoanCorrection", null=True, blank=True, on_delete=models.SET_NULL, related_name="adjustment"
     )
+    # A covered entry - something a tab's person paid for the user - is two
+    # rows in the off-bank account: the cost (-amount, a normal category)
+    # points here at the tab half (+amount, the tab). CASCADE so the pair
+    # goes together. All rules live in transactions/covered.py.
+    covered_tab_row = models.OneToOneField(
+        "self", null=True, blank=True, on_delete=models.CASCADE, related_name="covered_cost"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

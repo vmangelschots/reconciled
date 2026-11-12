@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from transactions.models import Transaction
+
 from . import utils
 from .models import Category
 from .yearly import values_for_year
@@ -92,7 +94,26 @@ class CategorySerializer(serializers.ModelSerializer):
                     {"name": "A category with this name already exists at this level."}
                 )
         self._validate_tab_group(attrs, parent)
+        self._validate_covered_tabs(attrs, parent)
         return attrs
+
+    def _validate_covered_tabs(self, attrs, parent):
+        """A tab with covered entries stays a tab - see
+        transactions/covered.py and the repayment-tabs spec."""
+        instance = self.instance
+        if instance is None:
+            return
+        covered = Transaction.objects.filter(covered_cost__isnull=False)
+        if instance.is_tab and not (parent is not None and parent.is_tab_group):
+            if covered.filter(category=instance).exists():
+                raise serializers.ValidationError(
+                    {"parent": "This tab has covered entries. Delete them before moving it out of its tab group."}
+                )
+        if instance.is_tab_group and not attrs.get("is_tab_group", True):
+            if covered.filter(category__parent=instance).exists():
+                raise serializers.ValidationError(
+                    {"is_tab_group": "Its tabs have covered entries. Delete them before turning this off."}
+                )
 
     def _validate_tab_group(self, attrs, parent):
         is_tab_group = attrs.get("is_tab_group", getattr(self.instance, "is_tab_group", False))

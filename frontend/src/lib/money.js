@@ -64,3 +64,11 @@ const signedFull = signedFormatter(undefined);
 export function formatSignedMoney(cents, locale) {
   return (locale ? signedFormatter(locale) : signedFull).format(cents / 100);
 }
+
+// An amount typed without a sign: "30", "30.5" or "30,50" -> 3050;
+// anything else (or nothing) -> null.
+export function parseCents(text) {
+  const normalized = text.trim().replace(",", ".");
+  if (!/^\d+(\.\d{0,2})?$/.test(normalized)) return null;
+  return Math.round(parseFloat(normalized) * 100);
+}

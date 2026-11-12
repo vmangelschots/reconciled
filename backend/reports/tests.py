@@ -7,6 +7,7 @@ from rest_framework.test import APIClient
 
 from accounts.models import Account
 from budgets.models import Category
+from transactions import covered
 from transactions.models import Transaction
 from transactions.splits import SplitLine, save_split
 from transactions.transfers import link_transfer
@@ -147,3 +148,36 @@ class CategorySpendingTests(ReportTestCase):
     def test_malformed_month_is_rejected(self):
         self.assertEqual(self.client.get(reverse("report-category-spending")).status_code, 400)
         self.assertEqual(self.get("2026-3x").status_code, 400)
+
+
+class CoveredEntryCellTests(ReportTestCase):
+    """"In a report's transactions" and "Renaming the tab" in
+    repayment-tabs."""
+
+    def setUp(self):
+        super().setUp()
+        self.takeout = Category.objects.create(name="Takeout")
+        tabs = Category.objects.create(name="Tabs", is_tab_group=True)
+        self.sarah = Category.objects.create(name="Sarah", parent=tabs)
+        covered.create(self.sarah, covered.CoveredInput(date(2026, 11, 11), "Sushi Palace", 1500, self.takeout))
+
+    def cell(self):
+        return self.client.get(
+            reverse("report-spending-cell"), {"month": "2026-11", "category": self.takeout.pk}
+        ).json()
+
+    def test_listed_by_its_cost_with_paid_by(self):
+        body = self.cell()
+
+        self.assertEqual(body["accounts"], ["Paid by Sarah"])
+        self.assertEqual(
+            [(r["payee"], r["amount_cents"], r["account_name"], r["paid_by_tab"], r["split_amount_cents"])
+             for r in body["rows"]],
+            [("Sushi Palace", -1500, "Paid by Sarah", self.sarah.pk, None)],
+        )
+
+    def test_renaming_the_tab(self):
+        self.sarah.name = "Sarah V."
+        self.sarah.save()
+
+        self.assertEqual(self.cell()["rows"][0]["account_name"], "Paid by Sarah V.")
