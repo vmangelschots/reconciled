@@ -91,6 +91,14 @@ def bill_state(amount_cents, due, payment, ref_day, month_over, future):
     return "not_seen" if (ref_day - due).days <= GRACE_DAYS else "missed"
 
 
+def as_of(month, today):
+    """(reference day, month over, future) for figures of `month`: today
+    for the current month, the month's last day for a past one."""
+    this_month = today.replace(day=1)
+    ref_day = today if month == this_month else month_range(month) - timedelta(days=1)
+    return ref_day, month < this_month, month > this_month
+
+
 def month_outflows(category_ids_by_bills_category, month):
     """{bills category id: [Outflow]} for `month`: every outflow in the
     category or the subcategories it covers, at its finest grain (split
@@ -112,16 +120,16 @@ def month_outflows(category_ids_by_bills_category, month):
     return result
 
 
-def bill_rows(categories, children, month, today):
+def bill_rows(categories, children, month, today, loan_lines=None):
     """{category id: figures} for the Bills categories in `categories` in
     `month`, as of today for the current month and the month's last day
     for a past one. `children` maps a parent id to its subcategories, whose
     outflows a parent's bills match too. A category without bills that
-    count in the month is left out: it has no budget."""
-    this_month = today.replace(day=1)
-    future = month > this_month
-    month_over = month < this_month
-    ref_day = today if month == this_month else month_range(month) - timedelta(days=1)
+    count in the month is left out: it has no budget. `loan_lines` are a
+    loan category's bills, their states already set by the loan (see
+    budgets/loan_bills.py); they never take part in matching."""
+    ref_day, month_over, future = as_of(month, today)
+    loan_lines = loan_lines or {}
 
     bills_by_category = {}
     for category in categories:
@@ -134,8 +142,9 @@ def bill_rows(categories, children, month, today):
     )
 
     result = {}
-    for category_id, bills in bills_by_category.items():
-        matches = match(bills, outflows[category_id], month)
+    for category_id in {*bills_by_category, *(c.id for c in categories if loan_lines.get(c.id))}:
+        bills = bills_by_category.get(category_id, [])
+        matches = match(bills, outflows.get(category_id, []), month)
         lines = []
         for bill in sorted(bills, key=lambda b: (b.day, b.id)):
             due = due_date(month, bill.day)
@@ -152,10 +161,13 @@ def bill_rows(categories, children, month, today):
                     "paid_on": payment.date if payment else None,
                     "paid_cents": payment.cents if payment else None,
                     "over_cents": payment.cents - bill.amount_cents if state == "paid_over" else None,
+                    "source": "manual",
+                    "loan_account_id": None,
                 }
             )
+        lines = sorted([*lines, *loan_lines.get(category_id, [])], key=lambda line: (line["day"], line["source"] == "loan", line["id"]))
         result[category_id] = {
-            "budget_cents": sum(b.amount_cents for b in bills),
+            "budget_cents": sum(line["amount_cents"] for line in lines),
             "bills": lines,
             "paid_count": sum(1 for line in lines if line["paid_on"] is not None),
             "due_to_date_cents": sum(line["amount_cents"] for line in lines if line["due_date"] <= ref_day),

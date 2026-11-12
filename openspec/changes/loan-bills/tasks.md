@@ -8,9 +8,9 @@
 
 ## 2. Loan bill lines
 
-- [ ] 2.1 Add `budgets/loan_bills.py` `loan_lines(month, today)` from `installment_states` (skip before-setup and covered; posted → paid with payment date and amount; else `bill_state`), lines with `source: "loan"`, `loan_account_id` and id `loan-<account>-<number>`; verify with DB tests for the spec scenarios: two house loans totalling 1,470.00, a correction lowering December to 1,400.00 after a paid November, a paid-off loan's last month, a covered installment, matched on the 8th → paid on 8 Nov, unmatched on 10 Nov → not seen, a past month → missed
-- [ ] 2.2 Pass `loan_lines` through `budget_rows` into `monthly_limits` and `bill_rows`, and skip loan lines in `attention_bills`; verify with tests: "Mortgage" budget 1,470.00 counts in the totals and the tile marker, 35.00 insurance in "Mortgage" makes it 35.00 over, a missed House A installment appears in `missed_loans` but not in `attention.bills`, and the summary query count stays constant with two loans
-- [ ] 2.3 Call `sync_loans` in `BudgetSummaryView`; verify with a test that a payment arriving after setup shows House A as paid on the Budgets summary without opening the overview
+- [x] 2.1 Add `budgets/loan_bills.py` `loan_lines(month, today)` from `installment_states` (skip before-setup and covered; posted → paid with payment date and amount; else `bill_state`), lines with `source: "loan"`, `loan_account_id` and id `loan-<account>-<number>`; verify with DB tests for the spec scenarios: two house loans totalling 1,470.00, a correction lowering December to 1,400.00 after a paid November, a paid-off loan's last month, a covered installment, matched on the 8th → paid on 8 Nov, unmatched on 10 Nov → not seen, a past month → missed
+- [x] 2.2 Pass `loan_lines` through `budget_rows` into `monthly_limits` and `bill_rows`, and skip loan lines in `attention_bills`; verify with tests: "Mortgage" budget 1,470.00 counts in the totals and the tile marker, 35.00 insurance in "Mortgage" makes it 35.00 over, a missed House A installment appears in `missed_loans` but not in `attention.bills`, and `loan_lines` takes the same number of queries for one loan as for two
+- [x] 2.3 Call `sync_loans` in `BudgetSummaryView`; verify with a test that a payment arriving after setup shows House A as paid on the Budgets summary without opening the overview
 
 ## 3. Frontend
 

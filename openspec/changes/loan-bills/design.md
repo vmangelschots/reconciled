@@ -34,12 +34,14 @@ an import, but not on the Budgets page.
 
 ## Decisions
 
-### Loan lines are computed from `installment_states`
+### Loan lines follow the schedule's states
 `budgets/loan_bills.py` provides `loan_lines(month, today)`, which returns
 `{category_id: [line]}`:
 - For every loan on an active account with a payment category, it takes
-  the installments from `installment_states(loan, today)` dated in
-  `month`, skipping `before_setup` and `covered`.
+  the installments dated in `month`, skipping `before_setup` and
+  `covered`, by the same rules as `installment_states`. It loads every
+  loan's adjustments and corrections in one go (three queries in all),
+  instead of calling `installment_states` per loan.
 - A `posted` installment is `paid`, with `paid_on` and `paid_cents` from
   `adjustment.loan_payment`.
 - Any other installment gets `bills.bill_state(amount, due, None,
@@ -70,9 +72,9 @@ the schedule is always right.
   lines, so the tile marker and per-day figure work as they are.
 - `attention_bills` skips `source == "loan"`.
 
-The cost is one `installment_states` per active loan per call: a few
-queries and pure arithmetic. That's fine for a household's handful of
-loans. A query-count test pins it.
+`loan_lines` costs three queries whatever the number of loans, and a
+test pins that. `sync_loans` on the Budgets page still costs queries per
+loan, as it already does on the Overview.
 
 ### Adopt and release, in a models-only module
 `budgets/loan_categories.py` imports only `budgets.models` and

@@ -7,6 +7,7 @@ from transactions.models import Transaction
 
 from . import utils
 from .bills import bill_rows
+from .loan_bills import loan_lines as month_loan_lines
 from .models import Bill, Category, CategoryLimit
 from .utils import month_range
 
@@ -30,11 +31,13 @@ def spent_by_category(categories, start, end):
     }
 
 
-def monthly_limits(period_start):
+def monthly_limits(period_start, loan_lines=None):
     """({category_id: limit}, ids with an override) for the month: its
     override, else the default. A category without either isn't in it. A
     Bills category's limit is the total of its bills that count in the
-    month, so it is a budget like any limit - see openspec/specs/bill-budgets."""
+    month, so it is a budget like any limit - see openspec/specs/bill-budgets.
+    A loan category's bills come from its loans (`loan_lines`, worked out
+    here when not given)."""
     defaults, overrides = {}, {}
     limits = CategoryLimit.objects.filter(category__in=budgeted_categories(), category__budget_kind=Category.BudgetKind.MONTHLY).filter(
         Q(month__isnull=True) | Q(month=period_start)
@@ -52,6 +55,10 @@ def monthly_limits(period_start):
         .annotate(total=Sum("amount_cents"))
     )
     bill_totals = {row["category_id"]: row["total"] for row in bills}
+    if loan_lines is None:
+        loan_lines = month_loan_lines(period_start, utils.today())
+    for category_id, lines in loan_lines.items():
+        bill_totals[category_id] = bill_totals.get(category_id, 0) + sum(line["amount_cents"] for line in lines)
     return {**defaults, **overrides, **bill_totals}, set(overrides)
 
 
@@ -83,10 +90,11 @@ def budget_rows(period_start, today=None):
     today = today or utils.today()
     categories = list(budgeted_categories().select_related("parent").prefetch_related("bills"))
     spent = spent_by_category(categories, period_start, month_range(period_start))
-    limits, overridden = monthly_limits(period_start)
+    loans = month_loan_lines(period_start, today)
+    limits, overridden = monthly_limits(period_start, loans)
     children = subcategories_by_parent(categories)
     bills = bill_rows(
-        [c for c in categories if c.budget_kind == Category.BudgetKind.BILLS], children, period_start, today
+        [c for c in categories if c.budget_kind == Category.BudgetKind.BILLS], children, period_start, today, loans
     )
 
     rows = []

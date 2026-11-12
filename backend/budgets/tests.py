@@ -609,12 +609,13 @@ class BudgetSummaryQueryTests(TestCase):
             Bill.objects.create(category=bills, name="Bill", day=5, amount_cents=100, from_month=date(2026, 1, 1))
             Transaction.objects.create(account=account, date="2026-01-05", amount_cents=-100, payee="x", category=bills)
 
-        # One for the user's household, four for the monthly rows and
-        # uncategorized, two for the bills and their outflows, two for the
-        # bill totals in the month's limits (rows and yearly spending), three
-        # for the month's yearly spending, four for the yearly rows and their
-        # parents, one for the uncategorized outflows.
-        with self.assertNumQueries(18):
+        # One for the user's household, one for the loans to sync, four for
+        # the monthly rows and uncategorized, two for the bills and their
+        # outflows, two for the bill totals and two for the loan bills in the
+        # month's limits (rows and yearly spending), three for the month's
+        # yearly spending, four for the yearly rows and their parents, one
+        # for the uncategorized outflows.
+        with self.assertNumQueries(21):
             response = client.get(reverse("budget-summary"), {"month": "2026-01"})
 
         self.assertEqual([c["spent_cents"] for c in response.json()["categories"]], [100] * 12)

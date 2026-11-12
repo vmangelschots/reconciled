@@ -6,6 +6,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from reports.spending import month_spending
+from transactions.loans import sync_loans
 
 from . import utils
 from .attention import attention_bills, attention_categories, attention_yearly
@@ -224,6 +225,9 @@ class BudgetSummaryView(APIView):
         except ValueError:
             return Response({"detail": "month must be in YYYY-MM format."}, status=400)
         today = utils.today()
+        # Loan bills are paid when their installment is matched, so bring
+        # the matches up to date first - see openspec/specs/loan-schedules.
+        sync_loans(today)
         current = period_start == today.replace(day=1)
         days_in_month = (utils.month_range(period_start) - period_start).days
         pace = today.day / days_in_month if current else None
