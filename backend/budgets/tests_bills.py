@@ -3,13 +3,22 @@
 from datetime import date
 from unittest.mock import patch
 
+from types import SimpleNamespace
+
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
+from django.test import SimpleTestCase
 from django.urls import reverse
 from households.testing import TestCase
 from rest_framework.test import APIClient
 
+from accounts.models import Account
+from transactions.models import Transaction
+from transactions.splits import SplitLine, save_split
+
+from .bills import Outflow, bill_rows, bill_state, due_date, match
 from .models import Bill, Category, CategoryLimit, YearlyBudget
+from .summary import subcategories_by_parent
 
 NOV_2026 = date(2026, 11, 1)
 
@@ -134,3 +143,133 @@ class BillsApiTests(TestCase):
         jan = Category.objects.create(name="Jan", parent=tabs)
         self.assertEqual(self._set_budget(jan, kind="bills").status_code, 400)
         self.assertEqual(self._set_bills(jan, []).status_code, 400)
+
+
+def bill(bill_id, day, cents):
+    return SimpleNamespace(id=bill_id, day=day, amount_cents=cents)
+
+
+def out(tx_id, day, cents, month=11):
+    return Outflow(tx_id, date(2026, month, day), cents)
+
+
+class DueDateTests(SimpleTestCase):
+    def test_the_31st_in_february(self):
+        self.assertEqual(due_date(date(2027, 2, 1), 31), date(2027, 2, 28))
+
+    def test_an_ordinary_day(self):
+        self.assertEqual(due_date(NOV_2026, 21), date(2026, 11, 21))
+
+
+class MatchTests(SimpleTestCase):
+    def test_a_day_late(self):
+        self.assertEqual(match([bill(1, 5, 1799)], [out(10, 6, 1799)], NOV_2026), {1: out(10, 6, 1799)})
+
+    def test_too_far_from_its_day(self):
+        self.assertEqual(match([bill(1, 21, 1099)], [out(10, 27, 1099)], NOV_2026), {})
+
+    def test_not_across_months(self):
+        self.assertEqual(match([bill(1, 30, 2500)], [out(10, 2, 2500, month=12)], NOV_2026), {})
+
+    def test_outside_the_amount_window(self):
+        # 30% of 17.99 is 5.39; 24.00 is 6.01 away.
+        self.assertEqual(match([bill(1, 5, 1799)], [out(10, 5, 2400)], NOV_2026), {})
+
+    def test_small_bills_have_a_5_euro_window(self):
+        self.assertIn(1, match([bill(1, 21, 1099)], [out(10, 21, 1599)], NOV_2026))
+
+    def test_the_closest_amount_wins(self):
+        result = match([bill(1, 5, 1799)], [out(10, 5, 1500), out(11, 4, 1799)], NOV_2026)
+        self.assertEqual(result[1].id, 11)
+
+    def test_two_bills_of_the_same_amount(self):
+        result = match([bill(1, 3, 2500), bill(2, 3, 2500)], [out(10, 3, 2500), out(11, 3, 2500)], NOV_2026)
+        self.assertEqual({result[1].id, result[2].id}, {10, 11})
+
+    def test_an_outflow_pays_one_bill(self):
+        result = match([bill(1, 3, 2500), bill(2, 4, 2500)], [out(10, 3, 2500)], NOV_2026)
+        self.assertEqual(list(result), [1])
+
+
+class BillStateTests(SimpleTestCase):
+    DUE = date(2026, 11, 21)
+
+    def state(self, ref_day, payment=None, month_over=False, future=False, cents=1099):
+        return bill_state(cents, self.DUE, payment, ref_day, month_over, future)
+
+    def test_paid(self):
+        self.assertEqual(bill_state(1799, date(2026, 11, 5), out(1, 5, 1799), date(2026, 11, 19), False, False), "paid")
+
+    def test_a_price_rise_is_paid_over(self):
+        self.assertEqual(bill_state(1799, date(2026, 11, 5), out(1, 5, 1999), date(2026, 11, 19), False, False), "paid_over")
+
+    def test_within_the_tolerance_is_paid(self):
+        self.assertEqual(bill_state(1799, date(2026, 11, 5), out(1, 5, 1899), date(2026, 11, 19), False, False), "paid")
+
+    def test_upcoming_then_due_soon(self):
+        self.assertEqual(self.state(date(2026, 11, 17)), "upcoming")
+        self.assertEqual(self.state(date(2026, 11, 18)), "due_soon")
+        self.assertEqual(self.state(date(2026, 11, 19)), "due_soon")
+        self.assertEqual(self.state(self.DUE), "due_soon")
+
+    def test_not_seen_then_missed(self):
+        for day in range(22, 27):
+            self.assertEqual(self.state(date(2026, 11, day)), "not_seen", day)
+        self.assertEqual(self.state(date(2026, 11, 27)), "missed")
+
+    def test_a_finished_month(self):
+        self.assertEqual(bill_state(1099, date(2026, 10, 30), None, date(2026, 10, 31), True, False), "missed")
+
+    def test_a_future_month(self):
+        self.assertEqual(self.state(date(2026, 11, 19), future=True), "upcoming")
+
+
+class BillRowsTests(TestCase):
+    def setUp(self):
+        self.account = Account.objects.create(name="Crelan", account_type="checking", starting_balance_cents=0)
+        self.streaming = Category.objects.create(name="Streaming", budget_kind="bills")
+        for name, day, cents in (("Netflix", 5, 1799), ("Disney+", 8, 1199), ("Spotify", 21, 1099)):
+            Bill.objects.create(category=self.streaming, name=name, day=day, amount_cents=cents, from_month=date(2026, 9, 1))
+
+    def _pay(self, on, cents, category=None):
+        return Transaction.objects.create(
+            account=self.account, date=on, amount_cents=-cents, payee="x", category=category or self.streaming
+        )
+
+    def _rows(self, month, today):
+        categories = list(Category.objects.prefetch_related("bills"))
+        return bill_rows(categories, subcategories_by_parent(categories), month, today)
+
+    def test_two_of_three_paid(self):
+        self._pay(date(2026, 11, 5), 1799)
+        self._pay(date(2026, 11, 9), 1199)
+        row = self._rows(NOV_2026, date(2026, 11, 19))[self.streaming.id]
+        self.assertEqual(row["budget_cents"], 4097)
+        self.assertEqual([b["state"] for b in row["bills"]], ["paid", "paid", "due_soon"])
+        self.assertEqual(row["bills"][1]["paid_on"], date(2026, 11, 9))
+        self.assertEqual(row["paid_count"], 2)
+        self.assertEqual(row["due_to_date_cents"], 2998)
+        self.assertEqual(row["unpaid_cents"], 1099)
+
+    def test_a_bill_counts_from_its_month(self):
+        Bill.objects.create(category=self.streaming, name="Apple TV", day=12, amount_cents=999, from_month=NOV_2026)
+        october = self._rows(date(2026, 10, 1), date(2026, 11, 19))[self.streaming.id]
+        november = self._rows(NOV_2026, date(2026, 11, 19))[self.streaming.id]
+        self.assertEqual(october["budget_cents"], 4097)
+        self.assertEqual(november["budget_cents"], 5096)
+
+    def test_a_split_part_pays_a_bill(self):
+        line = Transaction.objects.create(account=self.account, date=date(2026, 11, 5), amount_cents=-3000, payee="Card")
+        save_split(line, [SplitLine(-1799, category=self.streaming), SplitLine(-1201)])
+        row = self._rows(NOV_2026, date(2026, 11, 19))[self.streaming.id]
+        self.assertEqual(row["bills"][0]["state"], "paid")
+
+    def test_a_subcategory_payment_counts(self):
+        kids = Category.objects.create(name="Kids", parent=self.streaming)
+        self._pay(date(2026, 11, 8), 1199, category=kids)
+        row = self._rows(NOV_2026, date(2026, 11, 19))[self.streaming.id]
+        self.assertEqual(row["bills"][1]["state"], "paid")
+
+    def test_no_bills_no_row(self):
+        empty = Category.objects.create(name="Internet", budget_kind="bills")
+        self.assertNotIn(empty.id, self._rows(NOV_2026, date(2026, 11, 19)))

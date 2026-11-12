@@ -8,8 +8,8 @@
 
 ## 2. Matching and states
 
-- [ ] 2.1 Add `budgets/bills.py` pure functions `due_date`, `amount_window`, `paid_tolerance`, `match` and `bill_state` with the constants from design.md; verify with DB-free unit tests covering the spec scenarios: 31st in February, a day late, too far from its day, not across months, two candidates (closest amount wins), two same-amount bills, paid, paid over by 2.00, due soon, not seen 22–26 Nov, missed from 27 Nov, missed once a past month ended, future month upcoming
-- [ ] 2.2 Add the DB layer `bill_rows` (bills counting from `from_month`, outflows from `counted_rows().excluding_adjustments()` in the category and its subcategories, one query) returning per-bill state, `paid_on`, `paid_cents`, `over_cents`, plus `paid_count`, `due_to_date_cents`, `unpaid_cents`; verify with DB tests including a bill added in November not counting in October and a split part paying a bill
+- [x] 2.1 Add `budgets/bills.py` pure functions `due_date`, `amount_window`, `paid_tolerance`, `match` and `bill_state` with the constants from design.md; verify with DB-free unit tests covering the spec scenarios: 31st in February, a day late, too far from its day, not across months, two candidates (closest amount wins), two same-amount bills, paid, paid over by 2.00, due soon, not seen 22–26 Nov, missed from 27 Nov, missed once a past month ended, future month upcoming
+- [x] 2.2 Add the DB layer `bill_rows` (bills counting from `from_month`, outflows from `counted_rows().excluding_adjustments()` in the category and its subcategories, one query) returning per-bill state, `paid_on`, `paid_cents`, `over_cents`, plus `paid_count`, `due_to_date_cents`, `unpaid_cents`; verify with DB tests including a bill added in November not counting in October and a split part paying a bill
 
 ## 3. Summary, totals and attention
 
