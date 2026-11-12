@@ -273,3 +273,126 @@ class BillRowsTests(TestCase):
     def test_no_bills_no_row(self):
         empty = Category.objects.create(name="Internet", budget_kind="bills")
         self.assertNotIn(empty.id, self._rows(NOV_2026, date(2026, 11, 19)))
+
+
+class BillsInTheMonthTests(TestCase):
+    """Bills rows, totals, pace and attention - through both endpoints."""
+
+    TODAY = date(2026, 11, 19)
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(user=get_user_model().objects.create_user(username="m", password="x"))
+        self.account = Account.objects.create(name="Crelan", account_type="checking", starting_balance_cents=0)
+        self.streaming = Category.objects.create(name="Streaming", budget_kind="bills")
+        for name, day, cents in (("Netflix", 5, 1799), ("Disney+", 8, 1199), ("Spotify", 21, 1099)):
+            Bill.objects.create(category=self.streaming, name=name, day=day, amount_cents=cents, from_month=date(2026, 9, 1))
+        self.groceries = Category.objects.create(name="Groceries")
+        CategoryLimit.objects.create(category=self.groceries, month=None, limit_cents=40000)
+
+    def _pay(self, on, cents, category=None):
+        Transaction.objects.create(
+            account=self.account, date=on, amount_cents=-cents, payee="x", category=category or self.streaming
+        )
+
+    def _summary(self, today=None, month="2026-11"):
+        today = today or self.TODAY
+        with patch("budgets.utils.today", lambda: today):
+            return self.client.get(reverse("budget-summary"), {"month": month}).json()
+
+    def _overview(self, today=None, month="2026-11"):
+        today = today or self.TODAY
+        with patch("budgets.utils.today", lambda: today), patch("reports.views._today", lambda: today):
+            return self.client.get(reverse("report-overview"), {"month": month}).json()
+
+    def _row(self, summary, category):
+        return next(r for r in summary["categories"] if r["category_id"] == category.id)
+
+    def test_a_bills_row(self):
+        self._pay(date(2026, 11, 5), 1799)
+        self._pay(date(2026, 11, 9), 1199)
+        row = self._row(self._summary(), self.streaming)
+        self.assertEqual(row["kind"], "bills")
+        self.assertEqual(row["limit_cents"], 4097)
+        self.assertEqual([b["state"] for b in row["bills"]], ["paid", "paid", "due_soon"])
+        self.assertEqual(self._row(self._summary(), self.groceries)["kind"], "monthly")
+
+    def test_limits_and_bills_together(self):
+        totals = self._summary()["totals"]
+        self.assertEqual(totals["limit_cents"], 44097)
+
+    def test_a_bills_subcategory_is_a_cap(self):
+        home = Category.objects.create(name="Home")
+        CategoryLimit.objects.create(category=home, month=None, limit_cents=10000)
+        internet = Category.objects.create(name="Internet", parent=home, budget_kind="bills")
+        Bill.objects.create(category=internet, name="Proximus", day=3, amount_cents=4500, from_month=NOV_2026)
+        summary = self._summary()
+        self.assertTrue(self._row(summary, internet)["covered_by_parent"])
+        self.assertEqual(self._row(summary, home)["caps_cents"], 4500)
+        self.assertEqual(summary["totals"]["limit_cents"], 44097 + 10000)
+
+    def test_a_bills_category_without_bills_has_no_budget(self):
+        empty = Category.objects.create(name="Internet", budget_kind="bills")
+        self._pay(date(2026, 11, 3), 2500, category=empty)
+        summary = self._summary()
+        self.assertIsNone(self._row(summary, empty)["limit_cents"])
+        self.assertEqual(summary["totals"]["outside_cents"], 2500)
+
+    def test_pace_with_bills(self):
+        # The spec's example: on 10 November, 900.00 of limits of which 300.00
+        # are bills, 200.00 of them due; 100.00 of the bills unpaid.
+        Bill.objects.all().delete()
+        CategoryLimit.objects.all().delete()
+        CategoryLimit.objects.create(category=self.groceries, month=None, limit_cents=60000)
+        for name, day in (("Rent A", 1), ("Rent B", 5), ("Rent C", 25)):
+            Bill.objects.create(category=self.streaming, name=name, day=day, amount_cents=10000, from_month=NOV_2026)
+        self._pay(date(2026, 11, 1), 10000)
+        self._pay(date(2026, 11, 5), 10000)
+        totals = self._summary(today=date(2026, 11, 10))["totals"]
+        self.assertAlmostEqual(totals["marker"], (20000 + 60000 / 3) / 90000)
+        self.assertEqual(int(totals["marker"] * 100), 44)
+        self.assertEqual(totals["bills_unpaid_cents"], 10000)
+
+    def test_no_bills_marker_is_the_pace(self):
+        Category.objects.filter(id=self.streaming.id).update(budget_kind="monthly")
+        summary = self._summary()
+        self.assertEqual(summary["totals"]["marker"], summary["pace"])
+
+    def test_a_past_month_has_no_marker(self):
+        totals = self._summary(month="2026-10")["totals"]
+        self.assertIsNone(totals["marker"])
+        self.assertIsNone(totals["bills_unpaid_cents"])
+
+    def test_all_paid_early_is_not_ahead(self):
+        self._pay(date(2026, 11, 5), 1799)
+        self._pay(date(2026, 11, 8), 1199)
+        self._pay(date(2026, 11, 8), 1099)
+        Bill.objects.filter(name="Spotify").update(day=8)
+        for response in (self._summary(today=date(2026, 11, 8)), self._overview(today=date(2026, 11, 8))):
+            self.assertEqual(response["attention"]["categories"], [])
+
+    def test_extra_spending_money_is_over(self):
+        money = Category.objects.create(name="Spending money", budget_kind="bills")
+        for name in ("Vincent", "Partner"):
+            Bill.objects.create(category=money, name=name, day=1, amount_cents=20000, from_month=NOV_2026)
+        self._pay(date(2026, 11, 1), 20000, category=money)
+        self._pay(date(2026, 11, 1), 20000, category=money)
+        self._pay(date(2026, 11, 15), 5000, category=money)
+        attention = self._summary()["attention"]
+        self.assertEqual([(c["name"], c["over"]) for c in attention["categories"]], [("Spending money", True)])
+        self.assertEqual(attention["categories"][0]["spent_cents"] - attention["categories"][0]["limit_cents"], 5000)
+
+    def test_a_missed_bill(self):
+        self._pay(date(2026, 11, 5), 1799)
+        self._pay(date(2026, 11, 8), 1199)
+        for response in (self._summary(today=date(2026, 11, 28)), self._overview(today=date(2026, 11, 28))):
+            bills = response["attention"]["bills"]
+            self.assertEqual(
+                [(b["name"], b["category_name"], b["due_date"], b["amount_cents"]) for b in bills],
+                [("Spotify", "Streaming", "2026-11-21", 1099)],
+            )
+
+    def test_not_seen_is_not_listed(self):
+        self._pay(date(2026, 11, 5), 1799)
+        self._pay(date(2026, 11, 8), 1199)
+        self.assertEqual(self._summary(today=date(2026, 11, 23))["attention"]["bills"], [])

@@ -13,9 +13,9 @@
 
 ## 3. Summary, totals and attention
 
-- [ ] 3.1 Make `monthly_limits` include Bills totals and `budget_rows` emit Bills rows (`kind`, `bills`, counts) next to monthly rows with `kind: "monthly"`; verify with tests that a Bills category's budget counts in `budget_totals`, a Bills subcategory under a monthly parent is a cap, and a Bills category without bills has no budget
-- [ ] 3.2 Add `marker` and `bills_unpaid_cents` to `budget_totals` for the current month; verify with a test reproducing the "Pace with bills" scenario (marker 44%, unpaid 100.00) and one showing `marker == pace` without bills
-- [ ] 3.3 Skip the ahead rule for Bills in `attention_categories`, add `attention_bills` (missed bills, by due date then name), and return `attention.bills` from `BudgetSummaryView` and the overview endpoint; verify with tests in `budgets/tests.py` and `reports/tests_overview.py`: Streaming all paid on 8 Nov not listed, Spending money 50.00 over listed as a category warning, Spotify missed listed on 28 Nov and not on 23 Nov
+- [x] 3.1 Make `monthly_limits` include Bills totals and `budget_rows` emit Bills rows (`kind`, `bills`, counts) next to monthly rows with `kind: "monthly"`; verify with tests that a Bills category's budget counts in `budget_totals`, a Bills subcategory under a monthly parent is a cap, and a Bills category without bills has no budget
+- [x] 3.2 Add `marker` and `bills_unpaid_cents` to `budget_totals` for the current month; verify with a test reproducing the "Pace with bills" scenario (marker 44%, unpaid 100.00) and one showing `marker == pace` without bills
+- [x] 3.3 Skip the ahead rule for Bills in `attention_categories`, add `attention_bills` (missed bills, by due date then name), and return `attention.bills` from `BudgetSummaryView` and the overview endpoint; verify with tests in `budgets/tests.py` and `reports/tests_overview.py`: Streaming all paid on 8 Nov not listed, Spending money 50.00 over listed as a category warning, Spotify missed listed on 28 Nov and not on 23 Nov
 
 ## 4. Backup
 

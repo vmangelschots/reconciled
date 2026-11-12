@@ -8,7 +8,7 @@ from rest_framework.views import APIView
 from reports.spending import month_spending
 
 from . import utils
-from .attention import attention_categories, attention_yearly
+from .attention import attention_bills, attention_categories, attention_yearly
 from .models import Bill, BudgetSettings, Category, CategoryLimit, YearlyBudget
 from .serializers import CategorySerializer
 from .summary import budget_rows, budget_totals, uncategorized_spent, yearly_spent_cents
@@ -205,7 +205,7 @@ class BudgetSummaryView(APIView):
         current = period_start == today.replace(day=1)
         days_in_month = (utils.month_range(period_start) - period_start).days
         pace = today.day / days_in_month if current else None
-        rows = budget_rows(period_start)
+        rows = budget_rows(period_start, today)
         yearly = yearly_rows(period_start, today)
         yearly_spent = yearly_spent_cents(period_start)
         _, uncategorized_cents = month_spending(period_start)
@@ -218,7 +218,7 @@ class BudgetSummaryView(APIView):
                 "yearly": yearly,
                 # The same figures and warnings as the overview's budget tile.
                 "totals": {
-                    **budget_totals(rows),
+                    **budget_totals(rows, pace),
                     "yearly_spent_cents": yearly_spent,
                     "uncategorized_cents": uncategorized_cents,
                 },
@@ -227,6 +227,7 @@ class BudgetSummaryView(APIView):
                 "attention": {
                     "categories": attention_categories(rows, pace),
                     "yearly": attention_yearly(yearly, current),
+                    "bills": attention_bills(rows),
                 },
             }
         )

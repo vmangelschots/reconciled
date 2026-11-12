@@ -7,7 +7,7 @@ from rest_framework.views import APIView
 
 from accounts.models import TIER_ORDER, Account, Loan, tier_position
 from banksync.models import BankAccountLink, BankConnection, BankCredentials
-from budgets.attention import attention_categories, attention_yearly
+from budgets.attention import attention_bills, attention_categories, attention_yearly
 from budgets.models import Category
 from budgets.summary import budget_rows, budget_totals, yearly_spent_cents
 from budgets.utils import month_range, parse_month
@@ -365,7 +365,7 @@ class OverviewView(APIView):
             money_out=Sum(Case(When(amount_cents__lt=0, then="amount_cents"), default=0, output_field=BigIntegerField())),
         )
 
-        rows = budget_rows(month)
+        rows = budget_rows(month, today)
         yearly = yearly_rows(month, today)
         yearly_spent = yearly_spent_cents(month)
         _, uncategorized_cents = month_spending(month)
@@ -401,7 +401,7 @@ class OverviewView(APIView):
                     "out_cents": -(totals["money_out"] or 0),
                 },
                 "budget": {
-                    **budget_totals(rows),
+                    **budget_totals(rows, pace),
                     "uncategorized_cents": uncategorized_cents,
                     "yearly_spent_cents": yearly_spent,
                     "pace": pace,
@@ -412,6 +412,7 @@ class OverviewView(APIView):
                     "uncategorized_count": uncategorized().count(),
                     "categories": attention_categories(rows, pace),
                     "yearly": attention_yearly(yearly, current),
+                    "bills": attention_bills(rows),
                     "missed_loans": _attention_missed_loans(today),
                     "reconnect": _attention_reconnect(),
                     "bank_sync_stopped": BankCredentials.objects.filter(stopped=True).exists(),

@@ -5,7 +5,9 @@ from django.db.models import Q, Sum
 
 from transactions.models import Transaction
 
-from .models import Category, CategoryLimit
+from . import utils
+from .bills import bill_rows
+from .models import Bill, Category, CategoryLimit
 from .utils import month_range
 
 
@@ -30,7 +32,9 @@ def spent_by_category(categories, start, end):
 
 def monthly_limits(period_start):
     """({category_id: limit}, ids with an override) for the month: its
-    override, else the default. A category without either isn't in it."""
+    override, else the default. A category without either isn't in it. A
+    Bills category's limit is the total of its bills that count in the
+    month, so it is a budget like any limit - see openspec/specs/bill-budgets."""
     defaults, overrides = {}, {}
     limits = CategoryLimit.objects.filter(category__in=budgeted_categories(), category__budget_kind=Category.BudgetKind.MONTHLY).filter(
         Q(month__isnull=True) | Q(month=period_start)
@@ -40,7 +44,15 @@ def monthly_limits(period_start):
             defaults[limit.category_id] = limit.limit_cents
         else:
             overrides[limit.category_id] = limit.limit_cents
-    return {**defaults, **overrides}, set(overrides)
+    bills = (
+        Bill.objects.filter(
+            category__in=budgeted_categories(), category__budget_kind=Category.BudgetKind.BILLS, from_month__lte=period_start
+        )
+        .values("category_id")
+        .annotate(total=Sum("amount_cents"))
+    )
+    bill_totals = {row["category_id"]: row["total"] for row in bills}
+    return {**defaults, **overrides, **bill_totals}, set(overrides)
 
 
 def has_budget(category, limits):
@@ -57,57 +69,89 @@ def subcategories_by_parent(categories):
     return children
 
 
-def budget_rows(period_start):
-    """One row per monthly budgeted category for the month starting at
+MONTHLY_KINDS = [Category.BudgetKind.MONTHLY, Category.BudgetKind.BILLS]
+
+
+def budget_rows(period_start, today=None):
+    """One row per monthly or Bills category for the month starting at
     `period_start`: its limit and its spending, the net outflow of its
     transactions. A parent with a limit counts everything under it; a
     subcategory's own limit is a cap inside its parent - see
-    openspec/specs/budgets."""
-    categories = list(budgeted_categories().select_related("parent"))
+    openspec/specs/budgets. A Bills row's limit is its bills' total, and it
+    also carries each bill's state as of `today` - see
+    openspec/specs/bill-budgets."""
+    today = today or utils.today()
+    categories = list(budgeted_categories().select_related("parent").prefetch_related("bills"))
     spent = spent_by_category(categories, period_start, month_range(period_start))
     limits, overridden = monthly_limits(period_start)
     children = subcategories_by_parent(categories)
+    bills = bill_rows(
+        [c for c in categories if c.budget_kind == Category.BudgetKind.BILLS], children, period_start, today
+    )
 
     rows = []
     # Yearly categories have their own rows - see budgets/yearly.py.
-    for category in (c for c in categories if c.budget_kind == Category.BudgetKind.MONTHLY):
+    for category in (c for c in categories if c.budget_kind in MONTHLY_KINDS):
         limit_cents = limits.get(category.id)
         subcategories = children.get(category.id, [])
         covers = limit_cents is not None and bool(subcategories)
         own_cents = spent.get(category.id, 0)
         under_cents = own_cents + sum(spent.get(sub.id, 0) for sub in subcategories)
         spent_cents = under_cents if covers else own_cents
-        rows.append(
-            {
-                "category_id": category.id,
-                "category_name": category.name,
-                "parent_id": category.parent_id,
-                "limit_cents": limit_cents,
-                "spent_cents": spent_cents,
-                "remaining_cents": limit_cents - spent_cents if limit_cents is not None else None,
-                "over_limit": limit_cents is not None and spent_cents > limit_cents,
-                "covers_subcategories": covers,
-                "covered_by_parent": category.parent is not None and has_budget(category.parent, limits),
-                "caps_cents": sum(limits.get(sub.id, 0) for sub in subcategories) if covers else None,
-                # What a parent without a budget shows: everything under it.
-                "group_spent_cents": under_cents if subcategories and limit_cents is None else None,
-                "overridden": category.id in overridden,
-            }
-        )
+        row = {
+            "category_id": category.id,
+            "category_name": category.name,
+            "parent_id": category.parent_id,
+            "kind": category.budget_kind,
+            "limit_cents": limit_cents,
+            "spent_cents": spent_cents,
+            "remaining_cents": limit_cents - spent_cents if limit_cents is not None else None,
+            "over_limit": limit_cents is not None and spent_cents > limit_cents,
+            "covers_subcategories": covers,
+            "covered_by_parent": category.parent is not None and has_budget(category.parent, limits),
+            "caps_cents": sum(limits.get(sub.id, 0) for sub in subcategories) if covers else None,
+            # What a parent without a budget shows: everything under it.
+            "group_spent_cents": under_cents if subcategories and limit_cents is None else None,
+            "overridden": category.id in overridden,
+        }
+        if category.budget_kind == Category.BudgetKind.BILLS:
+            figures = bills.get(category.id)
+            row.update(
+                bills=figures["bills"] if figures else [],
+                paid_count=figures["paid_count"] if figures else 0,
+                due_to_date_cents=figures["due_to_date_cents"] if figures else 0,
+                unpaid_cents=figures["unpaid_cents"] if figures else 0,
+            )
+        rows.append(row)
     return rows
 
 
-def budget_totals(rows):
+def budget_totals(rows, pace=None):
     """The month's totals from `budget_rows`, shared so pages can't
     disagree. Covered rows are left out: their spending is already in the
-    parent, and a cap adds nothing to the budget."""
+    parent, and a cap adds nothing to the budget.
+
+    For the current month (`pace` set), `marker` is where spending is
+    expected to be by the end of today, as a share of the limits: the bills
+    due so far plus the passed share of every other limit. Without bills it
+    equals `pace`. `bills_unpaid_cents` is what the bills still need, which
+    the per-day figure leaves out - see openspec/specs/overview."""
     counted = [r for r in rows if not r["covered_by_parent"]]
     limited = [r for r in counted if r["limit_cents"] is not None]
+    limit_cents = sum(r["limit_cents"] for r in limited)
+    bills = [r for r in limited if r["kind"] == Category.BudgetKind.BILLS]
+    marker = None
+    if pace is not None:
+        bills_cents = sum(r["limit_cents"] for r in bills)
+        due_cents = sum(r["due_to_date_cents"] for r in bills)
+        marker = (due_cents + pace * (limit_cents - bills_cents)) / limit_cents if limit_cents > 0 else pace
     return {
         "has_limits": bool(limited),
-        "limit_cents": sum(r["limit_cents"] for r in limited),
+        "limit_cents": limit_cents,
         "spent_cents": sum(r["spent_cents"] for r in limited),
         "outside_cents": sum(r["spent_cents"] for r in counted if r["limit_cents"] is None and r["spent_cents"] > 0),
+        "marker": marker,
+        "bills_unpaid_cents": sum(r["unpaid_cents"] for r in bills) if pace is not None else None,
     }
 
 
