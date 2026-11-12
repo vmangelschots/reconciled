@@ -14,7 +14,7 @@ from transactions.serializers import TransactionSerializer
 from . import portfolio_import
 from .models import Account, Loan, tier_position
 from .portfolio_file import PortfolioFileError
-from .serializers import AccountSerializer
+from .serializers import AccountSerializer, VisibleAccountField
 
 
 class SetValueSerializer(serializers.Serializer):
@@ -31,7 +31,7 @@ class LoanTermsSerializer(serializers.Serializer):
     annual_rate = serializers.DecimalField(max_digits=7, decimal_places=4)
     term_months = serializers.IntegerField()
     first_payment_date = serializers.DateField()
-    paid_from = serializers.PrimaryKeyRelatedField(queryset=Account.objects)
+    paid_from = VisibleAccountField()
     payment_category = serializers.PrimaryKeyRelatedField(
         queryset=Category.objects, allow_null=True, required=False, default=None
     )
@@ -159,7 +159,7 @@ class AccountViewSet(
     def get_queryset(self):
         # By tier, then name - see the accounts spec's "Accounts are
         # listed by tier".
-        queryset = Account.objects.select_related("loan").order_by(tier_position(), "name", "id")
+        queryset = Account.objects.visible().select_related("loan").order_by(tier_position(), "name", "id")
         if self.action == "list":
             # Archived accounts are excluded from the default list but
             # remain reachable by id (retrieve/update/archive), so their

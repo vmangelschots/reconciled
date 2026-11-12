@@ -102,7 +102,7 @@ def _projection(tier, today):
     """The active accounts' forecasts added up, as (points, lowest), or
     (None, None) with nothing scheduled. It starts from history's balance
     today: an account's current balance also counts rows dated later."""
-    accounts = [a for a in Account.objects.filter(archived=False) if a.tier == tier]
+    accounts = [a for a in Account.objects.visible().filter(archived=False) if a.tier == tier]
     forecasts = [generate_forecast(a, PROJECTION_DAYS, today) for a in accounts]
     if not any(f["occurrences"] for f in forecasts):
         return None, None
@@ -318,7 +318,7 @@ class OverviewView(APIView):
         month_end = month_range(month)
         sync_loans(today)
 
-        accounts = list(Account.objects.filter(archived=False).order_by(tier_position(), "name", "id"))
+        accounts = list(Account.objects.visible().filter(archived=False).order_by(tier_position(), "name", "id"))
         # An import counts for every account it sent lines to, such as a
         # Revolut pocket account next to the upload's account.
         last_imports = dict(

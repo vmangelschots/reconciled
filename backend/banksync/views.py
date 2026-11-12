@@ -137,7 +137,7 @@ class StatusView(APIView):
             return Response({"enabled": False, "credentials": credentials})
         links = list(BankAccountLink.objects.select_related("account"))
         links_by_hash = {link.account_hash: link for link in links}
-        accounts = Account.objects.filter(archived=False).order_by("name")
+        accounts = Account.objects.visible().filter(archived=False).order_by("name")
         linked = {link.account_id for link in links}
         return Response(
             {
@@ -301,7 +301,7 @@ class LinksView(APIView):
         offered = next((a for a in connection.accounts if a["uid"] == request.data.get("uid")), None)
         if offered is None:
             return Response({"detail": "This bank account isn't part of the connection."}, status=400)
-        account = Account.objects.filter(pk=request.data.get("account_id"), archived=False).first()
+        account = Account.objects.visible().filter(pk=request.data.get("account_id"), archived=False).first()
         if account is None:
             return Response({"detail": "Pick an active account."}, status=400)
         if BankAccountLink.objects.filter(account=account).exists():

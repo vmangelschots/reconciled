@@ -42,3 +42,11 @@ class AccountSerializer(serializers.ModelSerializer):
         loan = self._loan(obj)
         return loan.paid_from_id if loan is not None else None
 
+
+class VisibleAccountField(serializers.PrimaryKeyRelatedField):
+    """An account the user can pick: never the off-bank account (see
+    Account.is_off_bank). The queryset is built per request, since
+    Account.objects is scoped to the bound household."""
+
+    def get_queryset(self):
+        return Account.objects.visible()

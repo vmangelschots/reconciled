@@ -1,9 +1,13 @@
 from datetime import date
 
+from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
 from households.testing import TestCase
+from rest_framework.test import APIClient
 
 from accounts.models import Account
 from budgets.models import Category
+from reports.balances import history_tier
 from reports.spending import month_spending
 
 from . import covered
@@ -155,3 +159,59 @@ class EditCoveredTests(CoveredTestCase):
         self.assertEqual(tab_detail(self.sarah).balance_cents, 0)
         spent, _ = month_spending(date(2026, 11, 1))
         self.assertNotIn(self.takeout.id, spent)
+
+
+class OffBankIsNotAnAccountTests(CoveredTestCase):
+    """"Covered entries are not in an account" in the accounts spec."""
+
+    def setUp(self):
+        super().setUp()
+        self.api = APIClient()
+        self.api.force_authenticate(get_user_model().objects.create_user(username="u", password="x"))
+        self.revolut = Account.objects.create(name="Revolut", account_type="checking", starting_balance_cents=5000)
+        self.entry()
+        self.off_bank = covered.off_bank_account()
+
+    def test_accounts_list(self):
+        names = [a["name"] for a in self.api.get("/api/accounts/").json()]
+
+        self.assertEqual(names, ["Joint", "Revolut"])
+
+    def test_overview_accounts_and_balance(self):
+        body = self.api.get("/api/reports/overview/", {"month": "2026-11"}).json()
+
+        self.assertEqual([a["name"] for a in body["accounts"]], ["Joint", "Revolut"])
+        self.assertEqual(body["balance_cents"], 5000)
+        self.assertEqual([t["tier"] for t in body["tiers"]], ["everyday"])
+
+    def test_no_ledger_of_its_own(self):
+        self.assertEqual(self.api.get(f"/api/accounts/{self.off_bank.pk}/").status_code, 404)
+        rows = self.api.get("/api/transactions/", {"account": self.off_bank.pk}).json()
+        self.assertEqual(rows if isinstance(rows, list) else rows.get("results"), [])
+
+    def test_not_a_transfer_target(self):
+        row = Transaction.objects.create(account=self.joint, date=date(2026, 11, 2), amount_cents=-100, payee="x")
+
+        response = self.api.post(f"/api/transactions/{row.pk}/transfer/", {"account": self.off_bank.pk}, format="json")
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_no_manual_transaction_into_it(self):
+        response = self.api.post(
+            "/api/transactions/",
+            {"account": self.off_bank.pk, "date": "2026-11-02", "amount_cents": -100, "payee": "x"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_not_a_forecast_or_import_account(self):
+        self.assertEqual(self.api.get("/api/forecast/", {"account": self.off_bank.pk}).status_code, 404)
+        upload = SimpleUploadedFile("a.csv", b"date,amount\n2026-01-01,1\n")
+        response = self.api.post("/api/import-sessions/", {"account": self.off_bank.pk, "file": upload}, format="multipart")
+        self.assertEqual(response.status_code, 400)
+
+    def test_net_worth_tier_with_only_savings(self):
+        Account.objects.filter(is_off_bank=False).update(account_type="savings")
+
+        self.assertEqual(history_tier(), "savings")

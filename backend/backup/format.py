@@ -115,10 +115,11 @@ def build_backup():
         "household": current_household().name,
         "migrations": _latest_migrations(),
         "summary": {
-            "accounts": Account.objects.count(),
+            "accounts": Account.objects.visible().count(),
             # The bank's lines, as the user counts them: split parts are
-            # inside their transaction.
-            "transactions": Transaction.objects.ledger_rows().count(),
+            # inside their transaction, and covered entries aren't any
+            # bank's.
+            "transactions": Transaction.objects.ledger_rows().filter(account__is_off_bank=False).count(),
         },
         "data": data,
     }

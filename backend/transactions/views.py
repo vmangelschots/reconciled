@@ -142,7 +142,7 @@ class TransactionViewSet(viewsets.ModelViewSet):
             return Response({"transaction": self._serialized(txn.pk)})
 
         try:
-            target = Account.objects.get(pk=request.data.get("account"))
+            target = Account.objects.visible().get(pk=request.data.get("account"))
         except (Account.DoesNotExist, ValueError, TypeError):
             return Response({"account": ["Unknown account."]}, status=status.HTTP_400_BAD_REQUEST)
         try:
@@ -218,7 +218,7 @@ class TransactionViewSet(viewsets.ModelViewSet):
         account_id = request.data.get("account")
         if account_id is not None:
             try:
-                account = Account.objects.get(pk=account_id)
+                account = Account.objects.visible().get(pk=account_id)
             except (Account.DoesNotExist, ValueError, TypeError):
                 return Response({"account": ["Unknown account."]}, status=status.HTTP_400_BAD_REQUEST)
             rows = rows.filter(account=account)
