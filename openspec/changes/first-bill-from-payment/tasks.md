@@ -2,7 +2,7 @@
 
 ## 1. Backend
 
-- [ ] 1.1 Make `bill_rows` return figures for every non-loan Bills category, with `bills: []`, all its outflows (and its subcategories') as `extras`, and the usual `review` flag when no bills count in the month; verify with tests: "Streaming" without bills and a PayPal 7.99 on 18 November has that payment in `extras`, `review` true in November and false in September, and its summary row still has no limit and isn't over; then run `python manage.py test budgets`
+- [x] 1.1 Make `bill_rows` return figures for every non-loan Bills category, with `bills: []`, all its outflows (and its subcategories') as `extras`, and the usual `review` flag when no bills count in the month; verify with tests: "Streaming" without bills and a PayPal 7.99 on 18 November has that payment in `extras`, `review` true in November and false in September, and its summary row still has no limit and isn't over; then run `python manage.py test budgets`
 
 ## 2. Frontend
 
