@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { setCategoryBills, setCategoryBudget, setCategoryLimit } from "../api/categories";
 import { cn } from "../lib/cn";
 import { formatMoney } from "../lib/money";
-import { currentMonth } from "../lib/months";
+import { currentMonth, monthLabel } from "../lib/months";
 import { formatShortMonth, historyValuesFor } from "../lib/yearlyBudgets";
 import { Button } from "./ui/Button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/Dialog";
@@ -180,7 +180,9 @@ export function BudgetEditor(props) {
   return <KindEditor {...props} />;
 }
 
-function KindEditor({ category, month, limitCents, startMonth, onSaved, onCancel }) {
+// `bills` are the viewed month's bills (from the summary), so a Bills
+// category is edited as that month sees it; changes apply from it on.
+function KindEditor({ category, month, limitCents, startMonth, bills, onSaved, onCancel }) {
   const initialKind = category.budget_kind ?? "monthly";
   const [kind, setKind] = useState(initialKind);
   const [amount, setAmount] = useState(
@@ -189,7 +191,7 @@ function KindEditor({ category, month, limitCents, startMonth, onSaved, onCancel
   const [thisMonthOnly, setThisMonthOnly] = useState(false);
   const [dueDay, setDueDay] = useState(category.yearly?.due ? String(Number(category.yearly.due.slice(3))) : "");
   const [dueMonth, setDueMonth] = useState(category.yearly?.due?.slice(0, 2) ?? "");
-  const [lines, setLines] = useState(() => (category.bills ?? []).map(billLine));
+  const [lines, setLines] = useState(() => (bills ?? category.bills ?? []).map(billLine));
   const [confirming, setConfirming] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const toast = useToast();
@@ -231,6 +233,7 @@ function KindEditor({ category, month, limitCents, startMonth, onSaved, onCancel
               day: Number(line.day),
               amount_cents: toCents(line.amount),
             })),
+          month,
         );
       } else if (kind === "monthly" && initialKind === "monthly") {
         await setCategoryLimit(category.id, { month: thisMonthOnly ? month : null, limit_cents: cents });
@@ -280,6 +283,9 @@ function KindEditor({ category, month, limitCents, startMonth, onSaved, onCancel
       <div className="flex flex-col items-start gap-3">
         <SegmentedControl label="Budget" options={KINDS} value={kind} onChange={changeKind} />
         {kind === "bills" && <BillLines lines={lines} onChange={setLines} />}
+        {kind === "bills" && (
+          <p className="text-xs text-ink-muted">Changes apply from {monthLabel(month)} on; earlier months keep theirs.</p>
+        )}
         {kind !== "bills" && (
           <label className="flex items-center gap-2 text-sm text-ink-secondary">
             <Input

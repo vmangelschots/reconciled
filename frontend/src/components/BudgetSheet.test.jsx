@@ -20,7 +20,7 @@ vi.mock("../api/budgets", async () => {
 
 vi.mock("../api/categories", async () => {
   const actual = await vi.importActual("../api/categories");
-  return { ...actual, listCategories: vi.fn(), setCategoryLimit: vi.fn(), setCategoryBudget: vi.fn(), setCategoryBills: vi.fn() };
+  return { ...actual, listCategories: vi.fn(), setCategoryLimit: vi.fn(), setCategoryBudget: vi.fn(), setCategoryBills: vi.fn(), addBillFromPayment: vi.fn() };
 });
 
 const YEARLY_CATEGORIES = [
@@ -136,6 +136,7 @@ beforeEach(() => {
   categoriesApi.setCategoryBudget.mockResolvedValue({});
   categoriesApi.setCategoryLimit.mockResolvedValue({});
   categoriesApi.setCategoryBills.mockResolvedValue({});
+  categoriesApi.addBillFromPayment.mockResolvedValue({});
   reportsApi.getSpendingCell.mockResolvedValue(CELL);
 });
 afterEach(() => vi.useRealTimers());
@@ -148,6 +149,13 @@ async function openRow(name) {
 
 async function openEditor(name) {
   await openRow(name);
+  return screen.findByRole("form", { name: `Budget for ${name}` });
+}
+
+// A Bills sheet lists its bills; Edit bills turns them into the editor.
+async function openBillsEditor(name) {
+  await openRow(name);
+  await userEvent.click(await screen.findByRole("button", { name: "Edit bills" }));
   return screen.findByRole("form", { name: `Budget for ${name}` });
 }
 
@@ -372,7 +380,7 @@ describe("Bills in the sheet", () => {
 
   it("adds a bill and saves the list", async () => {
     renderPage();
-    const form = await openEditor("Streaming");
+    const form = await openBillsEditor("Streaming");
     await userEvent.click(within(form).getByRole("button", { name: "Add bill" }));
     const days = within(form).getAllByLabelText("Day");
     const names = within(form).getAllByLabelText("Name");
@@ -389,7 +397,7 @@ describe("Bills in the sheet", () => {
       { id: 72, name: "Disney+", day: 8, amount_cents: 1199 },
       { id: 73, name: "Spotify", day: 26, amount_cents: 1099 },
       { name: "Apple TV", day: 21, amount_cents: 999 },
-    ]);
+    ], "2026-10");
   });
 
   it("asks before switching a monthly category to bills, then saves its bills", async () => {
@@ -407,12 +415,12 @@ describe("Bills in the sheet", () => {
     );
     await userEvent.click(within(dialog).getByRole("button", { name: "Switch to bills" }));
     expect(categoriesApi.setCategoryBudget).toHaveBeenCalledWith(1, { kind: "bills" });
-    expect(categoriesApi.setCategoryBills).toHaveBeenCalledWith(1, [{ name: "Weekly box", day: 1, amount_cents: 6000 }]);
+    expect(categoriesApi.setCategoryBills).toHaveBeenCalledWith(1, [{ name: "Weekly box", day: 1, amount_cents: 6000 }], "2026-10");
   });
 
   it("says how many bills switching away removes", async () => {
     renderPage();
-    const form = await openEditor("Streaming");
+    const form = await openBillsEditor("Streaming");
     await userEvent.click(within(form).getByRole("button", { name: "Monthly" }));
     await setAmount(form, "45");
     await userEvent.click(within(form).getByRole("button", { name: "Save" }));
@@ -421,7 +429,7 @@ describe("Bills in the sheet", () => {
 
   it("refuses a bill without a name", async () => {
     renderPage();
-    const form = await openEditor("Streaming");
+    const form = await openBillsEditor("Streaming");
     await userEvent.clear(within(form).getAllByLabelText("Name")[0]);
     await userEvent.click(within(form).getByRole("button", { name: "Save" }));
     expect(await screen.findByText("Give each bill a name.")).toBeInTheDocument();
@@ -459,6 +467,8 @@ describe("A loan category in the sheet", () => {
     expect(screen.getByRole("link", { name: "House A" })).toHaveAttribute("href", "/transactions/4/schedule");
     expect(screen.queryByRole("form", { name: "Budget for Mortgage" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Bills" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Edit bills" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "To review" })).toBeNull();
   });
 
   it("marks each loan bill and links it to its schedule", async () => {
@@ -469,6 +479,76 @@ describe("A loan category in the sheet", () => {
     expect(houseB).toHaveAttribute("href", "/transactions/5/schedule");
     expect(within(houseB).getByLabelText("From a loan")).toBeInTheDocument();
     expect(within(list).getAllByRole("listitem")[1]).toHaveTextContent("Not seen");
+  });
+});
+
+describe("To review in a Bills sheet", () => {
+  const netflixUp = bill(71, "Netflix", 5, 1799, "paid_over", {
+    paid_on: "2026-10-05", paid_cents: 1999, difference_cents: 200, source: "manual",
+  });
+  const reviewRow = (fields = {}) => ({
+    ...STREAMING_ROW,
+    spent_cents: 4097,
+    bills: [netflixUp, { ...STREAMING_ROW.bills[1], source: "manual" }, { ...STREAMING_ROW.bills[2], source: "manual" }],
+    extras: [{ id: 91, date: "2026-10-18", payee: "PayPal", amount_cents: 799 }],
+    review: true,
+    ...fields,
+  });
+
+  function withRow(row) {
+    categoriesApi.listCategories.mockResolvedValue([...YEARLY_CATEGORIES, STREAMING]);
+    budgetsApi.getBudgetSummary.mockResolvedValue(summary({}, { categories: [GROCERIES_ROW, TRANSPORT_ROW, row] }));
+  }
+
+  it("offers to update a bill paid at another amount, from the viewed month on", async () => {
+    withRow(reviewRow());
+    renderPage();
+    await openRow("Streaming");
+    const review = await screen.findByRole("region", { name: "To review" });
+    expect(review).toHaveTextContent(`Netflix paid ${formatMoney(1999)}, expected ${formatMoney(1799)}`);
+    const bills = screen.getByRole("list", { name: "This month's bills" });
+    expect(within(bills).getAllByRole("listitem")[0]).toHaveTextContent(`+${formatMoney(200)}`);
+
+    await userEvent.click(within(review).getByRole("button", { name: "Update" }));
+    expect(categoriesApi.setCategoryBills).toHaveBeenCalledWith(7, [
+      { id: 71, name: "Netflix", day: 5, amount_cents: 1999 },
+      { id: 72, name: "Disney+", day: 8, amount_cents: 1199 },
+      { id: 73, name: "Spotify", day: 26, amount_cents: 1099 },
+    ], "2026-10");
+    expect(await screen.findByText(`Netflix is ${formatMoney(1999)} from October 2026 on.`)).toBeInTheDocument();
+  });
+
+  it("adds a PayPal payment as a bill under the name given", async () => {
+    withRow(reviewRow());
+    renderPage();
+    await openRow("Streaming");
+    const review = await screen.findByRole("region", { name: "To review" });
+    await userEvent.click(within(review).getByRole("button", { name: "Add as bill" }));
+    const name = within(review).getByLabelText("Bill name");
+    expect(name).toHaveValue("PayPal");
+    await userEvent.clear(name);
+    await userEvent.type(name, "Apple TV{Enter}");
+    expect(categoriesApi.addBillFromPayment).toHaveBeenCalledWith(7, 91, "Apple TV");
+  });
+
+  it("shows nothing to review outside this month and the one before", async () => {
+    withRow(reviewRow({ review: false }));
+    renderPage();
+    await openRow("Streaming");
+    await screen.findByRole("list", { name: "This month's bills" });
+    expect(screen.queryByRole("region", { name: "To review" })).toBeNull();
+  });
+
+  it("lists the bills once and folds the transactions away", async () => {
+    withRow(reviewRow());
+    renderPage();
+    await openRow("Streaming");
+    await screen.findByRole("list", { name: "This month's bills" });
+    expect(screen.queryByRole("form", { name: "Budget for Streaming" })).toBeNull();
+    const toggle = await screen.findByRole("button", { name: /1 transactions in October 2026/ });
+    expect(screen.queryByText("Delhaize")).toBeNull();
+    await userEvent.click(toggle);
+    expect(await screen.findByText("Delhaize")).toBeInTheDocument();
   });
 });
 

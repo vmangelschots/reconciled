@@ -56,6 +56,12 @@ export function BudgetsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [month]);
 
+  // After a change from inside the sheet, which stays open.
+  async function reloadAll() {
+    await listCategories().then(setCategories);
+    await reloadSummary();
+  }
+
   async function handleBudgetSaved(id) {
     toast.success("Budget updated.");
     setSelectedId(null);
@@ -149,7 +155,7 @@ export function BudgetsPage() {
         startMonth={summary?.yearly?.start_month}
         wide={isWide}
         onSaved={handleBudgetSaved}
-        onChanged={reloadSummary}
+        onChanged={reloadAll}
         onClose={() => setSelectedId(null)}
       />
     </section>
