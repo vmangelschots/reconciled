@@ -2,7 +2,7 @@
 
 ## 1. Matching
 
-- [ ] 1.1 Rewrite `budgets/bills.py` `match` as global pairing within the month (pairs inside an amount window of the larger of 15% and 2.00, sorted by amount difference, distance to the bill's day, bill day, bill id, outflow id; greedy) and remove `MATCH_DAYS`; verify by updating `MatchTests` (too far from its day now pays; the old 5.00 window case no longer matches) and adding tests for: every payee PayPal, an earlier bill not taking a later bill's payment (Disney+/Spotify on 22 Nov), same amount three days apart, an 8.00 outflow not paying a 10.99 bill, and an outflow paying at most one bill
+- [x] 1.1 Rewrite `budgets/bills.py` `match` as global pairing within the month (pairs inside an amount window of the larger of 15% and 2.00, sorted by amount difference, distance to the bill's day, bill day, bill id, outflow id; greedy) and remove `MATCH_DAYS`; verify by updating `MatchTests` (too far from its day now pays; the old 5.00 window case no longer matches) and adding tests for: every payee PayPal, an earlier bill not taking a later bill's payment (Disney+/Spotify on 22 Nov), same amount three days apart, an 8.00 outflow not paying a 10.99 bill, and an outflow paying at most one bill
 
 ## 2. Bills from the viewed month on
 

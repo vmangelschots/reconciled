@@ -165,22 +165,42 @@ class MatchTests(SimpleTestCase):
     def test_a_day_late(self):
         self.assertEqual(match([bill(1, 5, 1799)], [out(10, 6, 1799)], NOV_2026), {1: out(10, 6, 1799)})
 
-    def test_too_far_from_its_day(self):
-        self.assertEqual(match([bill(1, 21, 1099)], [out(10, 27, 1099)], NOV_2026), {})
+    def test_too_far_from_its_day_still_pays(self):
+        self.assertEqual(match([bill(1, 21, 1099)], [out(10, 27, 1099)], NOV_2026), {1: out(10, 27, 1099)})
 
     def test_not_across_months(self):
         self.assertEqual(match([bill(1, 30, 2500)], [out(10, 2, 2500, month=12)], NOV_2026), {})
 
     def test_outside_the_amount_window(self):
-        # 30% of 17.99 is 5.39; 24.00 is 6.01 away.
-        self.assertEqual(match([bill(1, 5, 1799)], [out(10, 5, 2400)], NOV_2026), {})
+        # 15% of 17.99 is 2.69; 21.00 is 3.01 away.
+        self.assertEqual(match([bill(1, 5, 1799)], [out(10, 5, 2100)], NOV_2026), {})
 
-    def test_small_bills_have_a_5_euro_window(self):
-        self.assertIn(1, match([bill(1, 21, 1099)], [out(10, 21, 1599)], NOV_2026))
+    def test_small_bills_have_a_2_euro_window(self):
+        self.assertIn(1, match([bill(1, 21, 1099)], [out(10, 21, 1299)], NOV_2026))
+        # The old 5.00 window no longer matches.
+        self.assertEqual(match([bill(1, 21, 1099)], [out(10, 21, 1599)], NOV_2026), {})
+
+    def test_far_from_the_amount(self):
+        self.assertEqual(match([bill(1, 21, 1099)], [out(10, 21, 800)], NOV_2026), {})
 
     def test_the_closest_amount_wins(self):
-        result = match([bill(1, 5, 1799)], [out(10, 5, 1500), out(11, 4, 1799)], NOV_2026)
+        result = match([bill(1, 5, 1799)], [out(10, 5, 1599), out(11, 4, 1799)], NOV_2026)
         self.assertEqual(result[1].id, 11)
+
+    def test_every_payee_is_paypal(self):
+        bills = [bill(1, 5, 1799), bill(2, 8, 1199), bill(3, 21, 1099)]
+        outflows = [out(10, 6, 1099), out(11, 9, 1799), out(12, 22, 1199)]
+        result = match(bills, outflows, NOV_2026)
+        self.assertEqual({b: o.cents for b, o in result.items()}, {1: 1799, 2: 1199, 3: 1099})
+
+    def test_an_earlier_bill_doesnt_take_a_later_bills_payment(self):
+        # On 22 November: Disney+ (8th) unpaid, Spotify (21st) paid 10.99.
+        result = match([bill(1, 8, 1199), bill(2, 21, 1099)], [out(10, 21, 1099)], NOV_2026)
+        self.assertEqual(list(result), [2])
+
+    def test_same_amount_three_days_apart(self):
+        result = match([bill(1, 3, 2500), bill(2, 6, 2500)], [out(10, 3, 2500), out(11, 6, 2500)], NOV_2026)
+        self.assertEqual((result[1].id, result[2].id), (10, 11))
 
     def test_two_bills_of_the_same_amount(self):
         result = match([bill(1, 3, 2500), bill(2, 3, 2500)], [out(10, 3, 2500), out(11, 3, 2500)], NOV_2026)

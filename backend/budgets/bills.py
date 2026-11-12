@@ -15,8 +15,6 @@ from transactions.models import Transaction
 
 from .utils import month_range
 
-# A payment this many days either side of a bill's day can pay it.
-MATCH_DAYS = 4
 # An unpaid bill this many days or fewer before its day is due soon.
 DUE_SOON_DAYS = 3
 # Days after its day before an unpaid bill is missed - the same as loans.
@@ -39,8 +37,9 @@ def due_date(month, day):
 
 def amount_window(amount_cents):
     """How far a payment may be from a bill's amount and still pay it: the
-    larger of 30% and 5.00."""
-    return max(amount_cents * 30 // 100, 500)
+    larger of 15% and 2.00. Close enough that a matched amount can be
+    offered as the bill's new price - see openspec/specs/bill-budgets."""
+    return max(amount_cents * 15 // 100, 200)
 
 
 def paid_tolerance(amount_cents):
@@ -50,31 +49,27 @@ def paid_tolerance(amount_cents):
 
 
 def match(bills, outflows, month):
-    """{bill.id: Outflow} for the bills of one category in `month`. Bills go
-    in order of their day; each takes the unused outflow within MATCH_DAYS of
-    its date and inside its amount window that is closest in amount, then in
-    date. Each outflow pays at most one bill."""
-    used = set()
-    matches = {}
-    for bill in sorted(bills, key=lambda b: (b.day, b.id)):
+    """{bill.id: Outflow} for the bills of one category in `month`: every
+    bill and outflow of the month within the amount window are paired at
+    once, the pair closest in amount first, then the one closest to the
+    bill's day. Each bill takes at most one outflow and each outflow pays at
+    most one bill. The payee doesn't matter: with PayPal it says nothing."""
+    pairs = []
+    for bill in bills:
         due = due_date(month, bill.day)
         window = amount_window(bill.amount_cents)
-        candidates = [
-            o
-            for o in outflows
-            if o.id not in used
-            and o.date.year == month.year
-            and o.date.month == month.month
-            and abs((o.date - due).days) <= MATCH_DAYS
-            and abs(o.cents - bill.amount_cents) <= window
-        ]
-        if not candidates:
+        for o in outflows:
+            diff = abs(o.cents - bill.amount_cents)
+            if o.date.year == month.year and o.date.month == month.month and diff <= window:
+                pairs.append((diff, abs((o.date - due).days), bill.day, bill.id, o.id, bill, o))
+    pairs.sort(key=lambda p: p[:5])
+    matches, used = {}, set()
+    for *_, bill, outflow in pairs:
+        if bill.id in matches or outflow.id in used:
             continue
-        best = min(candidates, key=lambda o: (abs(o.cents - bill.amount_cents), abs((o.date - due).days), o.id))
-        used.add(best.id)
-        matches[bill.id] = best
+        matches[bill.id] = outflow
+        used.add(outflow.id)
     return matches
-
 
 def bill_state(amount_cents, due, payment, ref_day, month_over, future):
     """One of paid_over, paid, upcoming, due_soon, not_seen or missed, as of
