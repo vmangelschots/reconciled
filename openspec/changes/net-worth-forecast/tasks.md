@@ -17,7 +17,7 @@
 
 ## 4. Integration check
 
-- [ ] 4.1 With `/run-reconciled`, seed the demo household, add a salary and a transfer to savings, and confirm in the running app: the Net worth view over 1/3/5 years with interest-only loan steps and no change from the transfer, the Overview's dashed 12-month projection matching the Forecast page's first year, and the page at phone width
+- [x] 4.1 With `/run-reconciled`, seed the demo household, add a salary and a transfer to savings, and confirm in the running app: the Net worth view over 1/3/5 years with interest-only loan steps and no change from the transfer, the Overview's dashed 12-month projection matching the Forecast page's first year, and the page at phone width
 
 ## Workflow follow-up
 
