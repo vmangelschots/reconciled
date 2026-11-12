@@ -340,7 +340,8 @@ function recentLabel(row) {
 
 // A transfer between the user's accounts reads "<from> → <to>" with the
 // amount moved; otherwise the payee and its signed amount. With several
-// accounts, the account name sits under the amount.
+// accounts, the account name sits under the amount; a covered entry
+// always shows "Paid by <tab>" there.
 function RecentTransactions({ rows, showAccounts }) {
   if (rows.length === 0) {
     return <EmptyState className="pb-4">No transactions yet.</EmptyState>;
@@ -350,6 +351,9 @@ function RecentTransactions({ rows, showAccounts }) {
       {rows.map((row) => (
         <ListRow
           key={row.id}
+          // A covered entry - what a tab's person paid for the user -
+          // opens its tab, where it's edited.
+          to={row.paid_by_tab != null ? `/tabs/${row.paid_by_tab}` : undefined}
           icon={row.is_tab ? <HandCoins className="h-4 w-4" /> : null}
           primary={
             row.transfer_account_name
@@ -366,7 +370,7 @@ function RecentTransactions({ rows, showAccounts }) {
               ) : (
                 <Amount cents={row.amount_cents} signed />
               )}
-              {showAccounts && !row.transfer_account_name && (
+              {(showAccounts || row.paid_by_tab != null) && !row.transfer_account_name && (
                 <span className="max-w-28 truncate text-xs text-ink-muted">{row.account_name}</span>
               )}
             </span>

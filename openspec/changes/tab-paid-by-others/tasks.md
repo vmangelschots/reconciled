@@ -37,11 +37,11 @@
 
 ## 4. Elsewhere in the UI
 
-- [ ] 4.1 Show "Paid by <Tab>" as a link to the tab page in place of the account name in Overview recent transactions and in the `SpendingSheet` and `BudgetSheet` transaction lists. Show no "part of" and no edit affordance. Verify in `OverviewPage.test.jsx`, `SpendingSheet.test.jsx` and `BudgetSheet.test.jsx`.
+- [x] 4.1 Show "Paid by <Tab>" as a link to the tab page in place of the account name in Overview recent transactions and in the `SpendingSheet` and `BudgetSheet` transaction lists. Show no "part of" and no edit affordance. Verify in `OverviewPage.test.jsx`, `SpendingSheet.test.jsx` and `BudgetSheet.test.jsx`.
 
 ## 5. Whole change
 
-- [ ] 5.1 Run `python manage.py test`, and `npm test`, `npm run lint` and `npm run build` in `frontend/`, and verify all pass.
+- [x] 5.1 Run `python manage.py test`, and `npm test`, `npm run lint` and `npm run build` in `frontend/`, and verify all pass.
 - [ ] 5.2 In the running app at 1280px and 390px wide, on a tab owed 10.00, add a 15.00 takeout entry Sarah paid for. Then:
   - Check that the preview and the balance read "You owe Sarah €5.00".
   - Check that the Takeout budget and report count it.

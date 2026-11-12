@@ -601,6 +601,25 @@ describe("Recent transactions", () => {
     const [only] = await within(recent).findAllByRole("listitem");
     expect(only.textContent).not.toMatch(/Joint/);
   });
+
+  it("shows a covered entry with Paid by its tab, linking to the tab, even with one account", async () => {
+    overviewApi.getOverview.mockResolvedValue(
+      overview({
+        recent: [
+          row({
+            id: 7, date: "2026-10-23", payee: "Sushi Palace", amount_cents: -1500, account_name: "Paid by Sarah",
+            paid_by_tab: 11, category_label: "Takeout",
+          }),
+        ],
+      }),
+    );
+    renderPage();
+    const recent = await screen.findByRole("region", { name: "Recent transactions" });
+
+    const link = await within(recent).findByRole("link", { name: /Sushi Palace/ });
+    expect(link).toHaveAttribute("href", "/tabs/11");
+    expect(link.textContent).toMatch(/Sushi Palace.*Takeout.*-€15\.00.*Paid by Sarah/);
+  });
 });
 
 describe("Spending by category view", () => {
