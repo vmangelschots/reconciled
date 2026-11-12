@@ -21,6 +21,7 @@ class CategorySerializer(serializers.ModelSerializer):
     yearly = serializers.SerializerMethodField()
     yearly_history = serializers.SerializerMethodField()
     monthly_limits = serializers.SerializerMethodField()
+    bills = serializers.SerializerMethodField()
 
     class Meta:
         model = Category
@@ -35,6 +36,7 @@ class CategorySerializer(serializers.ModelSerializer):
             "yearly",
             "yearly_history",
             "monthly_limits",
+            "bills",
             "created_at",
             "updated_at",
         ]
@@ -65,6 +67,18 @@ class CategorySerializer(serializers.ModelSerializer):
         limits = list(category.limits.all())
         default = next((limit.limit_cents for limit in limits if limit.month is None), None)
         return {"default_cents": default, "override_count": sum(1 for limit in limits if limit.month is not None)}
+
+    def get_bills(self, category):
+        return [
+            {
+                "id": bill.id,
+                "name": bill.name,
+                "day": bill.day,
+                "amount_cents": bill.amount_cents,
+                "from_month": bill.from_month.isoformat()[:7],
+            }
+            for bill in sorted(category.bills.all(), key=lambda b: (b.day, b.id))
+        ]
 
     def validate_parent(self, parent):
         if parent is None:

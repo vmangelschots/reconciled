@@ -1,4 +1,5 @@
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
 from households.scoping import HouseholdOwned, HouseholdScoped
@@ -33,9 +34,11 @@ class Category(HouseholdOwned):
         YEARLY = "yearly"
         # Yearly on a date: one amount due on a day and month each year.
         TARGET = "target"
+        # A list of fixed monthly bills - see budgets/bills.py.
+        BILLS = "bills"
 
-    # Monthly amounts live in CategoryLimit, yearly ones in YearlyBudget -
-    # see openspec/specs/yearly-budgets.
+    # Monthly amounts live in CategoryLimit, yearly ones in YearlyBudget,
+    # bills in Bill - see openspec/specs/yearly-budgets and bill-budgets.
     budget_kind = models.CharField(max_length=10, choices=BudgetKind.choices, default=BudgetKind.MONTHLY)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -141,6 +144,30 @@ class YearlyBudget(HouseholdScoped):
 
     def __str__(self):
         return f"{self.category.name} ({self.from_year}+): {self.amount_cents}"
+
+
+class Bill(HouseholdScoped):
+    """One fixed monthly bill of a Bills category: its amount, due on `day`
+    (the month's last day when it has fewer days). It counts from
+    `from_month`, the first of the month it was added, and has no history:
+    an edit applies to every month it counts in. See
+    openspec/specs/bill-budgets."""
+
+    household_path = "category__household"
+
+    category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name="bills")
+    name = models.CharField(max_length=255)
+    day = models.PositiveSmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(31)])
+    amount_cents = models.BigIntegerField(validators=[MinValueValidator(1)])
+    from_month = models.DateField()
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["day", "id"]
+
+    def __str__(self):
+        return f"{self.category.name}: {self.name} on the {self.day}"
 
 
 class BudgetSettings(HouseholdScoped):

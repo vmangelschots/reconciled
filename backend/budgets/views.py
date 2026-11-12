@@ -9,7 +9,7 @@ from reports.spending import month_spending
 
 from . import utils
 from .attention import attention_categories, attention_yearly
-from .models import BudgetSettings, Category, CategoryLimit, YearlyBudget
+from .models import Bill, BudgetSettings, Category, CategoryLimit, YearlyBudget
 from .serializers import CategorySerializer
 from .summary import budget_rows, budget_totals, uncategorized_spent, yearly_spent_cents
 from .yearly import yearly_rows
@@ -24,7 +24,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         return (
             Category.objects.select_related("parent")
-            .prefetch_related("yearly_budgets", "limits")
+            .prefetch_related("yearly_budgets", "limits", "bills")
             .annotate(transaction_count=Count("transactions"))
         )
 
@@ -63,6 +63,8 @@ class CategoryViewSet(viewsets.ModelViewSet):
         category = self.get_object()
         if category.is_tab_group or category.is_tab:
             return Response({"detail": "Tabs aren't budgeted, so they take no limit."}, status=400)
+        if category.budget_kind == Category.BudgetKind.BILLS:
+            return Response({"detail": "This category has bills, so it takes no monthly limit."}, status=400)
         if category.budget_kind != Category.BudgetKind.MONTHLY:
             return Response({"detail": "This category has a yearly budget, so it takes no monthly limit."}, status=400)
         limit_cents = request.data.get("limit_cents")
@@ -89,13 +91,14 @@ class CategoryViewSet(viewsets.ModelViewSet):
         due: "MM-DD"}. Switching to or from monthly removes the other
         side's amounts; switching between the yearly kinds keeps the
         amount and history. A yearly amount applies from the current year
-        on - see openspec/specs/yearly-budgets."""
+        on - see openspec/specs/yearly-budgets. Bills takes no amount: its
+        bills are set with PUT .../bills/."""
         category = self.get_object()
         if category.is_tab_group or category.is_tab:
             return Response({"detail": "Tabs aren't budgeted, so they take no budget."}, status=400)
         kind = request.data.get("kind")
         if kind not in Category.BudgetKind.values:
-            return Response({"kind": "Must be monthly, yearly or target."}, status=400)
+            return Response({"kind": "Must be monthly, yearly, target or bills."}, status=400)
         amount_cents = request.data.get("amount_cents")
         if amount_cents is not None and (not isinstance(amount_cents, int) or amount_cents < 0):
             return Response({"amount_cents": "Must be a whole number of cents, 0 or more."}, status=400)
@@ -111,7 +114,14 @@ class CategoryViewSet(viewsets.ModelViewSet):
                 return Response({"due": str(exc)}, status=400)
 
         with transaction.atomic():
-            if kind == Category.BudgetKind.MONTHLY:
+            # Bills belong to the Bills kind only; any other kind's amounts
+            # go when switching to Bills - see openspec/specs/bill-budgets.
+            if kind != Category.BudgetKind.BILLS:
+                category.bills.all().delete()
+            if kind == Category.BudgetKind.BILLS:
+                category.limits.all().delete()
+                category.yearly_budgets.all().delete()
+            elif kind == Category.BudgetKind.MONTHLY:
                 category.yearly_budgets.all().delete()
                 if amount_cents is not None:
                     CategoryLimit.objects.update_or_create(
@@ -129,6 +139,55 @@ class CategoryViewSet(viewsets.ModelViewSet):
             category.save(update_fields=["budget_kind", "updated_at"])
 
         return Response(CategorySerializer(self.get_queryset().get(pk=category.pk)).data)
+
+    @action(detail=True, methods=["put"], url_path="bills")
+    def set_bills(self, request, pk=None):
+        """Replace a Bills category's bills: {bills: [{id?, name, day,
+        amount_cents}]}. A line with an id updates that bill and keeps the
+        month it counts from; a new line counts from the current month;
+        bills left out are deleted - see openspec/specs/bill-budgets."""
+        category = self.get_object()
+        if category.budget_kind != Category.BudgetKind.BILLS:
+            return Response({"detail": "Only a Bills category takes bills."}, status=400)
+        lines = request.data.get("bills")
+        if not isinstance(lines, list):
+            return Response({"bills": "Must be a list of bills."}, status=400)
+        errors, cleaned = self._clean_bills(category, lines)
+        if errors:
+            return Response({"bills": errors}, status=400)
+
+        this_month = utils.today().replace(day=1)
+        with transaction.atomic():
+            keep = {line["id"] for line in cleaned if line["id"] is not None}
+            category.bills.exclude(id__in=keep).delete()
+            for line in cleaned:
+                values = {"name": line["name"], "day": line["day"], "amount_cents": line["amount_cents"]}
+                if line["id"] is None:
+                    Bill.objects.create(category=category, from_month=this_month, **values)
+                else:
+                    Bill.objects.filter(id=line["id"]).update(**values)
+        return Response(CategorySerializer(self.get_queryset().get(pk=category.pk)).data)
+
+    @staticmethod
+    def _clean_bills(category, lines):
+        existing = set(category.bills.values_list("id", flat=True))
+        errors, cleaned = [], []
+        for line in lines:
+            line = line if isinstance(line, dict) else {}
+            error = {}
+            name = str(line.get("name") or "").strip()
+            day, amount, bill_id = line.get("day"), line.get("amount_cents"), line.get("id")
+            if not name:
+                error["name"] = "A bill needs a name."
+            if not isinstance(day, int) or isinstance(day, bool) or not 1 <= day <= 31:
+                error["day"] = "Must be a day from 1 to 31."
+            if not isinstance(amount, int) or isinstance(amount, bool) or amount <= 0:
+                error["amount_cents"] = "Must be a whole number of cents above 0."
+            if bill_id is not None and bill_id not in existing:
+                error["id"] = "Not a bill of this category."
+            errors.append(error)
+            cleaned.append({"id": bill_id, "name": name, "day": day, "amount_cents": amount})
+        return ([e for e in errors] if any(errors) else []), cleaned
 
 
 class BudgetSummaryView(APIView):

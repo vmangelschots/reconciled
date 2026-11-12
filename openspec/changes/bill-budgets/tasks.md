@@ -2,9 +2,9 @@
 
 ## 1. Bill model and API
 
-- [ ] 1.1 Add `Category.BudgetKind.BILLS` and the `budgets.Bill` model (category, name, day 1–31, amount_cents > 0, from_month, timestamps) with its migration; verify `python manage.py makemigrations --check` is clean after the migration and a model test rejects day 0/32 and amount 0 via `full_clean`
-- [ ] 1.2 Extend `set_budget` for `kind: "bills"` (no amount; switching to Bills deletes limits or yearly rows, switching away deletes bills) and add `bills` to `CategorySerializer`; verify with tests in `budgets/tests.py` for monthly→bills, yearly→bills, bills→monthly and the serialized bills
-- [ ] 1.3 Add `PUT /api/categories/{id}/bills` (replace list: keep ids and their `from_month`, new lines get the current month, delete missing; 400 for non-Bills category, bad day, empty name, amount <= 0; tabs rejected); verify with API tests for create, edit-keeps-from_month, delete and each rejection
+- [x] 1.1 Add `Category.BudgetKind.BILLS` and the `budgets.Bill` model (category, name, day 1–31, amount_cents > 0, from_month, timestamps) with its migration; verify `python manage.py makemigrations --check` is clean after the migration and a model test rejects day 0/32 and amount 0 via `full_clean`
+- [x] 1.2 Extend `set_budget` for `kind: "bills"` (no amount; switching to Bills deletes limits or yearly rows, switching away deletes bills) and add `bills` to `CategorySerializer`; verify with tests in `budgets/tests.py` for monthly→bills, yearly→bills, bills→monthly and the serialized bills
+- [x] 1.3 Add `PUT /api/categories/{id}/bills` (replace list: keep ids and their `from_month`, new lines get the current month, delete missing; 400 for non-Bills category, bad day, empty name, amount <= 0; tabs rejected); verify with API tests for create, edit-keeps-from_month, delete and each rejection
 
 ## 2. Matching and states
 
