@@ -36,7 +36,7 @@ reports.
 - A tab that has covered entries stays a tab. It can't be moved out of
   its tab group, and the tab half of an entry can only sit on a tab.
 
-Issue: none yet. Create one before the PR (`enhancement`).
+Issue: #51
 
 Out of scope:
 - Shared bills in the form (Sarah pays €30, your share is €15). For now,

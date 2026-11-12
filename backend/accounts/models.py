@@ -1,7 +1,7 @@
 from django.db import models
 from django.db.models import Case, IntegerField, Sum, Value, When
 
-from households.scoping import HouseholdOwned, HouseholdScoped
+from households.scoping import HouseholdManager, HouseholdOwned, HouseholdQuerySet, HouseholdScoped
 
 # Tiers from most to least liquid; an account's tier follows its type.
 # See the accounts spec's "Account tiers".
@@ -30,6 +30,14 @@ def tier_position():
     )
 
 
+class AccountQuerySet(HouseholdQuerySet):
+    def visible(self):
+        """The user's own accounts: everything except the off-bank account
+        that holds covered entries. Every place that lists, offers or looks
+        up an account for the user goes through this."""
+        return self.filter(is_off_bank=False)
+
+
 class Account(HouseholdOwned):
     class AccountType(models.TextChoices):
         CHECKING = "checking", "Checking"
@@ -48,11 +56,22 @@ class Account(HouseholdOwned):
     # Portfolio Performance cash accounts left out of this account's value:
     # see openspec/specs/portfolio-value-import.
     portfolio_excluded_cash = models.JSONField(default=list, blank=True)
+    # The one account per household that holds covered entries (what a
+    # tab's person paid for the user, see transactions/covered.py). It is
+    # never listed, offered or totalled as an account: use visible().
+    is_off_bank = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    objects = HouseholdManager.from_queryset(AccountQuerySet)()
+
     class Meta:
         ordering = ["name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["household"], condition=models.Q(is_off_bank=True), name="one_off_bank_account"
+            )
+        ]
 
     def __str__(self):
         return self.name

@@ -2,12 +2,12 @@
 
 ## 1. Data model
 
-- [ ] 1.1 Add `Account.is_off_bank`, `AccountQuerySet.visible()` and the migration. Verify in `accounts` tests that `visible()` leaves out the off-bank account and that its balance is 0 with covered entries in it.
-- [ ] 1.2 Add `Transaction.covered_tab_row` (self one-to-one, CASCADE, `related_name="covered_cost"`) and the migration. Verify that deleting a tab half deletes its cost half.
+- [x] 1.1 Add `Account.is_off_bank`, `AccountQuerySet.visible()` and the migration. Verify in `accounts` tests that `visible()` leaves out the off-bank account and that its balance is 0 with covered entries in it.
+- [x] 1.2 Add `Transaction.covered_tab_row` (self one-to-one, CASCADE, `related_name="covered_cost"`) and the migration. Verify that deleting a tab half deletes its cost half.
 
 ## 2. Covered entries backend
 
-- [ ] 2.1 Add `transactions/covered.py` with `create`, `update` and `delete`. They work on both halves atomically, create the off-bank account lazily, and reject an amount of zero or less and a category that is a tab or tab group. Verify in `tests_covered.py` with the "Record what the tab's person paid for" and "A covered entry's category is not a tab" scenarios, including that `tabs.tab_detail` and `reports.spending.month_spending` see the right amounts.
+- [x] 2.1 Add `transactions/covered.py` with `create`, `update` and `delete`. They work on both halves atomically, create the off-bank account lazily, and reject an amount of zero or less and a category that is a tab or tab group. Verify in `tests_covered.py` with the "Record what the tab's person paid for" and "A covered entry's category is not a tab" scenarios, including that `tabs.tab_detail` and `reports.spending.month_spending` see the right amounts.
 - [ ] 2.2 Add `POST`, `PATCH` and `DELETE` under `/tabs/{id}/covered/`. Add `kind`, `covered_category` and `notes` to the tab detail rows. Verify in `tests_tab_api.py` with the edit and delete scenarios, and that a 404 is returned for a row that isn't a covered entry on that tab.
 - [ ] 2.3 Guard the pair:
   - Reject recategorizing either half through transaction update, bulk categorize and split. The tab half may still move to another tab.
@@ -51,6 +51,5 @@
 
 ## Workflow follow-up
 
-- Create a GitHub issue (`enhancement`, project Reconciled) and add "Issue: #N" to `proposal.md`.
 - Archive the change on its branch before the PR is merged.
-- Open the PR with `Fixes #N`.
+- Open the PR with `Fixes #51`.
