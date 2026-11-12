@@ -4,10 +4,9 @@
 
 ### Requirement: What a backup holds
 A backup SHALL hold every account; every transaction, with its splits,
-transfer links, value adjustments, notes, category guesses and whether it
-was marked as extra to its bills; categories and tabs; monthly limits;
-yearly budgets; bills with their last month and one-month amounts; the
-budget settings; recurring
+transfer links, value adjustments, notes and category guesses; categories
+and tabs; monthly limits; yearly budgets; bills with the months they
+count in; the budget settings; recurring
 transactions; loan setups and their balance corrections, with the links
 between scheduled adjustments and their installments, corrections and
 payments; the remembered import mappings; when each account was last
@@ -68,8 +67,6 @@ SHALL get new ids.
 - **THEN** it restores, with no bills
 
 #### Scenario: Bill history survives
-- **WHEN** Netflix was 17.99 until October, is 19.99 from November and
-  expects 21.99 in December only, and a payment is marked as extra, and a
-  backup of it is restored
-- **THEN** the same months expect the same amounts, and the payment is
-  still marked as extra
+- **WHEN** Netflix was 17.99 until October and is 19.99 from November, and
+  a backup of it is restored
+- **THEN** October still expects 17.99 and November 19.99
