@@ -23,8 +23,8 @@
 
 ## 5. Frontend data and wording
 
-- [ ] 5.1 Add `api/categories.js` `setCategoryBills` and accept `kind: "bills"` in `setCategoryBudget`; verify with a test of the request shape
-- [ ] 5.2 In `lib/budgetOverview.js` add `BILL_TONE`, `billsRow` (figure "€X to pay" / "Paid" / "€N over", caption "n of m paid · <most pressing>"), `billWarning` ("Spotify missed", "Streaming · due 21 Nov · €11"), include bill items in `verdict`, and route Bills rows in `budgetList`; verify with `budgetOverview.test.js` cases for the "Two of three paid", "All paid" and "A missed bill" scenarios and the verdict count
+- [x] 5.1 Add `api/categories.js` `setCategoryBills` and accept `kind: "bills"` in `setCategoryBudget`; verify with a test of the request shape
+- [x] 5.2 In `lib/budgetOverview.js` add `BILL_TONE`, `billsRow` (figure "€X to pay" / "Paid" / "€N over", caption "n of m paid · <most pressing>"), `billWarning` ("Spotify missed", "Streaming · due 21 Nov · €11"), include bill items in `verdict`, and route Bills rows in `budgetList`; verify with `budgetOverview.test.js` cases for the "Two of three paid", "All paid" and "A missed bill" scenarios and the verdict count
 
 ## 6. Frontend UI
 

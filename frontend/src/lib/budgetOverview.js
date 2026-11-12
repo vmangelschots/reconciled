@@ -1,8 +1,50 @@
 // Turns the budget summary into what the Budgets page shows, and the wording
 // it shares with the overview - see specs/budget-overview.
-import { formatMoneyWhole as whole } from "./money";
+import { formatMoney, formatMoneyWhole as whole } from "./money";
 import { daysSince, monthLabel } from "./months";
-import { formatDayMonth, formatShortMonth, runwayLabel, TARGET_TONE, targetLabel } from "./yearlyBudgets";
+import { daysBetween, formatDayMonth, formatShortMonth, runwayLabel, TARGET_TONE, targetLabel } from "./yearlyBudgets";
+
+// How each bill state looks: the bill bar's segment and the sheet's chip -
+// see specs/bill-budgets.
+export const BILL_TONE = {
+  upcoming: "neutral",
+  due_soon: "reminder",
+  paid: "positive",
+  paid_over: "positive",
+  not_seen: "warning",
+  missed: "critical",
+};
+
+// A bill's state as a short chip label, or null for an upcoming bill, whose
+// day already says when. `through` is the day figures are given as of.
+export function billLabel(bill, through) {
+  switch (bill.state) {
+    case "paid":
+      return `Paid ${formatDayMonth(bill.paid_on)}`;
+    case "paid_over":
+      return `${formatMoney(bill.over_cents)} over`;
+    case "due_soon": {
+      const days = daysBetween(through, bill.due_date);
+      return days === 0 ? "Today" : days === 1 ? "Tomorrow" : `In ${days} days`;
+    }
+    case "not_seen":
+      return "Not seen";
+    case "missed":
+      return "Missed";
+    default:
+      return null;
+  }
+}
+
+// A missed bill in Needs attention / Needs a look.
+export function billWarning(b) {
+  const category = b.parent_name ? `${b.parent_name} / ${b.category_name}` : b.category_name;
+  return {
+    primary: `${b.name} missed`,
+    secondary: `${category} · due ${formatDayMonth(b.due_date)} · ${whole(b.amount_cents)}`,
+    critical: true,
+  };
+}
 
 // The line below the headline: the rest of the month's spending.
 export function budgetExtras(totals) {
@@ -59,7 +101,7 @@ export function verdict(summary, month, thisMonth) {
     if (left === 0) return "Finished on budget";
     return `Finished ${whole(Math.abs(left))} ${left < 0 ? "over" : "under"}`;
   }
-  const count = attention.categories.length + attention.yearly.length;
+  const count = attention.categories.length + attention.yearly.length + (attention.bills?.length ?? 0);
   if (count > 0) return `${count} ${count === 1 ? "needs" : "need"} a look`;
   return totals.has_limits ? "On track" : null;
 }
@@ -106,6 +148,36 @@ function monthlyRow(row, summary, byId) {
       row.overridden && "this month only",
       coverage(row, row.limit_cents),
     ),
+  };
+}
+
+// The bill that matters most after the paid count: a missed one, else one
+// not seen yet, else the next one due.
+function pressingBill(bills) {
+  const missed = bills.find((b) => b.state === "missed");
+  if (missed) return `${missed.name} missed`;
+  const notSeen = bills.find((b) => b.state === "not_seen");
+  if (notSeen) return `${notSeen.name} not seen`;
+  const next = bills.find((b) => b.state === "due_soon" || b.state === "upcoming");
+  return next ? `${next.name} due ${formatDayMonth(next.due_date)}` : null;
+}
+
+function billsRow(row) {
+  const bills = row.bills;
+  const over = row.over_limit;
+  return {
+    id: row.category_id,
+    name: row.category_name,
+    parentId: row.parent_id,
+    limitCents: row.limit_cents,
+    budgeted: true,
+    spentCents: row.spent_cents,
+    budgetCents: row.limit_cents,
+    bills: bills.map((b) => ({ id: b.id, name: b.name, amountCents: b.amount_cents, state: b.state })),
+    billLines: bills,
+    figure: over ? `${whole(row.spent_cents - row.limit_cents)} over` : row.unpaid_cents > 0 ? `${whole(row.unpaid_cents)} to pay` : "Paid",
+    critical: over,
+    caption: joined(`${row.paid_count} of ${bills.length} paid`, pressingBill(bills), coverage(row, row.limit_cents)),
   };
 }
 
@@ -165,7 +237,9 @@ export function budgetList(summary, categories) {
   const byId = Object.fromEntries(categories.map((c) => [c.id, c]));
   const yearly = summary.yearly;
   const all = [
-    ...summary.categories.map((row) => monthlyRow(row, summary, byId)),
+    ...summary.categories.map((row) =>
+      row.kind === "bills" && row.limit_cents != null ? billsRow(row) : monthlyRow(row, summary, byId),
+    ),
     ...yearly.categories.map((row) =>
       row.kind === "target" ? targetRow(row, yearly.through) : yearlyRow(row, yearly.year),
     ),
