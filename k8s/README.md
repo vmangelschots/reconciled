@@ -26,7 +26,7 @@ Everything runs in the `reconciled` namespace, behind one HTTPS hostname.
 |---|---|---|
 | Your hostname | `10-config.yaml` (3 places) and `50-ingress.yaml` (2 places) | `budget.example.com` |
 | cert-manager issuer name | `50-ingress.yaml` annotation | `letsencrypt` |
-| Image version (recommended: pin a release instead of `latest`) | `30-backend.yaml` (2 places), `40-frontend.yaml` | `:latest` |
+| Image version (recommended: pin a commit, `sha-a1b2c3d`, or a release, `1.4.0`, instead of `latest`; see [Upgrading](#upgrading)) | `30-backend.yaml` (2 places), `35-bank-sync.yaml`, `40-frontend.yaml` | `:latest` |
 | Secret key, encryption key, DB password, your login | `15-secret.yaml` (copy of `examples/secret.example.yaml`) | `change-me` |
 
 Create the secret file. It's git-ignored, so it can't be committed by
@@ -155,9 +155,44 @@ your secret. If the backend pod is stuck in `Init`, its `migrate` init
 container logs explain why:
 `kubectl -n reconciled logs deploy/backend -c migrate`.
 
-To upgrade, change the image tags and `kubectl apply -f k8s/` again. The
-backend is replaced (not rolled), and migrations run before the new
+## Upgrading
+
+Every image CI publishes is tagged with its commit, `sha-a1b2c3d`. Images built
+from a `v1.4.0` release tag are also tagged `1.4.0`. To upgrade, put the new tag
+in all four image fields (`30-backend.yaml` twice, `35-bank-sync.yaml`,
+`40-frontend.yaml`) and apply:
+
+```sh
+kubectl apply -f k8s/
+kubectl -n reconciled rollout status deploy/backend
+kubectl -n reconciled rollout status deploy/frontend
+```
+
+The backend is replaced (not rolled), and migrations run before the new
 version serves traffic.
+
+If you stay on `latest`, applying unchanged manifests does nothing: the pods
+keep running the image they already pulled. Restart them to pull the new one:
+
+```sh
+kubectl -n reconciled rollout restart deploy/backend deploy/frontend
+```
+
+### Check what's running
+
+Both pods log their version when they start. It's the short commit, or the
+release number, plus when the image was built:
+
+```sh
+kubectl -n reconciled logs deploy/backend | grep version
+# reconciled-backend version a1b2c3d (commit a1b2c3d, built 2026-11-12T14:03:00Z)
+kubectl -n reconciled logs deploy/frontend | grep version
+# reconciled-frontend version a1b2c3d (commit a1b2c3d, built 2026-11-12T14:03:00Z)
+```
+
+In the app, **Settings → About** shows the app and server versions. It warns
+when they differ, which usually means one of them didn't update. If it's the
+app, reload the page first.
 
 ## Backups
 

@@ -17,7 +17,7 @@
 ## 3. CI and deploy docs
 
 - [ ] 3.1 In `.github/workflows/ci.yml` `images` job, add a step computing `APP_VERSION` (`X.Y.Z` for `v*` tags, else 7-char SHA), `APP_COMMIT` and `APP_BUILT`, and pass them as build args to both images; verify the PR's CI run passes and its build logs show the args
-- [ ] 3.2 Update `k8s/README.md`: recommend `sha-<commit>` tags in "Edit these"; in the upgrade section, list the three image fields and `kubectl rollout restart` for `latest`; add "Check what's running" (pod logs and Settings → About); verify kubeconform still passes and the commands are correct
+- [x] 3.2 Update `k8s/README.md`: recommend `sha-<commit>` tags in "Edit these"; in the upgrade section, list the three image fields and `kubectl rollout restart` for `latest`; add "Check what's running" (pod logs and Settings → About); verify kubeconform still passes and the commands are correct
 
 ## 4. Integration check
 
