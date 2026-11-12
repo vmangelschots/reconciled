@@ -2,10 +2,10 @@
 
 ## 1. Backend version
 
-- [ ] 1.1 Add `core/version.py` with `version_info()` reading `APP_VERSION`/`APP_COMMIT`/`APP_BUILT` (default `dev`/`None`/`None`); verify with a unit test using `override env` for both set and unset cases
-- [ ] 1.2 Add `GET /api/version/` (`IsAuthenticated`) and add `version` to `/health`; verify with tests in `core/tests.py`: signed-in returns all three fields, anonymous gets 401, health still returns 200 with `status: ok` and a `version`
-- [ ] 1.3 Add `backend/gunicorn.conf.py` with a `when_ready` hook logging `reconciled-backend version <v> (commit <c>, built <b>)`; verify by running `APP_VERSION=test gunicorn config.wsgi:application` locally and seeing the line once
-- [ ] 1.4 In `backend/Dockerfile`, add `ARG`/`ENV` for the three values after `collectstatic`; verify `docker build --build-arg APP_VERSION=abc1234 backend` and `docker run … python -c` print the value, and a build without args reports `dev`
+- [x] 1.1 Add `core/version.py` with `version_info()` reading `APP_VERSION`/`APP_COMMIT`/`APP_BUILT` (default `dev`/`None`/`None`); verify with a unit test using `override env` for both set and unset cases
+- [x] 1.2 Add `GET /api/version/` (`IsAuthenticated`) and add `version` to `/health`; verify with tests in `core/tests.py`: signed-in returns all three fields, anonymous gets 401, health still returns 200 with `status: ok` and a `version`
+- [x] 1.3 Add `backend/gunicorn.conf.py` with a `when_ready` hook logging `reconciled-backend version <v> (commit <c>, built <b>)`; verify by running `APP_VERSION=test gunicorn config.wsgi:application` locally and seeing the line once
+- [x] 1.4 In `backend/Dockerfile`, add `ARG`/`ENV` for the three values after `collectstatic`; verify `docker build --build-arg APP_VERSION=abc1234 backend` and `docker run … python -c` print the value, and a build without args reports `dev`
 
 ## 2. Frontend version
 

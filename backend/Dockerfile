@@ -15,6 +15,15 @@ COPY . .
 
 RUN python manage.py collectstatic --noinput && chmod +x entrypoint.sh
 
+# Which build this is, stamped by CI (see openspec/specs/app-version). Kept
+# after the steps above so a new version doesn't bust their layer cache.
+ARG APP_VERSION=dev
+ARG APP_COMMIT=
+ARG APP_BUILT=
+ENV APP_VERSION=$APP_VERSION \
+    APP_COMMIT=$APP_COMMIT \
+    APP_BUILT=$APP_BUILT
+
 EXPOSE 8000
 
 ENTRYPOINT ["./entrypoint.sh"]
