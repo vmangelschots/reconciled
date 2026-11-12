@@ -9,7 +9,7 @@ import * as accountsApi from "../api/accounts";
 import * as overviewApi from "../api/overview";
 import * as reportsApi from "../api/reports";
 import * as tabsApi from "../api/tabs";
-import { formatMoney } from "../lib/money";
+import { formatMoney, formatMoneyWhole } from "../lib/money";
 import { formatDayMonth } from "../lib/yearlyBudgets";
 import { linkedBankSync, resetBankSync, setBankSync } from "../test/bankSyncMock";
 
@@ -42,6 +42,8 @@ function overview(overrides = {}) {
       outside_cents: 12000,
       uncategorized_cents: 21300,
       pace: 24 / 31,
+      marker: 24 / 31,
+      bills_unpaid_cents: 0,
       days_left: 8,
     },
     attention: { review_count: 0, uncategorized_count: 0, categories: [] },
@@ -313,6 +315,15 @@ describe("Budget tile", () => {
     expect(within(tile).getByTestId("progress-marker").style.left).toBe(`${(24 / 31) * 100}%`);
   });
 
+  it("puts the marker where spending is expected and leaves unpaid bills out of per day", async () => {
+    overviewApi.getOverview.mockResolvedValue(overview({ budget: { marker: 0.44, bills_unpaid_cents: 10000 } }));
+    renderPage();
+    const tile = await screen.findByRole("region", { name: "Budget" });
+
+    await waitFor(() => expect(tile).toHaveTextContent(`${eur(66000)} left · ${eur(7000)} a day`));
+    expect(within(tile).getByTestId("progress-marker").style.left).toBe("44%");
+  });
+
   it("says how much over, in the critical colour", async () => {
     overviewApi.getOverview.mockResolvedValue(overview({ budget: { spent_cents: 275000 } }));
     renderPage();
@@ -324,7 +335,7 @@ describe("Budget tile", () => {
 
   it("has no pace for a past month", async () => {
     overviewApi.getOverview.mockImplementation((month) =>
-      Promise.resolve(month === "2026-09" ? overview({ budget: { pace: null, days_left: null } }) : overview()),
+      Promise.resolve(month === "2026-09" ? overview({ budget: { pace: null, marker: null, bills_unpaid_cents: null, days_left: null } }) : overview()),
     );
     renderPage();
     await screen.findByText(/a day/);
@@ -462,6 +473,12 @@ describe("Needs attention", () => {
               spent_cents: 0, budget_cents: 40000, due_date: "2026-11-01",
             },
           ],
+          bills: [
+            {
+              category_id: 7, category_name: "Streaming", parent_name: null, bill_id: 73, name: "Spotify",
+              due_date: "2026-10-16", amount_cents: 1099,
+            },
+          ],
           missed_loans: [
             {
               account_id: 4, name: "Mortgage", date: "2026-10-02", installment: 23, term_months: 300,
@@ -474,15 +491,18 @@ describe("Needs attention", () => {
     renderPage();
     const attention = await screen.findByRole("region", { name: "Needs attention" });
 
-    await waitFor(() => expect(within(attention).getAllByRole("link")).toHaveLength(3));
+    await waitFor(() => expect(within(attention).getAllByRole("link")).toHaveLength(4));
     const links = within(attention).getAllByRole("link");
     expect(links.map((l) => l.textContent.split(/(?<=[a-z%)])(?=[A-Z€])/)[0])).toEqual([
       "Property tax due in 8 days",
+      "Spotify missed",
       `Mortgage: payment of ${formatDayMonth("2026-10-02")} not seen`,
       "Crelan: last import 12 days ago",
     ]);
-    expect(links[1]).toHaveAttribute("href", "/transactions/4/schedule?installment=23");
-    expect(links[1]).toHaveTextContent(`Installment 23 of 300 · ${formatMoney(94422)} from Crelan`);
+    expect(links[1]).toHaveAttribute("href", "/budgets?month=2026-10");
+    expect(links[1]).toHaveTextContent(`Streaming · due ${formatDayMonth("2026-10-16")} · ${formatMoneyWhole(1099)}`);
+    expect(links[2]).toHaveAttribute("href", "/transactions/4/schedule?installment=23");
+    expect(links[2]).toHaveTextContent(`Installment 23 of 300 · ${formatMoney(94422)} from Crelan`);
     vi.useRealTimers();
   });
 

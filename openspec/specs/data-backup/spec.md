@@ -33,7 +33,7 @@ SHALL be able to download one.
 ### Requirement: What a backup holds
 A backup SHALL hold every account; every transaction, with its splits,
 transfer links, value adjustments, notes and category guesses; categories
-and tabs; monthly limits; yearly budgets; the budget settings; recurring
+and tabs; monthly limits; yearly budgets; bills; the budget settings; recurring
 transactions; loan setups and their balance corrections, with the links
 between scheduled adjustments and their installments, corrections and
 payments; the remembered import mappings; when each account was last
@@ -82,6 +82,16 @@ SHALL get new ids.
 - **WHEN** an import mapping sends a Revolut product to "Revolut Pockets", and a
   backup of it is restored
 - **THEN** the mapping still points at the restored "Revolut Pockets"
+
+#### Scenario: Bills survive
+- **WHEN** "Streaming" is a Bills category with Netflix 17.99 on the 5th,
+  and a backup of it is restored
+- **THEN** "Streaming" is still a Bills category with Netflix 17.99 on the
+  5th, counting from the same month
+
+#### Scenario: A backup from before bills
+- **WHEN** a backup made before bills existed is restored
+- **THEN** it restores, with no bills
 
 ### Requirement: What a backup leaves out
 A backup SHALL NOT hold login users or their passwords. It SHALL NOT hold

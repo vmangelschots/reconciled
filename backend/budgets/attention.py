@@ -31,11 +31,38 @@ def attention_categories(rows, pace):
         }
         if spent > limit:
             over.append(item)
+        # Bills are paid in one go, so they are never ahead of the month's
+        # pace - see openspec/specs/bill-budgets.
+        elif row["kind"] == Category.BudgetKind.BILLS:
+            continue
         elif pace is not None and share >= WARNING_SHARE and share > pace * 100:
             warn.append(item)
     over.sort(key=lambda c: -(c["spent_cents"] - c["limit_cents"]))
     warn.sort(key=lambda c: -c["share"])
     return over + warn
+
+
+def attention_bills(rows):
+    """Missed bills in the month, earliest first - see
+    openspec/specs/bill-budgets. Bills due soon or not seen yet wait."""
+    names = {row["category_id"]: row["category_name"] for row in rows}
+    items = [
+        {
+            "category_id": row["category_id"],
+            "category_name": row["category_name"],
+            "parent_name": names.get(row["parent_id"]),
+            "bill_id": bill["id"],
+            "name": bill["name"],
+            "due_date": bill["due_date"],
+            "amount_cents": bill["amount_cents"],
+        }
+        for row in rows
+        if row["kind"] == Category.BudgetKind.BILLS
+        for bill in row["bills"]
+        if bill["state"] == "missed"
+    ]
+    items.sort(key=lambda i: (i["due_date"], i["name"]))
+    return items
 
 
 # Yearly warnings, most pressing first - see openspec/specs/overview.

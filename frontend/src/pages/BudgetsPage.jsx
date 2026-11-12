@@ -3,6 +3,7 @@ import { Fragment, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { getBudgetSummary, setBudgetStartMonth } from "../api/budgets";
 import { listCategories } from "../api/categories";
+import { BillBar } from "../components/BillBar";
 import { BudgetSheet } from "../components/BudgetSheet";
 import { Button, buttonVariants } from "../components/ui/Button";
 import { EmptyState } from "../components/ui/EmptyState";
@@ -14,6 +15,7 @@ import { Stat } from "../components/ui/Stat";
 import { useToast } from "../components/ui/Toast";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import {
+  billWarning,
   budgetExtras,
   budgetList,
   categoryWarning,
@@ -155,15 +157,17 @@ export function BudgetsPage() {
 }
 
 function Headline({ summary, month, onOpen }) {
-  const { totals, attention, days_left: daysLeft, pace } = summary;
+  const { totals, attention, days_left: daysLeft } = summary;
   const label = verdict(summary, month, currentMonth());
   const extras = budgetExtras(totals);
   const items = [
     ...attention.categories.map((c) => ({ id: c.id, key: `category-${c.id}`, ...categoryWarning(c) })),
     ...attention.yearly.map((y) => ({ id: y.id, key: `yearly-${y.id}`, ...yearlyWarning(y, month.slice(0, 4)) })),
+    ...(attention.bills ?? []).map((b) => ({ id: b.category_id, key: `bill-${b.bill_id}`, ...billWarning(b) })),
   ];
   const left = totals.limit_cents - totals.spent_cents;
-  const perDay = perDayCents(left, daysLeft);
+  // Bills not paid yet are spoken for, so they don't count as left per day.
+  const perDay = perDayCents(left - (totals.bills_unpaid_cents ?? 0), daysLeft);
   return (
     <Panel flush>
       <div className="flex flex-col lg:flex-row">
@@ -178,7 +182,7 @@ function Headline({ summary, month, onOpen }) {
                 </>
               }
             >
-              <ProgressBar className="my-2" label="Budget spent" value={totals.spent_cents} max={totals.limit_cents} marker={pace} />
+              <ProgressBar className="my-2" label="Budget spent" value={totals.spent_cents} max={totals.limit_cents} marker={totals.marker} />
               <span className={cn("text-sm", left < 0 ? "text-critical" : "text-ink-secondary")}>
                 {left < 0 ? `${whole(-left)} over` : `${whole(left)} left`}
                 {perDay != null && ` · ${whole(perDay)} a day`}
@@ -256,6 +260,7 @@ function BudgetRow({ row, highlight, onOpen }) {
         </span>
         <span className="order-3 col-span-2 sm:order-none sm:col-span-1">
           {row.bar && <ProgressBar label={`${row.name} spent`} {...row.bar} />}
+          {row.bills && <BillBar label={`${row.name} bills`} bills={row.bills} />}
         </span>
         <span
           className={cn(

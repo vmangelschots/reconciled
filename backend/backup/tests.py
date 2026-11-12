@@ -18,7 +18,7 @@ from decimal import Decimal
 
 from accounts.models import Account, Loan, LoanCorrection
 from banksync.models import BankCredentials
-from budgets.models import BudgetSettings, Category, CategoryLimit, YearlyBudget
+from budgets.models import Bill, BudgetSettings, Category, CategoryLimit, YearlyBudget
 from forecasting.models import RecurringTransaction
 from households.context import household_context
 from households.models import Household
@@ -96,6 +96,8 @@ class BackupTestCase(TestCase):
         CategoryLimit.objects.create(category=self.groceries, month=date(2026, 10, 1), limit_cents=45000)
         self.groceries.budget_kind = Category.BudgetKind.MONTHLY
         YearlyBudget.objects.create(category=self.household, from_year=2026, amount_cents=120000, due_month=3, due_day=1)
+        self.streaming = Category.objects.create(name="Streaming", budget_kind=Category.BudgetKind.BILLS)
+        Bill.objects.create(category=self.streaming, name="Netflix", day=5, amount_cents=1799, from_month=date(2026, 9, 1))
         settings = BudgetSettings.load()
         settings.start_month = date(2026, 1, 1)
         settings.save()
@@ -293,6 +295,21 @@ class RestoreBackupTests(BackupTestCase):
                 del row["fields"]["category_reason"]
         restore_backup(read_backup(json.dumps(envelope)))
         self.assertEqual(set(Transaction.objects.values_list("category_reason", flat=True)), {""})
+
+    def test_bills_survive(self):
+        content = self.file_content()
+        self.mess_up()
+        restore_backup(read_backup(content))
+        bill = Bill.objects.get()
+        self.assertEqual((bill.category.name, bill.category.budget_kind), ("Streaming", "bills"))
+        self.assertEqual((bill.name, bill.day, bill.amount_cents, bill.from_month), ("Netflix", 5, 1799, date(2026, 9, 1)))
+
+    def test_a_backup_from_before_bills_restores(self):
+        envelope = json.loads(self.file_content())
+        envelope["data"] = [row for row in envelope["data"] if row["model"] != "budgets.bill"]
+        restore_backup(read_backup(json.dumps(envelope)))
+        self.assertFalse(Bill.objects.exists())
+        self.assertTrue(Category.objects.filter(name="Groceries").exists())
 
     def test_a_covered_entry_survives(self):
         takeout = Category.objects.create(name="Takeout")

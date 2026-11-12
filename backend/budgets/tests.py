@@ -11,7 +11,7 @@ from transactions.models import Transaction
 from transactions.splits import SplitLine, save_split
 from transactions.transfers import link_transfer
 
-from .models import BudgetSettings, Category, CategoryLimit, YearlyBudget
+from .models import Bill, BudgetSettings, Category, CategoryLimit, YearlyBudget
 from .summary import budget_rows, budget_totals, yearly_spent_cents
 
 
@@ -605,14 +605,19 @@ class BudgetSummaryQueryTests(TestCase):
             yearly = Category.objects.create(name=f"Y{i}", budget_kind="yearly")
             YearlyBudget.objects.create(category=yearly, from_year=2026, amount_cents=1000)
             Transaction.objects.create(account=account, date="2026-01-05", amount_cents=-100, payee="x", category=yearly)
+            bills = Category.objects.create(name=f"B{i}", budget_kind="bills")
+            Bill.objects.create(category=bills, name="Bill", day=5, amount_cents=100, from_month=date(2026, 1, 1))
+            Transaction.objects.create(account=account, date="2026-01-05", amount_cents=-100, payee="x", category=bills)
 
         # One for the user's household, four for the monthly rows and
-        # uncategorized, three for the month's yearly spending, four for the
-        # yearly rows and their parents, one for the uncategorized outflows.
-        with self.assertNumQueries(14):
+        # uncategorized, two for the bills and their outflows, two for the
+        # bill totals in the month's limits (rows and yearly spending), three
+        # for the month's yearly spending, four for the yearly rows and their
+        # parents, one for the uncategorized outflows.
+        with self.assertNumQueries(18):
             response = client.get(reverse("budget-summary"), {"month": "2026-01"})
 
-        self.assertEqual([c["spent_cents"] for c in response.json()["categories"]], [100] * 6)
+        self.assertEqual([c["spent_cents"] for c in response.json()["categories"]], [100] * 12)
         self.assertEqual([c["spent_cents"] for c in response.json()["yearly"]["categories"]], [100] * 6)
 
 
