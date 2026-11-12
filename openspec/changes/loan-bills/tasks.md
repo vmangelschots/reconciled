@@ -20,7 +20,7 @@
 
 ## 4. Integration check
 
-- [ ] 4.1 Run `python manage.py test` and the app locally: give "Mortgage" a monthly limit, set up "House A" and "House B" with it as payment category (see the warning, then the note), and confirm on Budgets that "Mortgage" shows two loan bills with no pace marker and no limit, a matched installment as paid, the editor's "Set by 2 loans", the picker's bank icon, and a missed installment only as the loan's red line in Needs attention; clear one loan's category and remove the other's setup and confirm "Mortgage" goes back to no budget
+- [x] 4.1 Run `python manage.py test` and the app locally: give "Mortgage" a monthly limit, set up "House A" and "House B" with it as payment category (see the warning, then the note), and confirm on Budgets that "Mortgage" shows two loan bills with no pace marker and no limit, a matched installment as paid, the editor's "Set by 2 loans", the picker's bank icon, and a missed installment only as the loan's red line in Needs attention; clear one loan's category and remove the other's setup and confirm "Mortgage" goes back to no budget
 
 ## Workflow follow-up
 
