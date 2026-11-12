@@ -172,7 +172,8 @@ balance sentence.
 The Budgets page SHALL use the shared month switcher, and SHALL keep the
 chosen month in its address, so a link can open it on a given month.
 Without a month in the address it SHALL open on the current month in
-local time.
+local time. A category in the address SHALL open that category's sheet
+on the chosen month.
 
 #### Scenario: A link opens the right month
 - **WHEN** the user opens /budgets?month=2026-09
@@ -186,6 +187,11 @@ local time.
 - **WHEN** it is 1 November 00:30 local time while UTC is still 31
   October, and the user opens /budgets
 - **THEN** the page shows November
+
+#### Scenario: A link opens a category's sheet
+- **WHEN** the user opens /budgets?month=2026-12&category=<Streaming's id>
+- **THEN** December 2026 shows with the "Streaming" sheet open, and
+  closing the sheet removes the category from the address
 
 ### Requirement: One budget kind per category
 Every budgeted category SHALL have exactly one budget kind: monthly,
