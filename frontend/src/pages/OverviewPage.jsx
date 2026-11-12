@@ -508,6 +508,7 @@ export function OverviewPage() {
   const netWorthPanel = (
     <NetWorthPanel
       months={netWorth.data?.months}
+      projection={netWorth.data?.projection}
       loading={netWorth.loading && !netWorth.data}
       error={netWorth.error ? loadError("net worth") : null}
       selectedMonth={month}

@@ -13,7 +13,7 @@
 
 ## 3. Overview net worth chart
 
-- [ ] 3.1 Give `NetWorthChart` a `projection`: history sliced by range, then a dashed line joined at the current month, and a "Projected" tooltip with total and change only; pass it from the Overview; verify with tests for "History and a year ahead", "The 1Y range" and "Hover a projected month", and the existing net worth chart tests; then run `npm test`, `npm run lint`, `npm run build`
+- [x] 3.1 Give `NetWorthChart` a `projection`: history sliced by range, then a dashed line joined at the current month, and a "Projected" tooltip with total and change only; pass it from the Overview; verify with tests for "History and a year ahead", "The 1Y range" and "Hover a projected month", and the existing net worth chart tests; then run `npm test`, `npm run lint`, `npm run build`
 
 ## 4. Integration check
 
