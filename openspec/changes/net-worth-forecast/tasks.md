@@ -2,9 +2,9 @@
 
 ## 1. Backend
 
-- [ ] 1.1 Give `_installment_items` a `tier=None` (every active loan) and `interest=True` (minus the interest) mode and `_expected_items` a `transfers=False` mode, keeping the Everyday behaviour unchanged; verify the existing `forecasting` tests still pass and add tests that every active loan's interest is taken in interest mode and that account-recognised items are skipped without transfers; then run `python manage.py test forecasting`
-- [ ] 1.2 Write `net_worth_forecast(today, months)` (start from `net_worth_at`, month totals including spread budgets per day, `empty`, `has_income`) and `GET /api/forecast/net-worth/?years=1|3|5`; verify with tests for "Three years ahead", "A bill already paid", "Saving every month", "Salary and bills", "The house", "The mortgage" (interest only, paid from savings too), "A loan paid off", and a 400 for another `years`; then run `python manage.py test forecasting`
-- [ ] 1.3 Add `projection` to `NetWorthView` from `net_worth_forecast(today, 12)` (the months after the current one, or null when empty); verify with report tests for "A year ahead" (December through November, equal to the Forecast API's months) and "Nothing forecast"; then run `python manage.py test reports`
+- [x] 1.1 Give `_installment_items` a `tier=None` (every active loan) and `interest=True` (minus the interest) mode and `_expected_items` a `transfers=False` mode, keeping the Everyday behaviour unchanged; verify the existing `forecasting` tests still pass and add tests that every active loan's interest is taken in interest mode and that account-recognised items are skipped without transfers; then run `python manage.py test forecasting`
+- [x] 1.2 Write `net_worth_forecast(today, months)` (start from `net_worth_at`, month totals including spread budgets per day, `empty`, `has_income`) and `GET /api/forecast/net-worth/?years=1|3|5`; verify with tests for "Three years ahead", "A bill already paid", "Saving every month", "Salary and bills", "The house", "The mortgage" (interest only, paid from savings too), "A loan paid off", and a 400 for another `years`; then run `python manage.py test forecasting`
+- [x] 1.3 Add `projection` to `NetWorthView` from `net_worth_forecast(today, 12)` (the months after the current one, or null when empty); verify with report tests for "A year ahead" (December through November, equal to the Forecast API's months) and "Nothing forecast"; then run `python manage.py test reports`
 
 ## 2. Forecast page
 

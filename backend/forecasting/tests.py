@@ -11,7 +11,10 @@ from households.testing import TestCase
 from transactions.models import Transaction
 from transactions.transfers import link_transfer
 
-from .forecast import everyday_forecast
+from reports.balances import net_worth_at
+from transactions.loans import schedule
+
+from .forecast import everyday_forecast, net_worth_forecast
 from .models import ExpectedItem
 
 TODAY = date(2026, 11, 12)
@@ -389,3 +392,79 @@ class ForecastApiTests(ForecastCase):
         self.assertEqual(links["bill"], {"category": streaming.id, "month": "2026-11-01"})
         self.assertEqual(links["installment"], {"account": loan_account.id, "installment": 1})
         self.assertEqual(links["expected"], {"expected": item.id})
+
+
+class NetWorthForecastTests(ForecastCase):
+    """The forecasting spec's net worth scenarios, from 12 November 2026."""
+
+    def months(self, months=12, today=TODAY):
+        return {row["month"]: row for row in net_worth_forecast(today, months)["months"]}
+
+    def loan(self, paid_from, term_months=100, rate="6.00"):
+        account = Account.objects.create(name="House A", account_type="loan", starting_balance_cents=-9000000)
+        return Loan.objects.create(
+            account=account, principal_cents=9000000, annual_rate=rate, term_months=term_months,
+            first_payment_date=date(2026, 12, 2), paid_from=paid_from, setup_date=TODAY,
+        )
+
+    def test_three_years_ahead(self):
+        forecast = net_worth_forecast(TODAY, 36)
+        self.assertEqual(forecast["start_cents"], net_worth_at(TODAY))
+        self.assertEqual(len(forecast["months"]), 37)
+        self.assertEqual((forecast["months"][0]["month"], forecast["months"][-1]["month"]), ("2026-11", "2029-11"))
+        self.assertEqual(forecast["months"][0]["total_cents"], 150000)
+
+    def test_a_bill_already_paid(self):
+        streaming = self.streaming(("Netflix", 5, 1799))
+        self.pay(date(2026, 11, 6), -1799, streaming)
+        months = self.months()
+        self.assertEqual(months["2026-11"]["change_cents"], 0)
+        self.assertEqual(months["2026-12"]["change_cents"], -1799)
+
+    def test_saving_every_month(self):
+        savings = Account.objects.create(name="Spaarrekening", account_type="savings", starting_balance_cents=0)
+        ExpectedItem.objects.create(name="Savings", direction="out", amount_cents=50000, day=1, account=savings)
+        forecast = net_worth_forecast(TODAY, 12)
+        self.assertTrue(forecast["empty"])
+        self.assertEqual({row["change_cents"] for row in forecast["months"]}, {0})
+
+    def test_salary_and_bills(self):
+        self.salary()
+        rent = Category.objects.create(name="Rent", budget_kind="bills")
+        Bill.objects.create(category=rent, name="Rent", day=10, amount_cents=120000, from_month=date(2026, 9, 1))
+        months = self.months()
+        self.assertEqual(months["2026-11"]["change_cents"], 0)
+        self.assertEqual(months["2027-01"]["change_cents"], 330000)
+
+    def test_the_house(self):
+        Account.objects.create(name="House", account_type="property", starting_balance_cents=30000000)
+        self.salary()
+        months = self.months()
+        self.assertEqual(months["2026-11"]["total_cents"], 30150000)
+        self.assertEqual(months["2026-12"]["total_cents"], 30150000 + 2 * 450000)
+
+    def test_the_mortgage_costs_its_interest_even_from_savings(self):
+        savings = Account.objects.create(name="Spaarrekening", account_type="savings", starting_balance_cents=0)
+        loan = self.loan(savings)
+        first = schedule(loan)[0]
+        self.assertGreater(first.interest_cents, 0)
+        self.assertLess(first.interest_cents, first.payment_cents)
+        self.assertEqual(self.months()["2026-12"]["change_cents"], -first.interest_cents)
+        # The Everyday forecast doesn't count a loan paid from savings at all.
+        self.assertEqual(self.items(self.forecast(), "installment"), [])
+
+    def test_a_loan_paid_off(self):
+        loan = self.loan(self.crelan, term_months=4)
+        last = schedule(loan)[-1]
+        months = self.months()
+        self.assertEqual(last.date.strftime("%Y-%m"), "2027-03")
+        self.assertEqual(months["2027-03"]["change_cents"], -last.interest_cents)
+        self.assertEqual(months["2027-04"]["change_cents"], 0)
+
+    def test_the_api_takes_1_3_or_5_years(self):
+        client = APIClient()
+        client.force_authenticate(get_user_model().objects.create_user(username="budgeter", password="x"))
+        with patch("budgets.utils.today", lambda: TODAY):
+            self.assertEqual(client.get(reverse("forecast-net-worth"), {"years": 2}).status_code, 400)
+            body = client.get(reverse("forecast-net-worth"), {"years": 3}).json()
+        self.assertEqual(len(body["months"]), 37)

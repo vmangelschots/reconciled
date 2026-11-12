@@ -7,9 +7,11 @@ for the current month, and report net worth at the end of each month. The curren
 Everyday forecast.
 
 #### Scenario: Three years ahead
-- **WHEN** net worth is 77,000.00 today and the user asks for 3 years
-- **THEN** the forecast reports today and the end of each of the next 36
-  months, starting at 77,000.00
+- **WHEN** net worth is 77,000.00 on 12 November and the user asks for 3
+  years
+- **THEN** the forecast reports November at today's 77,000.00, then the end
+  of each of the next 36 months, the rest of November counting towards
+  December
 
 #### Scenario: A bill already paid
 - **WHEN** Netflix was paid on 6 November
@@ -29,8 +31,8 @@ In the net worth forecast:
 - **THEN** it doesn't change the net worth forecast
 
 #### Scenario: Salary and bills
-- **WHEN** "Salary" brings in 4,500.00 and bills take 1,200.00 in December
-- **THEN** net worth rises by 3,300.00 over December, other items aside
+- **WHEN** "Salary" brings in 4,500.00 and bills take 1,200.00 in January
+- **THEN** net worth rises by 3,300.00 over January, other items aside
 
 #### Scenario: The house
 - **WHEN** "House" is valued at 300,000.00 today

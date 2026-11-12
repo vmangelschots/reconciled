@@ -60,13 +60,15 @@ It returns `{start_cents, months: [{month, total_cents, change_cents}],
 has_income, empty}`.
 - **Start:** `net_worth_at(today)`, so the first point equals the current
   month of the history.
-- **End:** the last day of the month `months` months after this one. The
-  current month's own end is the first month reported, then each month
-  after it, so `months + 1` rows.
-- **Totals:** the items are summed per calendar month. Spread budgets go
-  in by their daily amounts, so a spread that crosses into the next month
-  lands in the right month. Each month's total is the running sum at its
-  last day.
+- **End:** the last day of the month `months` months after this one.
+- **Rows:** `months + 1` rows. The current month comes first, at today's
+  value with a change of 0, as net worth history reports the current
+  month. Then each month's end follows.
+- **Totals:** the rest of the current month counts towards the next
+  month's change, so the Overview's history and projection join at today.
+  The items are summed per calendar month. Spread budgets go in by their
+  daily amounts, so a spread that crosses into the next month lands in the
+  right month. Each month's total is the running sum at its last day.
 - **`empty`** is true when there are no items, and drives the "Nothing
   expected" state and the absent Overview projection.
 - **`has_income`** works as in the Everyday forecast. It decides whether
