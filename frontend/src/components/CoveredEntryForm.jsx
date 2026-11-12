@@ -185,35 +185,39 @@ export function CoveredEntryForm({ tabName, balanceCents, categories, entry = nu
 
       {formError && <p className="text-xs text-critical">{formError}</p>}
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          {entry &&
-            onDelete &&
-            (confirmDelete ? (
-              <span className="flex flex-wrap items-center gap-2 text-sm text-ink-secondary">
-                Delete this{entry.covered_category ? ` and its ${entry.covered_category.label} expense` : ""}?
-                <Button type="button" variant="destructive" size="sm" disabled={saving} onClick={() => run(onDelete)}>
-                  Delete
-                </Button>
-                <Button type="button" variant="ghost" size="sm" onClick={() => setConfirmDelete(false)}>
-                  Keep
-                </Button>
-              </span>
-            ) : (
+      {confirmDelete ? (
+        <div key="confirm" className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-sm text-ink-secondary">
+            Delete this{entry.covered_category ? ` and its ${entry.covered_category.label} expense` : ""}?
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" size="sm" onClick={() => setConfirmDelete(false)}>
+              Keep
+            </Button>
+            <Button type="button" variant="destructive" size="sm" disabled={saving} onClick={() => run(onDelete)}>
+              Delete
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div key="actions" className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            {entry && onDelete && (
               <Button type="button" variant="ghost" size="sm" onClick={() => setConfirmDelete(true)}>
                 Delete
               </Button>
-            ))}
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={onCancel}>
+              Cancel
+            </Button>
+            <Button type="submit" size="sm" disabled={saving}>
+              {saving ? "Saving…" : entry ? "Save" : `Add${categoryName ? ` to ${categoryName}` : ""}`}
+            </Button>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={onCancel}>
-            Cancel
-          </Button>
-          <Button type="submit" size="sm" disabled={saving}>
-            {saving ? "Saving…" : entry ? "Save" : `Add${categoryName ? ` to ${categoryName}` : ""}`}
-          </Button>
-        </div>
-      </div>
+      )}
     </form>
   );
 }
