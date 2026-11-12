@@ -468,3 +468,4 @@ class NetWorthForecastTests(ForecastCase):
             self.assertEqual(client.get(reverse("forecast-net-worth"), {"years": 2}).status_code, 400)
             body = client.get(reverse("forecast-net-worth"), {"years": 3}).json()
         self.assertEqual(len(body["months"]), 37)
+        self.assertEqual([a["name"] for a in body["accounts"]], ["Crelan"])

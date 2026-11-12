@@ -81,4 +81,12 @@ class NetWorthForecastView(APIView):
             years = None
         if years not in NET_WORTH_YEARS:
             return Response({"detail": "years must be 1, 3 or 5."}, status=400)
-        return Response(net_worth_forecast(budget_utils.today(), 12 * years))
+        forecast = net_worth_forecast(budget_utils.today(), 12 * years)
+        # Every active account counts in net worth, so each can be stale.
+        accounts = list(Account.objects.visible().filter(archived=False).order_by(tier_position(), "name", "id"))
+        freshness = import_freshness(accounts)
+        forecast["accounts"] = [
+            {"id": a.id, "name": a.name, "account_type": a.account_type, "tier": a.tier, **freshness[a.id]}
+            for a in accounts
+        ]
+        return Response(forecast)

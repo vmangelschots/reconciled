@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Info } from "lucide-react";
 import {
@@ -6,11 +6,13 @@ import {
   deleteExpectedItem,
   getExpectedItemOptions,
   getForecast,
+  getNetWorthForecast,
   listExpectedItems,
   updateExpectedItem,
 } from "../api/forecasting";
 import { CategoryCombobox } from "../components/CategoryCombobox";
 import { ForecastChart, longDay } from "../components/ForecastChart";
+import { NetWorthForecastChart } from "../components/NetWorthForecastChart";
 import { Amount } from "../components/ui/Amount";
 import { Button } from "../components/ui/Button";
 import { DialogTitle } from "../components/ui/Dialog";
@@ -27,6 +29,7 @@ import { StatusBadge } from "../components/ui/StatusBadge";
 import { useToast } from "../components/ui/Toast";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { cn } from "../lib/cn";
+import { todayIso } from "../lib/dates";
 import { staleImports } from "../lib/importFreshness";
 import { formatMoneyWhole, parseCents } from "../lib/money";
 import { formatDayMonth } from "../lib/yearlyBudgets";
@@ -36,6 +39,19 @@ const HORIZONS = [
   { value: 90, label: "90 days" },
 ];
 
+const VIEWS = [
+  { value: "everyday", label: "Everyday" },
+  { value: "net-worth", label: "Net worth" },
+];
+
+const YEARS = [
+  { value: 1, label: "1 year" },
+  { value: 3, label: "3 years" },
+  { value: 5, label: "5 years" },
+];
+
+const yearsText = (years) => (years === 1 ? "1 year" : `${years} years`);
+
 const whole = (cents) => formatMoneyWhole(cents);
 
 function errorText(e) {
@@ -43,13 +59,23 @@ function errorText(e) {
 }
 
 /**
- * The Everyday forecast: what's coming over 30 or 90 days, from bills,
- * loans, budgets and expected items - see openspec/specs/forecasting.
+ * The forecast: the Everyday money over 30 or 90 days, or net worth over 1,
+ * 3 or 5 years, from bills, loans, budgets and expected items - see
+ * openspec/specs/forecasting. The view and horizon live in the address.
  */
 export function ForecastingPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const view = searchParams.get("view") === "net-worth" ? "net-worth" : "everyday";
   const days = Number(searchParams.get("days")) === 30 ? 30 : 90;
-  const [forecast, setForecast] = useState(null);
+  const years = [3, 5].includes(Number(searchParams.get("years"))) ? Number(searchParams.get("years")) : 1;
+  const netWorth = view === "net-worth";
+  const key = netWorth ? `net-worth-${years}` : `everyday-${days}`;
+  // Tagged with what it was loaded for, so a switch never shows the other
+  // view's data, nor a late answer for an earlier choice.
+  const [loaded, setLoaded] = useState(null);
+  const forecast = loaded?.key === key ? loaded.data : null;
+  const latestKey = useRef(key);
+  latestKey.current = key;
   const [expected, setExpected] = useState(null);
   const [options, setOptions] = useState({ categories: [], accounts: [] });
   const [error, setError] = useState(null);
@@ -58,9 +84,11 @@ export function ForecastingPage() {
   const isWide = useMediaQuery("(min-width: 640px)");
 
   function load() {
-    return Promise.all([getForecast(days), listExpectedItems(), getExpectedItemOptions()])
+    const loadForecast = netWorth ? getNetWorthForecast(years) : getForecast(days);
+    const loadingKey = key;
+    return Promise.all([loadForecast, listExpectedItems(), getExpectedItemOptions()])
       .then(([f, items, opts]) => {
-        setForecast(f);
+        if (loadingKey === latestKey.current) setLoaded({ key: loadingKey, data: f });
         setExpected(items);
         setOptions(opts);
         setError(null);
@@ -71,7 +99,13 @@ export function ForecastingPage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [days]);
+  }, [key]);
+
+  // Switching views drops the other view's horizon.
+  const address = (next) => setSearchParams(next, { replace: true });
+  const setView = (next) => address(next === "net-worth" ? { view: next } : {});
+  const setDays = (value) => address(value === 90 ? {} : { days: String(value) });
+  const setYears = (value) => address(value === 1 ? { view: "net-worth" } : { view: "net-worth", years: String(value) });
 
   const loading = !forecast && !error;
   const openExpected = (id) => setSheet({ item: expected.find((i) => i.id === id) });
@@ -80,19 +114,23 @@ export function ForecastingPage() {
   return (
     <section className="flex flex-col gap-6">
       <PageHeader title="Forecast">
-        <PillSwitch
-          label="Horizon"
-          options={HORIZONS}
-          value={days}
-          onChange={(value) => setSearchParams(value === 90 ? {} : { days: String(value) }, { replace: true })}
-        />
+        <PillSwitch label="View" options={VIEWS} value={view} onChange={setView} />
+        {netWorth ? (
+          <PillSwitch label="Horizon" options={YEARS} value={years} onChange={setYears} />
+        ) : (
+          <PillSwitch label="Horizon" options={HORIZONS} value={days} onChange={setDays} />
+        )}
       </PageHeader>
 
       <div className="grid gap-4 lg:grid-cols-3 lg:items-start">
         <Panel loading={loading} error={error} className="lg:col-span-2">
-          {forecast && expected && (
-            <ForecastSummary forecast={forecast} hasExpected={expected.length > 0} onAddIncome={addIncome} />
-          )}
+          {forecast &&
+            expected &&
+            (netWorth ? (
+              <NetWorthSummary forecast={forecast} years={years} hasExpected={expected.length > 0} onAddIncome={addIncome} />
+            ) : (
+              <ForecastSummary forecast={forecast} hasExpected={expected.length > 0} onAddIncome={addIncome} />
+            ))}
         </Panel>
         <ExpectedPanel
           items={expected}
@@ -102,7 +140,7 @@ export function ForecastingPage() {
           onOpen={openExpected}
           className="lg:col-start-3 lg:row-start-1"
         />
-        {forecast && <ComingUp forecast={forecast} onOpenExpected={openExpected} className="lg:col-span-2" />}
+        {forecast && !netWorth && <ComingUp forecast={forecast} onOpenExpected={openExpected} className="lg:col-span-2" />}
       </div>
 
       <ExpectedSheet
@@ -149,21 +187,67 @@ function ForecastSummary({ forecast, hasExpected, onAddIncome }) {
         <span>Bills, loans, budgets and expected items. Spending without a budget isn&apos;t included.</span>
         {stale && <span className="text-warning">{stale}</span>}
       </div>
-      {!hasIncome && hasExpected && (
-        <div className="flex items-start gap-2 rounded-lg bg-surface-2 px-3 py-2.5 text-sm text-ink-secondary">
-          <Info className="mt-0.5 h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
-          <p>
-            Only money going out is counted. Add your salary to see the whole picture.{" "}
-            <button type="button" onClick={onAddIncome} className="text-accent hover:underline">
-              Add expected income
-            </button>
-          </p>
-        </div>
-      )}
+      {!hasIncome && hasExpected && <NoIncomeNote onAddIncome={onAddIncome} />}
       {nothing && missed.length === 0 ? (
         <EmptyState>Nothing expected in the next {horizonDays} days.</EmptyState>
       ) : (
         <ForecastChart points={points} items={items} lowest={lowest} critical={hasIncome} />
+      )}
+    </div>
+  );
+}
+
+function NoIncomeNote({ onAddIncome }) {
+  return (
+    <div className="flex items-start gap-2 rounded-lg bg-surface-2 px-3 py-2.5 text-sm text-ink-secondary">
+      <Info className="mt-0.5 h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
+      <p>
+        Only money going out is counted. Add your salary to see the whole picture.{" "}
+        <button type="button" onClick={onAddIncome} className="text-accent hover:underline">
+          Add expected income
+        </button>
+      </p>
+    </div>
+  );
+}
+
+function shortMonthYear(month) {
+  const [y, m] = month.split("-").map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString(undefined, { month: "short", year: "numeric" });
+}
+
+function NetWorthSummary({ forecast, years, hasExpected, onAddIncome }) {
+  const { months, start_cents: start, has_income: hasIncome, empty } = forecast;
+  const end = months[months.length - 1];
+  const stale = staleImports(forecast.accounts ?? [])?.text;
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-3 gap-3">
+        <Stat label="Today" size="sm" value={whole(start)} detail={longDay(todayIso())} />
+        {empty ? (
+          <span />
+        ) : (
+          <Stat label="Change" size="sm" value={formatMoneyWhole(end.total_cents - start, { signed: true })} />
+        )}
+        <Stat
+          label={`In ${yearsText(years)}`}
+          size="sm"
+          value={whole(end.total_cents)}
+          detail={shortMonthYear(end.month)}
+        />
+      </div>
+      <div className="flex flex-col gap-1 text-xs text-ink-muted">
+        <span>
+          Bills, loans, budgets and expected items. Loans count their interest; moving money between your accounts,
+          investments and property don&apos;t change it.
+        </span>
+        {stale && <span className="text-warning">{stale}</span>}
+      </div>
+      {!hasIncome && hasExpected && <NoIncomeNote onAddIncome={onAddIncome} />}
+      {empty ? (
+        <EmptyState>Nothing expected in the next {years === 1 ? "year" : yearsText(years)}.</EmptyState>
+      ) : (
+        <NetWorthForecastChart months={months} />
       )}
     </div>
   );

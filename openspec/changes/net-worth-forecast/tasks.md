@@ -8,8 +8,8 @@
 
 ## 2. Forecast page
 
-- [ ] 2.1 Add `getNetWorthForecast(years)` and a `NetWorthForecastChart` (monthly solid line, zero when in range, normal colours, month ticks over 1 year and Januaries over 3–5, tooltip with month, net worth and change); verify with component tests for "Hover a month" and "Negative net worth"; then run `npm test`
-- [ ] 2.2 Add the Everyday | Net worth switch and the 1/3/5 years switch to `ForecastingPage`, synced to `?view=net-worth&years=`, with the net worth summary (Today, Change, In N years, caption, stale-import line for all accounts, no-income note, chart or "Nothing expected in the next N years") and no Coming up; verify with page tests for "Switching to net worth", "A link to five years", "One year" and "Nothing in net worth either", and the existing Everyday tests unchanged; then run `npm test`, `npm run lint`, `npm run build`
+- [x] 2.1 Add `getNetWorthForecast(years)` and a `NetWorthForecastChart` (monthly solid line, zero when in range, normal colours, month ticks over 1 year and Januaries over 3–5, tooltip with month, net worth and change); verify with component tests for "Hover a month" and "Negative net worth"; then run `npm test`
+- [x] 2.2 Add the Everyday | Net worth switch and the 1/3/5 years switch to `ForecastingPage`, synced to `?view=net-worth&years=`, with the net worth summary (Today, Change, In N years, caption, stale-import line for all accounts, no-income note, chart or "Nothing expected in the next N years") and no Coming up; verify with page tests for "Switching to net worth", "A link to five years", "One year" and "Nothing in net worth either", and the existing Everyday tests unchanged; then run `npm test`, `npm run lint`, `npm run build`
 
 ## 3. Overview net worth chart
 

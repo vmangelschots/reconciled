@@ -43,7 +43,7 @@ function shortMonth(month) {
 
 // Januaries once the range spans years, otherwise evenly spaced months,
 // and never more than MAX_TICKS of either.
-function xTicks(rows) {
+export function xTicks(rows) {
   const months = rows.map((r) => r.month);
   const januaries = months.filter((m) => m.endsWith("-01"));
   const candidates = months.length > 24 && januaries.length > 1 ? januaries : months;
@@ -51,7 +51,7 @@ function xTicks(rows) {
   return candidates.filter((_, i) => (candidates.length - 1 - i) % step === 0);
 }
 
-function tickLabel(month, spansYears) {
+export function tickLabel(month, spansYears) {
   return spansYears ? month.slice(0, 4) : shortMonth(month);
 }
 
