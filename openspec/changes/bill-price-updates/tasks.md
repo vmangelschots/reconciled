@@ -23,7 +23,7 @@
 
 ## 5. Integration check
 
-- [ ] 5.1 Run `python manage.py test` and the app locally with "Streaming" (Netflix 17.99, Disney+ 11.99, Spotify 10.99, all payees "PayPal", Netflix paid 19.99, Spotify paid a week late, an unknown 7.99) and "Spending money" with an extra 50.00: confirm the matches, Update keeps October at 17.99, adding the 7.99 as a bill, the "To review" block shows in November and October but not September, Streaming isn't over for the 2.00, Spending money shows the red over segment, the sheet fits about one phone screen, and a loan category shows no prompts
+- [x] 5.1 Run `python manage.py test` and the app locally with "Streaming" (Netflix 17.99, Disney+ 11.99, Spotify 10.99, all payees "PayPal", Netflix paid 19.99, Spotify paid a week late, an unknown 7.99) and "Spending money" with an extra 50.00: confirm the matches, Update keeps October at 17.99, adding the 7.99 as a bill, the "To review" block shows in November and October but not September, Streaming isn't over for the 2.00, Spending money shows the red over segment, the sheet fits about one phone screen, and a loan category shows no prompts
 
 ## Workflow follow-up
 
