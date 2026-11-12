@@ -29,12 +29,16 @@ def attention_categories(rows, pace):
             "share": share,
             "over": spent > limit,
         }
+        # Bills are paid in one go, so they are never ahead of the month's
+        # pace, and over only beyond a small margin - see
+        # openspec/specs/bill-budgets.
+        if row["kind"] == Category.BudgetKind.BILLS:
+            item["over"] = row["over_limit"]
+            if row["over_limit"]:
+                over.append(item)
+            continue
         if spent > limit:
             over.append(item)
-        # Bills are paid in one go, so they are never ahead of the month's
-        # pace - see openspec/specs/bill-budgets.
-        elif row["kind"] == Category.BudgetKind.BILLS:
-            continue
         elif pace is not None and share >= WARNING_SHARE and share > pace * 100:
             warn.append(item)
     over.sort(key=lambda c: -(c["spent_cents"] - c["limit_cents"]))

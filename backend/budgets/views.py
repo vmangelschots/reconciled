@@ -7,9 +7,11 @@ from rest_framework.views import APIView
 
 from reports.spending import month_spending
 from transactions.loans import sync_loans
+from transactions.models import Transaction
 
 from . import utils
 from .attention import attention_bills, attention_categories, attention_yearly
+from .bill_changes import apply_bills
 from .loan_categories import active_loans, loan_categories
 from .models import Bill, BudgetSettings, Category, CategoryLimit, YearlyBudget
 from .serializers import CategorySerializer
@@ -163,37 +165,65 @@ class CategoryViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["put"], url_path="bills")
     def set_bills(self, request, pk=None):
-        """Replace a Bills category's bills: {bills: [{id?, name, day,
-        amount_cents}]}. A line with an id updates that bill and keeps the
-        month it counts from; a new line counts from the current month;
-        bills left out are deleted - see openspec/specs/bill-budgets."""
+        """Set a Bills category's bills from a month on: {month: "YYYY-MM"
+        (the viewed month, default the current one), bills: [{id?, name,
+        day, amount_cents}]}. Lines with an id are the bills counting in
+        that month; earlier months keep what they had - see
+        openspec/specs/bill-budgets."""
         category = self.get_object()
         if category.id in loan_categories():
             return Response({"detail": LOAN_SET}, status=400)
         if category.budget_kind != Category.BudgetKind.BILLS:
             return Response({"detail": "Only a Bills category takes bills."}, status=400)
+        try:
+            month = parse_month(request.data.get("month")) or utils.today().replace(day=1)
+        except ValueError as exc:
+            return Response({"month": str(exc)}, status=400)
         lines = request.data.get("bills")
         if not isinstance(lines, list):
             return Response({"bills": "Must be a list of bills."}, status=400)
-        errors, cleaned = self._clean_bills(category, lines)
+        errors, cleaned = self._clean_bills(category, month, lines)
         if errors:
             return Response({"bills": errors}, status=400)
-
-        this_month = utils.today().replace(day=1)
         with transaction.atomic():
-            keep = {line["id"] for line in cleaned if line["id"] is not None}
-            category.bills.exclude(id__in=keep).delete()
-            for line in cleaned:
-                values = {"name": line["name"], "day": line["day"], "amount_cents": line["amount_cents"]}
-                if line["id"] is None:
-                    Bill.objects.create(category=category, from_month=this_month, **values)
-                else:
-                    Bill.objects.filter(id=line["id"]).update(**values)
-        return Response(CategorySerializer(self.get_queryset().get(pk=category.pk), context=self.get_serializer_context()).data)
+            apply_bills(category, month, cleaned)
+        return Response(
+            CategorySerializer(self.get_queryset().get(pk=category.pk), context=self.get_serializer_context()).data
+        )
+
+    @action(detail=True, methods=["post"], url_path="bills/from-payment")
+    def bill_from_payment(self, request, pk=None):
+        """Make a payment that pays no bill a bill: {transaction, name}. It
+        is due on the payment's day for its amount, from its month on - see
+        openspec/specs/bill-budgets, "Add a payment as a bill"."""
+        category = self.get_object()
+        if category.id in loan_categories():
+            return Response({"detail": LOAN_SET}, status=400)
+        if category.budget_kind != Category.BudgetKind.BILLS:
+            return Response({"detail": "Only a Bills category takes bills."}, status=400)
+        name = str(request.data.get("name") or "").strip()
+        if not name:
+            return Response({"name": "A bill needs a name."}, status=400)
+        covered = [category.id, *category.subcategories.values_list("id", flat=True)]
+        payment = Transaction.objects.filter(
+            id=request.data.get("transaction"), category_id__in=covered, amount_cents__lt=0
+        ).first()
+        if payment is None:
+            return Response({"transaction": "Not a payment in this category."}, status=400)
+        Bill.objects.create(
+            category=category,
+            name=name,
+            day=payment.date.day,
+            amount_cents=-payment.amount_cents,
+            from_month=payment.date.replace(day=1),
+        )
+        return Response(
+            CategorySerializer(self.get_queryset().get(pk=category.pk), context=self.get_serializer_context()).data
+        )
 
     @staticmethod
-    def _clean_bills(category, lines):
-        existing = set(category.bills.values_list("id", flat=True))
+    def _clean_bills(category, month, lines):
+        existing = {b.id for b in category.bills.all() if b.counts_in(month)}
         errors, cleaned = [], []
         for line in lines:
             line = line if isinstance(line, dict) else {}

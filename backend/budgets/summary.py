@@ -51,6 +51,7 @@ def monthly_limits(period_start, loan_lines=None):
         Bill.objects.filter(
             category__in=budgeted_categories(), category__budget_kind=Category.BudgetKind.BILLS, from_month__lte=period_start
         )
+        .filter(Q(until_month__isnull=True) | Q(until_month__gte=period_start))
         .values("category_id")
         .annotate(total=Sum("amount_cents"))
     )
@@ -124,7 +125,14 @@ def budget_rows(period_start, today=None):
         }
         if category.budget_kind == Category.BudgetKind.BILLS:
             figures = bills.get(category.id)
+            # A small difference isn't over: a price change shows in the
+            # sheet's To review instead - see openspec/specs/bill-budgets.
+            # Loan installments are exact, so a loan category gets no margin.
+            if limit_cents is not None and category.id not in loans:
+                row["over_limit"] = spent_cents > limit_cents + max(limit_cents * 5 // 100, 100)
             row.update(
+                extras=figures["extras"] if figures else [],
+                review=figures["review"] if figures else False,
                 bills=figures["bills"] if figures else [],
                 paid_count=figures["paid_count"] if figures else 0,
                 due_to_date_cents=figures["due_to_date_cents"] if figures else 0,

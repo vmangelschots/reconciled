@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { billLabel, billWarning, budgetList, verdict } from "./budgetOverview";
+import { billLabel, billWarning, budgetList, reviewItems, verdict } from "./budgetOverview";
 import { formatMoney, formatMoneyWhole as whole } from "./money";
 import { formatDayMonth } from "./yearlyBudgets";
 
 function bill(id, name, day, cents, state, extra = {}) {
   return {
     id, name, day, due_date: `2026-11-${String(day).padStart(2, "0")}`, amount_cents: cents, state,
-    paid_on: null, paid_cents: null, over_cents: null, ...extra,
+    paid_on: null, paid_cents: null, difference_cents: null, source: "manual", ...extra,
   };
 }
 
@@ -82,7 +82,8 @@ describe("bill labels", () => {
   const through = "2026-11-19";
   it("says paid on its date, over by how much, or when it's due", () => {
     expect(billLabel(bill(1, "Netflix", 5, 1799, "paid", paid("2026-11-05", 1799)), through)).toBe(`Paid ${formatDayMonth("2026-11-05")}`);
-    expect(billLabel(bill(1, "Netflix", 5, 1799, "paid_over", { over_cents: 200 }), through)).toBe(`${formatMoney(200)} over`);
+    expect(billLabel(bill(1, "Netflix", 5, 1799, "paid_over", { difference_cents: 200 }), through)).toBe(`+${formatMoney(200)}`);
+    expect(billLabel(bill(1, "Netflix", 5, 1799, "paid_under", { difference_cents: -200 }), through)).toBe(`\u2212${formatMoney(200)}`);
     expect(billLabel(bill(3, "Spotify", 21, 1099, "due_soon"), through)).toBe("In 2 days");
     expect(billLabel(bill(3, "Spotify", 19, 1099, "due_soon"), through)).toBe("Today");
     expect(billLabel(bill(3, "Spotify", 21, 1099, "not_seen"), through)).toBe("Not seen");
@@ -104,5 +105,28 @@ describe("bill warnings", () => {
   it("counts in the verdict", () => {
     const s = summary([], { bills: [{ name: "Spotify" }] });
     expect(verdict(s, "2026-11", "2026-11")).toBe("1 needs a look");
+  });
+});
+
+describe("review items", () => {
+  const rows = (fields) => streaming([
+    bill(1, "Netflix", 5, 1799, "paid_over", { paid_on: "2026-11-05", paid_cents: 1999, difference_cents: 200 }),
+    bill(2, "Disney+", 8, 1199, "paid", paid("2026-11-08", 1199)),
+  ], { extras: [{ id: 91, date: "2026-11-18", payee: "PayPal", amount_cents: 799 }], review: true, ...fields });
+
+  it("lists bills paid at another amount and payments that pay no bill", () => {
+    const items = reviewItems(rows());
+    expect(items.map((i) => i.kind)).toEqual(["price", "extra"]);
+    expect(items[0].text).toBe(`Netflix paid ${formatMoney(1999)}, expected ${formatMoney(1799)}`);
+    expect(items[1].payment.payee).toBe("PayPal");
+  });
+
+  it("is empty outside this month and the one before", () => {
+    expect(reviewItems(rows({ review: false }))).toEqual([]);
+  });
+
+  it("never offers to update a loan bill", () => {
+    const row = streaming([bill(1, "House A", 7, 105000, "paid_over", { source: "loan", paid_cents: 110000, difference_cents: 5000 })], { review: true, extras: [] });
+    expect(reviewItems(row)).toEqual([]);
   });
 });

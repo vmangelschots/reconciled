@@ -15,8 +15,6 @@ from transactions.models import Transaction
 
 from .utils import month_range
 
-# A payment this many days either side of a bill's day can pay it.
-MATCH_DAYS = 4
 # An unpaid bill this many days or fewer before its day is due soon.
 DUE_SOON_DAYS = 3
 # Days after its day before an unpaid bill is missed - the same as loans.
@@ -28,6 +26,7 @@ class Outflow:
     id: int
     date: date
     cents: int  # positive: the amount that left
+    payee: str = ""
 
 
 def due_date(month, day):
@@ -39,8 +38,9 @@ def due_date(month, day):
 
 def amount_window(amount_cents):
     """How far a payment may be from a bill's amount and still pay it: the
-    larger of 30% and 5.00."""
-    return max(amount_cents * 30 // 100, 500)
+    larger of 15% and 2.00. Close enough that a matched amount can be
+    offered as the bill's new price - see openspec/specs/bill-budgets."""
+    return max(amount_cents * 15 // 100, 200)
 
 
 def paid_tolerance(amount_cents):
@@ -50,38 +50,39 @@ def paid_tolerance(amount_cents):
 
 
 def match(bills, outflows, month):
-    """{bill.id: Outflow} for the bills of one category in `month`. Bills go
-    in order of their day; each takes the unused outflow within MATCH_DAYS of
-    its date and inside its amount window that is closest in amount, then in
-    date. Each outflow pays at most one bill."""
-    used = set()
-    matches = {}
-    for bill in sorted(bills, key=lambda b: (b.day, b.id)):
+    """{bill.id: Outflow} for the bills of one category in `month`: every
+    bill and outflow of the month within the amount window are paired at
+    once, the pair closest in amount first, then the one closest to the
+    bill's day. Each bill takes at most one outflow and each outflow pays at
+    most one bill. The payee doesn't matter: with PayPal it says nothing."""
+    pairs = []
+    for bill in bills:
         due = due_date(month, bill.day)
         window = amount_window(bill.amount_cents)
-        candidates = [
-            o
-            for o in outflows
-            if o.id not in used
-            and o.date.year == month.year
-            and o.date.month == month.month
-            and abs((o.date - due).days) <= MATCH_DAYS
-            and abs(o.cents - bill.amount_cents) <= window
-        ]
-        if not candidates:
+        for o in outflows:
+            diff = abs(o.cents - bill.amount_cents)
+            if o.date.year == month.year and o.date.month == month.month and diff <= window:
+                pairs.append((diff, abs((o.date - due).days), bill.day, bill.id, o.id, bill, o))
+    pairs.sort(key=lambda p: p[:5])
+    matches, used = {}, set()
+    for *_, bill, outflow in pairs:
+        if bill.id in matches or outflow.id in used:
             continue
-        best = min(candidates, key=lambda o: (abs(o.cents - bill.amount_cents), abs((o.date - due).days), o.id))
-        used.add(best.id)
-        matches[bill.id] = best
+        matches[bill.id] = outflow
+        used.add(outflow.id)
     return matches
 
-
 def bill_state(amount_cents, due, payment, ref_day, month_over, future):
-    """One of paid_over, paid, upcoming, due_soon, not_seen or missed, as of
-    `ref_day`. A future month's bills are upcoming; once a month has ended,
-    an unpaid bill is missed."""
+    """One of paid_over, paid_under, paid, upcoming, due_soon, not_seen or
+    missed, as of `ref_day`. A future month's bills are upcoming; once a
+    month has ended, an unpaid bill is missed."""
     if payment is not None:
-        return "paid_over" if payment.cents > amount_cents + paid_tolerance(amount_cents) else "paid"
+        tolerance = paid_tolerance(amount_cents)
+        if payment.cents > amount_cents + tolerance:
+            return "paid_over"
+        if payment.cents < amount_cents - tolerance:
+            return "paid_under"
+        return "paid"
     if future:
         return "upcoming"
     if month_over:
@@ -111,12 +112,12 @@ def month_outflows(category_ids_by_bills_category, month):
         Transaction.objects.counted_rows()
         .excluding_adjustments()
         .filter(category_id__in=owners, amount_cents__lt=0, date__gte=month, date__lt=month_range(month))
-        .values_list("id", "date", "amount_cents", "category_id")
+        .values_list("id", "date", "amount_cents", "category_id", "payee")
     )
     result = {owner: [] for owner in category_ids_by_bills_category}
-    for tx_id, tx_date, cents, category_id in rows:
+    for tx_id, tx_date, cents, category_id, payee in rows:
         for owner in owners[category_id]:
-            result[owner].append(Outflow(tx_id, tx_date, -cents))
+            result[owner].append(Outflow(tx_id, tx_date, -cents, payee))
     return result
 
 
@@ -130,10 +131,14 @@ def bill_rows(categories, children, month, today, loan_lines=None):
     budgets/loan_bills.py); they never take part in matching."""
     ref_day, month_over, future = as_of(month, today)
     loan_lines = loan_lines or {}
+    this_month = today.replace(day=1)
+    # Prompts to review a month only while it is fresh: this one and the one
+    # before, so last month can still be closed on the 2nd.
+    review = month in (this_month, (this_month - timedelta(days=1)).replace(day=1))
 
     bills_by_category = {}
     for category in categories:
-        bills = [b for b in category.bills.all() if b.from_month <= month]
+        bills = [b for b in category.bills.all() if b.counts_in(month)]
         if bills:
             bills_by_category[category.id] = bills
     outflows = month_outflows(
@@ -160,13 +165,24 @@ def bill_rows(categories, children, month, today, loan_lines=None):
                     "state": state,
                     "paid_on": payment.date if payment else None,
                     "paid_cents": payment.cents if payment else None,
-                    "over_cents": payment.cents - bill.amount_cents if state == "paid_over" else None,
+                    "difference_cents": (
+                        payment.cents - bill.amount_cents if state in ("paid_over", "paid_under") else None
+                    ),
                     "source": "manual",
                     "loan_account_id": None,
                 }
             )
         lines = sorted([*lines, *loan_lines.get(category_id, [])], key=lambda line: (line["day"], line["source"] == "loan", line["id"]))
+        paid_ids = {payment.id for payment in matches.values()}
+        # Outflows that pay no bill; a loan category's never become bills.
+        extras = [] if loan_lines.get(category_id) else [
+            {"id": o.id, "date": o.date, "payee": o.payee, "amount_cents": o.cents}
+            for o in sorted(outflows.get(category_id, []), key=lambda o: (o.date, o.id))
+            if o.id not in paid_ids
+        ]
         result[category_id] = {
+            "extras": extras,
+            "review": review,
             "budget_cents": sum(line["amount_cents"] for line in lines),
             "bills": lines,
             "paid_count": sum(1 for line in lines if line["paid_on"] is not None),

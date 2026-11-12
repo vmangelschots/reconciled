@@ -11,6 +11,7 @@ export const BILL_TONE = {
   due_soon: "reminder",
   paid: "positive",
   paid_over: "positive",
+  paid_under: "positive",
   not_seen: "warning",
   missed: "critical",
 };
@@ -21,8 +22,11 @@ export function billLabel(bill, through) {
   switch (bill.state) {
     case "paid":
       return `Paid ${formatDayMonth(bill.paid_on)}`;
+    // A difference, never "over": that word is for money really over.
     case "paid_over":
-      return `${formatMoney(bill.over_cents)} over`;
+      return `+${formatMoney(bill.difference_cents)}`;
+    case "paid_under":
+      return `\u2212${formatMoney(-bill.difference_cents)}`;
     case "due_soon": {
       const days = daysBetween(through, bill.due_date);
       return days === 0 ? "Today" : days === 1 ? "Tomorrow" : `In ${days} days`;
@@ -162,6 +166,23 @@ function pressingBill(bills) {
   return next ? `${next.name} due ${formatDayMonth(next.due_date)}` : null;
 }
 
+// What the sheet's "To review" lists, only for this month and the one
+// before: bills paid at another amount (Update) and payments that pay no
+// bill (Add as bill) - see specs/bill-budgets.
+export function reviewItems(row) {
+  if (!row.review) return [];
+  const prices = row.bills
+    .filter((b) => b.source !== "loan" && (b.state === "paid_over" || b.state === "paid_under"))
+    .map((b) => ({
+      kind: "price",
+      key: `price-${b.id}`,
+      bill: b,
+      text: `${b.name} paid ${formatMoney(b.paid_cents)}, expected ${formatMoney(b.amount_cents)}`,
+    }));
+  const extras = (row.extras ?? []).map((p) => ({ kind: "extra", key: `extra-${p.id}`, payment: p }));
+  return [...prices, ...extras];
+}
+
 function billsRow(row, through) {
   const bills = row.bills;
   const over = row.over_limit;
@@ -176,6 +197,9 @@ function billsRow(row, through) {
     bills: bills.map((b) => ({ id: b.id, name: b.name, amountCents: b.amount_cents, state: b.state })),
     billLines: bills,
     through,
+    review: reviewItems(row),
+    // What is beyond the bills, for the bar's critical segment.
+    overCents: over ? row.spent_cents - row.limit_cents : 0,
     figure: over ? `${whole(row.spent_cents - row.limit_cents)} over` : row.unpaid_cents > 0 ? `${whole(row.unpaid_cents)} to pay` : "Paid",
     critical: over,
     caption: joined(`${row.paid_count} of ${bills.length} paid`, pressingBill(bills), coverage(row, row.limit_cents)),

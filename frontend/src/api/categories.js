@@ -39,9 +39,15 @@ export function setCategoryBudget(id, { kind, amount_cents, due }) {
   });
 }
 
-// Replaces a Bills category's bills: [{ id?, name, day, amount_cents }]. A
-// line with an id keeps the month it counts from; bills left out are
-// removed - see specs/bill-budgets.
-export function setCategoryBills(id, bills) {
-  return apiFetch(`/api/categories/${id}/bills/`, { method: "PUT", body: { bills } });
+// Sets a Bills category's bills from `month` ("YYYY-MM", the viewed month)
+// on: [{ id?, name, day, amount_cents }]. Earlier months keep what they had
+// - see specs/bill-budgets.
+export function setCategoryBills(id, bills, month) {
+  return apiFetch(`/api/categories/${id}/bills/`, { method: "PUT", body: { month, bills } });
+}
+
+// Makes a payment that pays no bill a bill, on its day for its amount, from
+// its month on.
+export function addBillFromPayment(id, transaction, name) {
+  return apiFetch(`/api/categories/${id}/bills/from-payment/`, { method: "POST", body: { transaction, name } });
 }

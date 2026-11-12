@@ -56,6 +56,12 @@ export function BudgetsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [month]);
 
+  // After a change from inside the sheet, which stays open.
+  async function reloadAll() {
+    await listCategories().then(setCategories);
+    await reloadSummary();
+  }
+
   async function handleBudgetSaved(id) {
     toast.success("Budget updated.");
     setSelectedId(null);
@@ -149,7 +155,7 @@ export function BudgetsPage() {
         startMonth={summary?.yearly?.start_month}
         wide={isWide}
         onSaved={handleBudgetSaved}
-        onChanged={reloadSummary}
+        onChanged={reloadAll}
         onClose={() => setSelectedId(null)}
       />
     </section>
@@ -260,7 +266,7 @@ function BudgetRow({ row, highlight, onOpen }) {
         </span>
         <span className="order-3 col-span-2 sm:order-none sm:col-span-1">
           {row.bar && <ProgressBar label={`${row.name} spent`} {...row.bar} />}
-          {row.bills && <BillBar label={`${row.name} bills`} bills={row.bills} />}
+          {row.bills && <BillBar label={`${row.name} bills`} bills={row.bills} overCents={row.overCents} />}
         </span>
         <span
           className={cn(

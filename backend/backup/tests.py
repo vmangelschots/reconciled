@@ -304,6 +304,25 @@ class RestoreBackupTests(BackupTestCase):
         self.assertEqual((bill.category.name, bill.category.budget_kind), ("Streaming", "bills"))
         self.assertEqual((bill.name, bill.day, bill.amount_cents, bill.from_month), ("Netflix", 5, 1799, date(2026, 9, 1)))
 
+    def test_bill_months_survive(self):
+        Bill.objects.filter(name="Netflix").update(until_month=date(2026, 10, 1))
+        Bill.objects.create(category=self.streaming, name="Netflix", day=5, amount_cents=1999, from_month=date(2026, 11, 1))
+        content = self.file_content()
+        self.mess_up()
+        restore_backup(read_backup(content))
+        self.assertEqual(
+            sorted((b.amount_cents, b.from_month, b.until_month) for b in Bill.objects.all()),
+            [(1799, date(2026, 9, 1), date(2026, 10, 1)), (1999, date(2026, 11, 1), None)],
+        )
+
+    def test_a_backup_from_before_bill_end_months_restores(self):
+        envelope = json.loads(self.file_content())
+        for row in envelope["data"]:
+            if row["model"] == "budgets.bill":
+                del row["fields"]["until_month"]
+        restore_backup(read_backup(json.dumps(envelope)))
+        self.assertEqual(list(Bill.objects.values_list("until_month", flat=True)), [None])
+
     def test_a_backup_from_before_bills_restores(self):
         envelope = json.loads(self.file_content())
         envelope["data"] = [row for row in envelope["data"] if row["model"] != "budgets.bill"]
