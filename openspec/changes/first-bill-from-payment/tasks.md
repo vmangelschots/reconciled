@@ -6,7 +6,7 @@
 
 ## 2. Frontend
 
-- [ ] 2.1 In `lib/budgetOverview.js`, give a Bills row without a limit `bills: []`, `billLines: []`, `through`, `review` and `overCents: 0` while keeping the "€X spent" figure and No budget grouping; in `BudgetSheet.jsx` hide the empty bill bar and show "No bills yet" in the bill list (mentioning "from a payment above" only when "To review" is shown); verify with `budgetOverview` tests for the row and `BudgetSheet.test.jsx` cases for the spec scenarios (sheet lists the 7.99 with Add as bill and "No bills yet"; September shows no "To review"); then run `npm test`, `npm run lint`, `npm run build`
+- [x] 2.1 In `lib/budgetOverview.js`, give a Bills row without a limit `bills: []`, `billLines: []`, `through`, `review` and `overCents: 0` while keeping the "€X spent" figure and No budget grouping; in `BudgetSheet.jsx` hide the empty bill bar and show "No bills yet" in the bill list (mentioning "from a payment above" only when "To review" is shown); verify with `budgetOverview` tests for the row and `BudgetSheet.test.jsx` cases for the spec scenarios (sheet lists the 7.99 with Add as bill and "No bills yet"; September shows no "To review"); then run `npm test`, `npm run lint`, `npm run build`
 
 ## 3. Integration check
 
