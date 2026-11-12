@@ -252,8 +252,10 @@ its date, payee, category and amount. Value adjustments SHALL NOT be
 listed. With more than one active account,
 each row SHALL show its account's name. A transfer between two of the
 user's active accounts SHALL be listed once, as "<from> → <to>" with the
-amount moved and no sign colour. "View all" SHALL open the last-opened
-account's transactions.
+amount moved and no sign colour. A covered entry SHALL be listed once, by
+its cost, with "Paid by <Tab>" in place of the account name, whatever the
+number of accounts. "View all" SHALL open the last-opened account's
+transactions.
 
 #### Scenario: Last eight
 - **WHEN** the accounts have 30 transactions between them
@@ -264,6 +266,12 @@ account's transactions.
 - **WHEN** the most recent movement is 500.00 from "Revolut" to "Crelan"
 - **THEN** one row reads "Revolut → Crelan" with €500.00, and the
   matching +500.00 in Crelan is not listed separately
+
+#### Scenario: A covered entry shows once
+- **WHEN** the newest entry is Sarah paying 15.00 for "Sushi Palace" in
+  "Takeout"
+- **THEN** one row reads "Sushi Palace", "Takeout", -€15.00 with "Paid by
+  Sarah" linking to her tab, and the tab half is not listed
 
 #### Scenario: Value adjustments are left out
 - **WHEN** the newest entry is a value adjustment on "House"
