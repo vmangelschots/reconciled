@@ -15,8 +15,8 @@
 
   Verify with the "A tab with covered entries stays a tab" scenarios.
 - [x] 2.4 Switch every account-listing site to `.visible()`: the account viewset, overview accounts, the tier lists, `balances.py`, the import and bank sync choices, the forecast lookup, and the transaction serializers' account and transfer fields. Verify with the "Covered entries are not in an account" scenarios: the accounts list, the Overview's Accounts tile and stale-import line, the ledger retrieve returning 404, and transfer targets.
-- [ ] 2.5 Add `account_label(txn)` and use it in `_recent_row` and the spending cell view (rows and the header's `accounts`). Leave tab halves out of recent transactions. Verify in `tests_overview.py` and `reports/tests.py` with "A covered entry shows once", "In a report's transactions" and "Renaming the tab".
-- [ ] 2.6 Verify a backup round-trip keeps the off-bank account, both halves and their link, in `backup/tests.py`.
+- [x] 2.5 Add `account_label(txn)` and use it in `_recent_row` and the spending cell view (rows and the header's `accounts`). Leave tab halves out of recent transactions. Verify in `tests_overview.py` and `reports/tests.py` with "A covered entry shows once", "In a report's transactions" and "Renaming the tab".
+- [x] 2.6 Verify a backup round-trip keeps the off-bank account, both halves and their link, in `backup/tests.py`.
 
 ## 3. Tab page UI
 

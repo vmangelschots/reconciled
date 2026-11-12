@@ -24,10 +24,12 @@ from households.context import household_context
 from households.models import Household
 from households.testing import TestCase
 from imports.models import AccountImportSettings, ImportSession
+from transactions import covered
 from transactions.adjustments import set_value
 from transactions.loans import link_payment, schedule, set_up_loan, sync_loan
 from transactions.models import Transaction
 from transactions.splits import SplitLine, save_split
+from transactions.tabs import tab_detail
 from transactions.transfers import link_transfer
 
 from .format import (
@@ -291,6 +293,23 @@ class RestoreBackupTests(BackupTestCase):
                 del row["fields"]["category_reason"]
         restore_backup(read_backup(json.dumps(envelope)))
         self.assertEqual(set(Transaction.objects.values_list("category_reason", flat=True)), {""})
+
+    def test_a_covered_entry_survives(self):
+        takeout = Category.objects.create(name="Takeout")
+        covered.create(self.tab, covered.CoveredInput(date(2026, 11, 11), "Sushi Palace", 1500, takeout))
+        before = snapshot()
+        content = self.file_content()
+        self.assertEqual(json.loads(content)["summary"], {"accounts": 3, "transactions": 6})
+        self.mess_up()
+
+        restored = restore_backup(read_backup(content))
+
+        self.assertEqual(snapshot(), before)
+        self.assertEqual(restored, {"accounts": 3, "transactions": 6})
+        cost = Transaction.objects.get(payee="Sushi Palace", amount_cents=-1500)
+        self.assertEqual((cost.covered_tab_row.category.name, cost.covered_tab_row.amount_cents), ("Jan", 1500))
+        self.assertTrue(cost.account.is_off_bank)
+        self.assertEqual(tab_detail(Category.objects.get(name="Jan")).balance_cents, 300 - 1500)
 
     def test_cash_left_out_of_a_portfolio_survives(self):
         Account.objects.filter(pk=self.revolut.pk).update(portfolio_excluded_cash=["cash-1"])

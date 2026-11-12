@@ -1,6 +1,6 @@
 from datetime import timedelta
 
-from django.db.models import BigIntegerField, Case, Count, Max, Sum, When
+from django.db.models import BigIntegerField, Case, Count, Max, Q, Sum, When
 from django.utils import timezone
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -15,6 +15,7 @@ from budgets.yearly import yearly_rows
 from forecasting.utils import generate_forecast
 from imports.models import ImportSession
 from transactions.categorize import needs_review, uncategorized
+from transactions.covered import account_label
 from transactions.loans import missed_installment, sync_loans
 from transactions.models import Transaction
 
@@ -207,7 +208,7 @@ class SpendingCellView(APIView):
                 "name": name,
                 "uncategorized": category is None,
                 "total_cents": total if income else -total,
-                "accounts": sorted({r.account.name for r in rows}),
+                "accounts": sorted({account_label(r)[0] for r in rows}),
                 "rows": [
                     {
                         "id": r.id,
@@ -215,7 +216,8 @@ class SpendingCellView(APIView):
                         "payee": r.payee,
                         "amount_cents": r.amount_cents,
                         "account_id": r.account_id,
-                        "account_name": r.account.name,
+                        "account_name": account_label(r)[0],
+                        "paid_by_tab": account_label(r)[1],
                         "category": r.category_id,
                         "category_label": _category_label(r.category),
                         "split_amount_cents": r.split_parent.amount_cents if r.split_parent_id else None,
@@ -238,12 +240,14 @@ def _category_label(category):
 def _recent_row(txn):
     category = txn.category
     counterpart = txn.transfer_counterpart
+    account_name, paid_by_tab = account_label(txn)
     return {
         "id": txn.id,
         "date": txn.date,
         "payee": txn.payee,
         "amount_cents": txn.amount_cents,
-        "account_name": txn.account.name,
+        "account_name": account_name,
+        "paid_by_tab": paid_by_tab,
         "category_label": _category_label(category),
         "is_tab": bool(category and category.parent_id and category.parent.is_tab_group),
         "transfer_account_name": counterpart.account.name if counterpart else None,
@@ -370,12 +374,15 @@ class OverviewView(APIView):
 
         # A transfer between two active accounts is listed once, by its
         # outgoing leg.
+        # Covered entries show once, by their cost (see repayment-tabs).
         recent = (
             Transaction.objects.ledger_rows()
-            .filter(account__in=accounts)
+            .filter(Q(account__in=accounts) | Q(account__is_off_bank=True, covered_tab_row__isnull=False))
             .excluding_adjustments()
             .exclude(amount_cents__gt=0, transfer_counterpart__account__archived=False)
-            .select_related("account", "category__parent", "transfer_counterpart__account")
+            .select_related(
+                "account", "category__parent", "transfer_counterpart__account", "covered_tab_row__category"
+            )
             .annotate(part_count=Count("parts"))
             .order_by("-date", "-id")[:RECENT_COUNT]
         )

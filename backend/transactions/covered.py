@@ -68,6 +68,24 @@ def _fields(data):
     }
 
 
+def paid_by(txn):
+    """For the cost half of a covered entry, the tab it's on - shown as
+    "Paid by <tab>" wherever an account name would go. None otherwise.
+    Needs covered_tab_row__category selected to stay one query."""
+    if txn.covered_tab_row_id is None:
+        return None
+    return txn.covered_tab_row.category
+
+
+def account_label(txn):
+    """(account name or "Paid by <tab>", tab id or None) for listing a row
+    outside its tab page; see "Covered entries elsewhere"."""
+    tab = paid_by(txn)
+    if tab is not None:
+        return f"Paid by {tab.name}", tab.id
+    return txn.account.name, None
+
+
 def covered_rows(tab):
     """The tab halves of the covered entries on `tab`."""
     return Transaction.objects.filter(category=tab, covered_cost__isnull=False)

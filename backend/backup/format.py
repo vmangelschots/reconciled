@@ -288,9 +288,13 @@ def restore_backup(rows):
 
     Account = apps.get_model("accounts.Account")
     Transaction = apps.get_model("transactions.Transaction")
+    # Counted as the summary counts them: no off-bank account, and no
+    # covered entries, which live in it.
+    off_bank = {o.object.pk for o in objects if isinstance(o.object, Account) and o.object.is_off_bank}
     return {
-        "accounts": sum(isinstance(o.object, Account) for o in objects),
+        "accounts": sum(isinstance(o.object, Account) and not o.object.is_off_bank for o in objects),
         "transactions": sum(
-            isinstance(o.object, Transaction) and o.object.split_parent_id is None for o in objects
+            isinstance(o.object, Transaction) and o.object.split_parent_id is None and o.object.account_id not in off_bank
+            for o in objects
         ),
     }
