@@ -3,7 +3,9 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accounts.models import Account, tier_position
 from budgets import utils as budget_utils
+from reports.views import import_freshness
 
 from .expected import allowed_accounts, allowed_categories, blocked_category_ids, pot_tier
 from .forecast import HORIZONS, everyday_forecast
@@ -52,4 +54,17 @@ class ForecastView(APIView):
             horizon_days = None
         if horizon_days not in HORIZONS:
             return Response({"detail": "horizon_days must be 30 or 90."}, status=400)
-        return Response(everyday_forecast(budget_utils.today(), horizon_days))
+        forecast = everyday_forecast(budget_utils.today(), horizon_days)
+        # The pot's accounts with when they were last imported, for the
+        # stale-import line - see the forecasting spec.
+        accounts = [
+            a
+            for a in Account.objects.visible().filter(archived=False).order_by(tier_position(), "name", "id")
+            if a.tier == forecast["tier"]
+        ]
+        freshness = import_freshness(accounts)
+        forecast["accounts"] = [
+            {"id": a.id, "name": a.name, "account_type": a.account_type, "tier": a.tier, **freshness[a.id]}
+            for a in accounts
+        ]
+        return Response(forecast)

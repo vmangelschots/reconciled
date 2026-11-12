@@ -293,6 +293,19 @@ describe("BudgetsPage month", () => {
     expect(screen.getByText(new Date(2026, 8, 1).toLocaleString(undefined, { month: "long", year: "numeric" }))).toBeInTheDocument();
   });
 
+  it("opens a category's sheet from the address", async () => {
+    renderPage("/budgets?month=2026-10&category=1");
+
+    const sheet = await screen.findByRole("dialog");
+    expect(within(sheet).getAllByText("Groceries").length).toBeGreaterThan(0);
+
+    await userEvent.keyboard("{Escape}");
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.getByTestId("where")).toHaveTextContent("?month=2026-10");
+    expect(screen.getByTestId("where")).not.toHaveTextContent("category");
+  });
+
   it("writes the month back to the address when switching", async () => {
     renderPage();
     await waitFor(() => expect(budgetsApi.getBudgetSummary).toHaveBeenCalledWith("2026-10"));

@@ -366,6 +366,11 @@ class ForecastApiTests(ForecastCase):
         with patch("budgets.utils.today", lambda: TODAY):
             return self.client.get(reverse("forecast"), params)
 
+    def test_the_pot_accounts_with_their_last_import(self):
+        Account.objects.create(name="Spaarrekening", account_type="savings", starting_balance_cents=0)
+        accounts = self.get(horizon_days=30).json()["accounts"]
+        self.assertEqual([(a["name"], a["last_import_date"], a["bank_linked"]) for a in accounts], [("Crelan", None, False)])
+
     def test_only_30_or_90_days(self):
         self.assertEqual(self.get(horizon_days=60).status_code, 400)
         self.assertEqual(self.get(horizon_days="x").status_code, 400)

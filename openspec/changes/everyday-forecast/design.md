@@ -152,9 +152,9 @@ converter that applies the same rules, so old backups still restore.
 
 ### API
 - `GET /api/forecast/?horizon_days=30|90` returns `everyday_forecast`,
-  with dates as ISO strings. It replaces `?account=`. The stale-import
-  line is worked out in the frontend from the accounts list with
-  `staleImports`, as the Overview does.
+  with dates as ISO strings, plus the pot's accounts with their import
+  freshness (`import_freshness`, shared with the Overview), which the
+  frontend phrases with `staleImports`. It replaces `?account=`.
 - `/api/expected-items/` is a `ModelViewSet` that replaces
   `/api/recurring-transactions/`. Each item carries `status`
   (`received` / `next` / `late` / `unrecognisable` / `budgeted`),

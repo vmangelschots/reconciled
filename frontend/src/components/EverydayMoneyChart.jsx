@@ -14,6 +14,7 @@ import {
 } from "recharts";
 import { ChartTooltip } from "./ui/ChartTooltip";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/Table";
+import { BelowZeroGradient, LowLabel, PointLabel, belowZeroStroke, showsLow } from "./chart/projection";
 import { staleImports } from "../lib/importFreshness";
 import { formatMoneyCompact, formatMoneyWhole } from "../lib/money";
 import { formatDayMonth } from "../lib/yearlyBudgets";
@@ -76,38 +77,6 @@ export function EverydayTooltip({ active, payload }) {
   );
 }
 
-// A label ending at its point, so it never runs off the chart's right edge.
-function PointLabel({ viewBox, text, className }) {
-  return (
-    <text x={viewBox.x - 8} y={viewBox.y - 10} textAnchor="end" className={className}>
-      {text}
-    </text>
-  );
-}
-
-// The projection in the critical colour once it passes below zero: a
-// gradient on the line, with a hard stop where the line meets zero.
-function ProjectionStroke({ projection }) {
-  const values = projection.map((p) => p.balance_cents);
-  const max = Math.max(...values);
-  const min = Math.min(...values);
-  const zero = max <= 0 ? 0 : min >= 0 ? 1 : max / (max - min);
-  return (
-    <defs>
-      <linearGradient id={GRADIENT_ID} x1="0" y1="0" x2="0" y2="1">
-        <stop offset={zero} stopColor="var(--chart-series-1)" />
-        <stop offset={zero} stopColor="var(--critical)" />
-      </linearGradient>
-    </defs>
-  );
-}
-
-function projectionColor(projection) {
-  const values = projection.map((p) => p.balance_cents);
-  if (Math.min(...values) >= 0) return "var(--chart-series-1)";
-  return Math.max(...values) <= 0 ? "var(--critical)" : `url(#${GRADIENT_ID})`;
-}
-
 function Caption({ data, stale }) {
   const { projection, end, current } = data;
   return (
@@ -116,10 +85,17 @@ function Caption({ data, stale }) {
         <>
           <span>Last 90 days</span>
           {projection ? (
-            stale && <span className="text-warning">{stale}</span>
+            <>
+              {data.has_income === false && (
+                <Link to="/forecast?days=30" className="text-ink-muted underline-offset-2 hover:text-accent hover:underline">
+                  No income expected
+                </Link>
+              )}
+              {stale && <span className="text-warning">{stale}</span>}
+            </>
           ) : (
-            <Link to="/forecast" className="text-accent hover:underline">
-              Set up recurring transactions
+            <Link to="/forecast?days=30" className="text-accent hover:underline">
+              Add expected income
             </Link>
           )}
         </>
@@ -133,8 +109,9 @@ function Caption({ data, stale }) {
 /**
  * The everyday balance per day with its dashed projection (Recharts). See
  * specs/balance-history.
- * - data: { tier, current, end, points, projection, lowest } from the
- *   report; a projection only comes with the current month.
+ * - data: { tier, current, end, points, projection, lowest, has_income }
+ *   from the report; a projection only comes with the current month. Without
+ *   expected income it isn't painted in the critical colour.
  * - accounts: the overview's accounts, for the stale-import note.
  * - showTable: the table view, toggled from the panel's header.
  * - width: optional fixed width; tests pass one, as jsdom has no layout.
@@ -152,12 +129,14 @@ export function EverydayMoneyChart({ data, accounts = [], showTable = false, wid
   const tooShort = points.length < MIN_POINTS;
   const last = points[points.length - 1];
   const todayBalance = projection?.[0].balance_cents ?? last?.balance_cents;
-  const showLow = projection && lowest && lowest.balance_cents < todayBalance;
+  const showLow = projection && showsLow(lowest, todayBalance);
+  const critical = data.has_income !== false;
+  const projectionValues = projection?.map((p) => p.balance_cents) ?? [];
   const drawn = tooShort ? rows.filter((r) => r.projected_cents !== undefined) : rows;
 
   const chart = (
     <ComposedChart data={drawn} width={width} height={HEIGHT} margin={{ top: 24, right: 8, left: 0, bottom: 0 }}>
-      {projection && <ProjectionStroke projection={projection} />}
+      {projection && <BelowZeroGradient id={GRADIENT_ID} values={projectionValues} />}
       <CartesianGrid vertical={false} stroke="var(--chart-gridline)" />
       <XAxis
         dataKey="date"
@@ -198,7 +177,7 @@ export function EverydayMoneyChart({ data, accounts = [], showTable = false, wid
         <Line
           dataKey="projected_cents"
           type="stepAfter"
-          stroke={projectionColor(projection)}
+          stroke={belowZeroStroke(projectionValues, GRADIENT_ID, critical)}
           strokeWidth={2}
           strokeDasharray="5 5"
           dot={false}
@@ -229,12 +208,7 @@ export function EverydayMoneyChart({ data, accounts = [], showTable = false, wid
           x={lowest.date}
           y={lowest.balance_cents}
           r={0}
-          label={
-            <PointLabel
-              text={`Low ${whole(lowest.balance_cents)} · ${formatDayMonth(lowest.date)}`}
-              className={lowest.balance_cents < 0 ? "chart-low-label chart-low-label-critical" : "chart-low-label"}
-            />
-          }
+          label={<LowLabel lowest={lowest} critical={critical} />}
         />
       )}
     </ComposedChart>

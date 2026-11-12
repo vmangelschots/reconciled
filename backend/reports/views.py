@@ -299,6 +299,28 @@ def _attention_reconnect():
     return rows
 
 
+def import_freshness(accounts):
+    """{account id: {last_import_date, bank_linked, bank_ended}}, for the
+    stale-import line on the Overview and the Forecast page."""
+    # An import counts for every account it sent lines to, such as a
+    # Revolut pocket account next to the upload's account.
+    last_imports = dict(
+        ImportSession.objects.filter(imported_accounts__in=accounts, status=ImportSession.Status.COMMITTED)
+        .values("imported_accounts")
+        .annotate(last=Max("updated_at"))
+        .values_list("imported_accounts", "last")
+    )
+    links = {link.account_id: link for link in BankAccountLink.objects.select_related("connection")}
+    return {
+        a.id: {
+            "last_import_date": _last_import_date(last_imports.get(a.id), links.get(a.id)),
+            "bank_linked": a.id in links,
+            "bank_ended": a.id in links and _link_ended(links[a.id]),
+        }
+        for a in accounts
+    }
+
+
 class OverviewView(APIView):
     """Every figure the overview shows for one month across all active
     accounts, in one request - see openspec/specs/overview."""
@@ -314,15 +336,7 @@ class OverviewView(APIView):
         sync_loans(today)
 
         accounts = list(Account.objects.visible().filter(archived=False).order_by(tier_position(), "name", "id"))
-        # An import counts for every account it sent lines to, such as a
-        # Revolut pocket account next to the upload's account.
-        last_imports = dict(
-            ImportSession.objects.filter(imported_accounts__in=accounts, status=ImportSession.Status.COMMITTED)
-            .values("imported_accounts")
-            .annotate(last=Max("updated_at"))
-            .values_list("imported_accounts", "last")
-        )
-        links = {link.account_id: link for link in BankAccountLink.objects.select_related("connection")}
+        freshness = import_freshness(accounts)
         last_values = dict(
             Transaction.objects.filter(account__in=accounts, is_adjustment=True)
             .values("account")
@@ -336,9 +350,7 @@ class OverviewView(APIView):
                 "account_type": a.account_type,
                 "tier": a.tier,
                 "balance_cents": a.current_balance_cents,
-                "last_import_date": _last_import_date(last_imports.get(a.id), links.get(a.id)),
-                "bank_linked": a.id in links,
-                "bank_ended": a.id in links and _link_ended(links[a.id]),
+                **freshness[a.id],
                 "last_value_date": last_values.get(a.id),
             }
             for a in accounts

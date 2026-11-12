@@ -37,12 +37,21 @@ describe("EverydayMoneyChart", () => {
     renderChart({ data: data({ current: false, end: "2026-09-30" }) });
     expect(screen.getByText(`To ${formatDayMonth("2026-09-30")}`)).toBeInTheDocument();
     expect(screen.queryByText("Today")).not.toBeInTheDocument();
-    expect(screen.queryByText("Set up recurring transactions")).not.toBeInTheDocument();
+    expect(screen.queryByText("Add expected income")).not.toBeInTheDocument();
   });
 
-  it("links to Forecast with nothing scheduled", () => {
+  it("links to Forecast over 30 days with nothing expected (Nothing expected)", () => {
     renderChart({ data: data() });
-    expect(screen.getByRole("link", { name: "Set up recurring transactions" })).toHaveAttribute("href", "/forecast");
+    expect(screen.getByRole("link", { name: "Add expected income" })).toHaveAttribute("href", "/forecast?days=30");
+  });
+
+  it("stays calm without expected income (Bills but no salary)", () => {
+    const lowest = { date: iso(1), balance_cents: -15000 };
+    renderChart({ data: data({ projection: projection([184000, -15000]), lowest, has_income: false }) });
+    const link = screen.getByRole("link", { name: "No income expected" });
+    expect(link).toHaveAttribute("href", "/forecast?days=30");
+    expect(link).not.toHaveClass("text-warning");
+    expect(screen.getByText(/^Low/)).not.toHaveClass("chart-low-label-critical");
   });
 
   it("labels a low ahead", () => {
@@ -57,9 +66,9 @@ describe("EverydayMoneyChart", () => {
     expect(screen.queryByText(/^Low/)).not.toBeInTheDocument();
   });
 
-  it("uses the critical colour when running short", () => {
+  it("uses the critical colour when running short with income expected", () => {
     const lowest = { date: iso(1), balance_cents: -15000 };
-    renderChart({ data: data({ projection: projection([184000, -15000]), lowest }) });
+    renderChart({ data: data({ projection: projection([184000, -15000]), lowest, has_income: true }) });
     expect(screen.getByText(/^Low/)).toHaveClass("chart-low-label-critical");
   });
 
