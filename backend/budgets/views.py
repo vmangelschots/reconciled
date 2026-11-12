@@ -7,6 +7,7 @@ from rest_framework.views import APIView
 
 from reports.spending import month_spending
 from transactions.loans import sync_loans
+from transactions.models import Transaction
 
 from . import utils
 from .attention import attention_bills, attention_categories, attention_yearly
@@ -186,6 +187,36 @@ class CategoryViewSet(viewsets.ModelViewSet):
             return Response({"bills": errors}, status=400)
         with transaction.atomic():
             apply_bills(category, month, cleaned)
+        return Response(
+            CategorySerializer(self.get_queryset().get(pk=category.pk), context=self.get_serializer_context()).data
+        )
+
+    @action(detail=True, methods=["post"], url_path="bills/from-payment")
+    def bill_from_payment(self, request, pk=None):
+        """Make a payment that pays no bill a bill: {transaction, name}. It
+        is due on the payment's day for its amount, from its month on - see
+        openspec/specs/bill-budgets, "Add a payment as a bill"."""
+        category = self.get_object()
+        if category.id in loan_categories():
+            return Response({"detail": LOAN_SET}, status=400)
+        if category.budget_kind != Category.BudgetKind.BILLS:
+            return Response({"detail": "Only a Bills category takes bills."}, status=400)
+        name = str(request.data.get("name") or "").strip()
+        if not name:
+            return Response({"name": "A bill needs a name."}, status=400)
+        covered = [category.id, *category.subcategories.values_list("id", flat=True)]
+        payment = Transaction.objects.filter(
+            id=request.data.get("transaction"), category_id__in=covered, amount_cents__lt=0
+        ).first()
+        if payment is None:
+            return Response({"transaction": "Not a payment in this category."}, status=400)
+        Bill.objects.create(
+            category=category,
+            name=name,
+            day=payment.date.day,
+            amount_cents=-payment.amount_cents,
+            from_month=payment.date.replace(day=1),
+        )
         return Response(
             CategorySerializer(self.get_queryset().get(pk=category.pk), context=self.get_serializer_context()).data
         )

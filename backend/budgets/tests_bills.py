@@ -497,3 +497,43 @@ class BillsInTheMonthTests(TestCase):
         self._pay(date(2026, 11, 5), 1799)
         self._pay(date(2026, 11, 8), 1199)
         self.assertEqual(self._summary(today=date(2026, 11, 23))["attention"]["bills"], [])
+
+
+@patch("budgets.utils.today", lambda: date(2026, 11, 19))
+class BillFromPaymentTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(user=get_user_model().objects.create_user(username="p", password="x"))
+        self.account = Account.objects.create(name="Crelan", account_type="checking", starting_balance_cents=0)
+        self.streaming = Category.objects.create(name="Streaming", budget_kind="bills")
+        self.paypal = Transaction.objects.create(
+            account=self.account, date=date(2026, 11, 18), amount_cents=-799, payee="PayPal", category=self.streaming
+        )
+
+    def add(self, category, **body):
+        return self.client.post(reverse("category-bill-from-payment", args=[category.id]), body, format="json")
+
+    def test_a_new_subscription_through_paypal(self):
+        response = self.add(self.streaming, transaction=self.paypal.id, name="Apple TV")
+        self.assertEqual(response.status_code, 200)
+        bill = Bill.objects.get()
+        self.assertEqual((bill.name, bill.day, bill.amount_cents, bill.from_month, bill.until_month), ("Apple TV", 18, 799, NOV_2026, None))
+        categories = list(Category.objects.prefetch_related("bills"))
+        row = bill_rows(categories, subcategories_by_parent(categories), NOV_2026, date(2026, 11, 19))[self.streaming.id]
+        self.assertEqual((row["bills"][0]["state"], row["extras"]), ("paid", []))
+
+    def test_a_subcategory_payment(self):
+        kids = Category.objects.create(name="Kids", parent=self.streaming)
+        payment = Transaction.objects.create(account=self.account, date=date(2026, 11, 3), amount_cents=-499, payee="PayPal", category=kids)
+        self.assertEqual(self.add(self.streaming, transaction=payment.id, name="Kids TV").status_code, 200)
+
+    def test_refusals(self):
+        inflow = Transaction.objects.create(account=self.account, date=date(2026, 11, 3), amount_cents=500, payee="Refund", category=self.streaming)
+        other = Category.objects.create(name="Food", budget_kind="bills")
+        elsewhere = Transaction.objects.create(account=self.account, date=date(2026, 11, 3), amount_cents=-500, payee="x", category=other)
+        monthly = Category.objects.create(name="Groceries")
+        self.assertEqual(self.add(self.streaming, transaction=inflow.id, name="x").status_code, 400)
+        self.assertEqual(self.add(self.streaming, transaction=elsewhere.id, name="x").status_code, 400)
+        self.assertEqual(self.add(self.streaming, transaction=self.paypal.id, name=" ").status_code, 400)
+        self.assertEqual(self.add(monthly, transaction=self.paypal.id, name="x").status_code, 400)
+        self.assertFalse(Bill.objects.exists())
