@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as accountsApi from '../api/accounts'
+import { apiFetch } from '../api/client'
 import * as transactionsApi from '../api/transactions'
 import { ThemeProvider } from '../theme/ThemeProvider'
 import { ToastProvider } from './ui/Toast'
@@ -256,5 +257,45 @@ describe('Accounts in the sidebar', () => {
 
     expect(await screen.findByText('Total · 1 account')).toBeInTheDocument()
     expect(screen.getByText(formatMoney(348217))).toBeInTheDocument()
+  })
+})
+
+describe('Layout stays current', () => {
+  // A page that saves through the real API client, as every page does.
+  function SavingPage() {
+    return (
+      <button type="button" onClick={() => apiFetch('/api/transactions/7/', { method: 'PATCH', body: { amount_cents: -5000 } })}>
+        Save
+      </button>
+    )
+  }
+
+  it('updates the sidebar balance and footer after a save, without navigating', async () => {
+    mockViewport(true)
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response('{}', { status: 200 }))))
+    render(
+      <ThemeProvider>
+        <ToastProvider>
+          <MemoryRouter initialEntries={['/transactions/1']}>
+            <Routes>
+              <Route element={<Layout />}>
+                <Route path="transactions/:accountId" element={<SavingPage />} />
+              </Route>
+            </Routes>
+          </MemoryRouter>
+        </ToastProvider>
+      </ThemeProvider>,
+    )
+    const sidebar = screen.getByRole('navigation', { name: 'Main' })
+    expect(await within(sidebar).findByRole('link', { name: 'Joint€3,482' })).toBeInTheDocument()
+    expect(screen.getByText(formatMoney(348217 + 1000000))).toBeInTheDocument()
+
+    accountsApi.listAccounts.mockResolvedValue([{ ...ACCOUNTS[0], current_balance_cents: 345217 }, ACCOUNTS[1]])
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await within(sidebar).findByRole('link', { name: 'Joint€3,452' })).toBeInTheDocument()
+    expect(screen.getByText(formatMoney(345217 + 1000000))).toBeInTheDocument()
+    expect(fetch).toHaveBeenCalledWith(expect.stringContaining('/api/transactions/7/'), expect.objectContaining({ method: 'PATCH' }))
+    vi.unstubAllGlobals()
   })
 })

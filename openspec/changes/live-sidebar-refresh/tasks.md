@@ -19,8 +19,8 @@
 
 ## 4. Integration check
 
-- [ ] 4.1 Add a `Layout.test.jsx` case rendering the shell with mocked APIs: after a mocked `updateTransaction` through `apiFetch`, the sidebar shows the new account balance and footer total while the route stays the same
-- [ ] 4.2 Run the app locally and confirm by hand: editing a transaction amount, deleting one, committing a CSV import and confirming a Review group each update the sidebar (balances, footer, Review count) without navigating; on a 390px viewport the pills' balance updates; switching to another tab and back after a change made in a second browser updates the sidebar; then run `npm test`, `npm run lint`, `npm run build`
+- [x] 4.1 Add a `Layout.test.jsx` case rendering the shell with mocked APIs: after a mocked `updateTransaction` through `apiFetch`, the sidebar shows the new account balance and footer total while the route stays the same
+- [x] 4.2 Run the app locally and confirm by hand: editing a transaction amount, deleting one, committing a CSV import and confirming a Review group each update the sidebar (balances, footer, Review count) without navigating; on a 390px viewport the pills' balance updates; switching to another tab and back after a change made in a second browser updates the sidebar; then run `npm test`, `npm run lint`, `npm run build` (checked in headless Chrome against a local stack; Review confirm is covered by the ReviewPage/ReviewCountContext tests, as the seeded data had no guesses)
 
 ## Workflow follow-up
 
