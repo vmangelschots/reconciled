@@ -10,7 +10,7 @@
 
 ## 3. Integration check
 
-- [ ] 3.1 Run the app locally: make "Streaming" a Bills category without bills, add a PayPal payment of 7.99 this month, open it from the No budget group, add the payment as "Apple TV", and confirm "Streaming" becomes a Bills row with "Paid"
+- [x] 3.1 Run the app locally: make "Streaming" a Bills category without bills, add a PayPal payment of 7.99 this month, open it from the No budget group, add the payment as "Apple TV", and confirm "Streaming" becomes a Bills row with "Paid"
 
 ## Workflow follow-up
 
