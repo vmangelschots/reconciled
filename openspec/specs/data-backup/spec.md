@@ -33,7 +33,8 @@ SHALL be able to download one.
 ### Requirement: What a backup holds
 A backup SHALL hold every account; every transaction, with its splits,
 transfer links, value adjustments, notes and category guesses; categories
-and tabs; monthly limits; yearly budgets; bills; the budget settings; recurring
+and tabs; monthly limits; yearly budgets; bills with the months they
+count in; the budget settings; recurring
 transactions; loan setups and their balance corrections, with the links
 between scheduled adjustments and their installments, corrections and
 payments; the remembered import mappings; when each account was last
@@ -92,6 +93,11 @@ SHALL get new ids.
 #### Scenario: A backup from before bills
 - **WHEN** a backup made before bills existed is restored
 - **THEN** it restores, with no bills
+
+#### Scenario: Bill history survives
+- **WHEN** Netflix was 17.99 until October and is 19.99 from November, and
+  a backup of it is restored
+- **THEN** October still expects 17.99 and November 19.99
 
 ### Requirement: What a backup leaves out
 A backup SHALL NOT hold login users or their passwords. It SHALL NOT hold

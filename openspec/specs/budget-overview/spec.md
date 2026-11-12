@@ -207,7 +207,9 @@ count, as in the budgets capability.
 
 ### Requirement: Budget sheet
 Clicking a budget, No budget or subcategory row SHALL open a sheet with that
-category's figures, its budget editor and the viewed month's transactions. It
+category's figures, its budget editor and the viewed month's transactions. A
+Bills category's sheet SHALL show its bill list instead of the editor, and
+collapse the transactions to "N transactions in <Month>", which opens them. It
 SHALL open from the side, or from the bottom on a phone. Saving SHALL close it
 and briefly highlight the row.
 
@@ -233,6 +235,11 @@ and briefly highlight the row.
 #### Scenario: Rename from the sheet
 - **WHEN** the user wants to rename the category
 - **THEN** the sheet links to the category settings
+
+#### Scenario: A Bills sheet stays short
+- **WHEN** the user opens "Streaming" in November, which has 4 transactions
+- **THEN** the sheet shows its bills and "4 transactions in November",
+  which lists them when chosen
 
 ### Requirement: Budgets on a phone
 On a phone, the headline and Needs a look SHALL be one block above the list,
