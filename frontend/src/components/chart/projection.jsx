@@ -4,10 +4,16 @@
 import { formatMoneyWhole } from "../../lib/money";
 import { formatDayMonth } from "../../lib/yearlyBudgets";
 
-// A label ending at its point, so it never runs off the chart's right edge.
+// Points closer than this to the chart's left edge get their label after
+// them, so it isn't cut off on a phone.
+const LEFT_ROOM = 160;
+
+// A label ending at its point, so it never runs off the chart's right
+// edge - or starting at it, near the left edge.
 export function PointLabel({ viewBox, text, className }) {
+  const after = viewBox.x < LEFT_ROOM;
   return (
-    <text x={viewBox.x - 8} y={viewBox.y - 10} textAnchor="end" className={className}>
+    <text x={viewBox.x + (after ? 8 : -8)} y={viewBox.y - 10} textAnchor={after ? "start" : "end"} className={className}>
       {text}
     </text>
   );

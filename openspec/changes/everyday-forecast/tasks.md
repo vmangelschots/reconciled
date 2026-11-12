@@ -23,7 +23,7 @@
 - [x] 4.1 Rewrite `ForecastChart` in Recharts on the shared module: solid line, zero in the axis, Monday ticks at 30 days and month ticks at 90, low label, critical only when `critical`, tooltip with up to 3 items and "+N more"; verify with `ForecastChart` tests for "Hover a payday", "A busy day" and "Running short" with and without `critical`; then run `npm test`
 - [x] 4.2 Update `api/forecasting.js` and rewrite `ForecastingPage.jsx`: `PillSwitch` 30/90 in the header synced to `?days=`, the main Panel with three small `Stat`s and their dates, the "what it counts" caption, the stale-import line, the neutral no-income note and the chart, the empty state when nothing is coming up, and the `lg:grid-cols-3` layout with Expected beside it and Coming up below; verify with `ForecastingPage.test.jsx` cases for "Opening Forecast", "A link to 30 days", "A stale account", "Only out items", "A new household" and the critical Lowest figure; then run `npm test`
 - [x] 4.3 Build the Coming up panel: day subheaders with whole-euro balances, `ListRow` items with source captions and cent amounts, budget lines, "Not seen" chips with due dates, greyed "Missed · not counted" lines, and navigation for each source; verify with tests for "A day in the list", "Spread budgets", "Where an item is kept", "A late bill" and "A missed bill"; then run `npm test`
-- [ ] 4.4 Build the Expected panel and the expected item sheet: lines with "Received 24 Nov" / "Next 25 Nov" / late / "Already in a budget", the empty state with "Add expected income" (sheet set to In), In/Out, name, amount, day, the grouped "Recognise by" picker from `options/`, the direction-aware hint, Save/Cancel/Delete; verify with tests for "Salary received", "No expected items yet", "Adding salary" and "Budgeted categories aren't offered", and check the page at 390px wide ("Forecast on a phone"); then run `npm test`, `npm run lint`, `npm run build`
+- [x] 4.4 Build the Expected panel and the expected item sheet: lines with "Received 24 Nov" / "Next 25 Nov" / late / "Already in a budget", the empty state with "Add expected income" (sheet set to In), In/Out, name, amount, day, the grouped "Recognise by" picker from `options/`, the direction-aware hint, Save/Cancel/Delete; verify with tests for "Salary received", "No expected items yet", "Adding salary" and "Budgeted categories aren't offered", and check the page at 390px wide ("Forecast on a phone"); then run `npm test`, `npm run lint`, `npm run build`
 
 ## 5. Overview projection
 
@@ -31,7 +31,7 @@
 
 ## 6. Integration check
 
-- [ ] 6.1 Run the app locally with bills, a monthly and a yearly budget, a loan paid from Crelan and no expected items: confirm Forecast shows the empty Expected panel and no critical colour; add "Salary" in 4,500 on the 25th recognised by "Salary" and confirm it shows in the chart, Coming up and the Overview projection, which agrees with Forecast over 30 days; mark a bill paid and see it leave this month; check the budget lines open the right Budgets sheet; check the page at phone width
+- [x] 6.1 Run the app locally with bills, a monthly and a yearly budget, a loan paid from Crelan and no expected items: confirm Forecast shows the empty Expected panel and no critical colour; add "Salary" in 4,500 on the 25th recognised by "Salary" and confirm it shows in the chart, Coming up and the Overview projection, which agrees with Forecast over 30 days; mark a bill paid and see it leave this month; check the budget lines open the right Budgets sheet; check the page at phone width
 
 ## Workflow follow-up
 
