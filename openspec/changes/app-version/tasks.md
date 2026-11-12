@@ -9,10 +9,10 @@
 
 ## 2. Frontend version
 
-- [ ] 2.1 Add `src/lib/version.js` (frontend `{version, commit, built}` from `VITE_APP_*`, default `dev`; `versionsDiffer`) with unit tests for the `dev` and mismatch cases
-- [ ] 2.2 Add `src/api/version.js` (`fetchServerVersion`) and `src/components/AboutSection.jsx` (App and Server rows, loading "…", "Couldn't load" on failure without a toast, mismatch warning); render it last on `SettingsPage`; verify with `AboutSection.test.jsx` covering normal, release (commit shown), failure and mismatch, and run `npm test`, `npm run lint`
-- [ ] 2.3 In `frontend/Dockerfile`, pass the build args as `VITE_APP_*` to `npm run build` and as `ENV` in the nginx stage; add `docker-entrypoint.d/05-version.sh` logging `reconciled-frontend version …`; verify `docker build --build-arg APP_VERSION=abc1234 frontend` then `docker run` prints the line and the built bundle contains `abc1234`
-- [ ] 2.4 In `nginx.conf`, serve `/index.html` with `Cache-Control: no-cache`; verify `curl -I` against the running container shows the header for `/` and for a client route like `/transactions`, and not for `/assets/*`
+- [x] 2.1 Add `src/lib/version.js` (frontend `{version, commit, built}` from `VITE_APP_*`, default `dev`; `versionsDiffer`) with unit tests for the `dev` and mismatch cases
+- [x] 2.2 Add `src/api/version.js` (`fetchServerVersion`) and `src/components/AboutSection.jsx` (App and Server rows, loading "…", "Couldn't load" on failure without a toast, mismatch warning); render it last on `SettingsPage`; verify with `AboutSection.test.jsx` covering normal, release (commit shown), failure and mismatch, and run `npm test`, `npm run lint`
+- [x] 2.3 In `frontend/Dockerfile`, pass the build args as `VITE_APP_*` to `npm run build` and as `ENV` in the nginx stage; add `docker-entrypoint.d/05-version.sh` logging `reconciled-frontend version …`; verify `docker build --build-arg APP_VERSION=abc1234 frontend` then `docker run` prints the line and the built bundle contains `abc1234`
+- [x] 2.4 In `nginx.conf`, serve `/index.html` with `Cache-Control: no-cache`; verify `curl -I` against the running container shows the header for `/` and for a client route like `/transactions`, and not for `/assets/*`
 
 ## 3. CI and deploy docs
 
