@@ -16,6 +16,12 @@ SHALL NOT be bills.
 - **THEN** "Mortgage" has two bills in November, House A 1,050.00 and
   House B 420.00 on the 7th, and a budget of 1,470.00
 
+#### Scenario: After the upgrade
+- **WHEN** "Mortgage" had a 1,400.00 monthly limit and was already the
+  payment category of "House A" before this version
+- **THEN** after the upgrade "Mortgage" has no limit and House A as its
+  bill, without re-saving the loan
+
 #### Scenario: A correction lowers the payment
 - **WHEN** "House A"'s 7 November installment was paid, and a correction
   on 12 November makes its payment from December 980.00
