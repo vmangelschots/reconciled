@@ -27,3 +27,9 @@ export function formatDateSpan(fromIso, toIso, today = new Date()) {
   const thisYear = from.getUTCFullYear() === today.getFullYear() && to.getUTCFullYear() === today.getFullYear();
   return (thisYear ? sameYear : otherYear).formatRange(from, to);
 }
+
+// Today as the API's "YYYY-MM-DD", in the browser's own time zone.
+export function todayIso(today = new Date()) {
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
+}

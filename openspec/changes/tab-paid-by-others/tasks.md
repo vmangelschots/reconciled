@@ -20,14 +20,14 @@
 
 ## 3. Tab page UI
 
-- [ ] 3.1 Add `tabPreviewSentence` (future tense) to `lib/tabs.js`, and the covered-entry calls to `api/tabs.js`. Verify in `tabs.test.js` for positive, negative and zero results.
-- [ ] 3.2 Add `components/CoveredEntryForm.jsx`:
+- [x] 3.1 Add `tabPreviewSentence` (future tense) to `lib/tabs.js`, and the covered-entry calls to `api/tabs.js`. Verify in `tabs.test.js` for positive, negative and zero results.
+- [x] 3.2 Add `components/CoveredEntryForm.jsx`:
   - Amount (focused, € prefix), payee, category picker without tabs, and a date defaulting to today.
   - The preview line, inline field errors, Enter and Escape handling.
   - In edit mode, Delete with an inline confirm.
 
   Verify in `CoveredEntryForm.test.jsx` with the "Covered entry form" and "Keep on second thought" scenarios.
-- [ ] 3.3 Wire the form into `TabPage.jsx`:
+- [x] 3.3 Wire the form into `TabPage.jsx`:
   - The header outline button (scrolls to the form and opens it, hidden while it's open) and the dashed last line, including on an empty tab.
   - Covered rows: verb "covered", category subtitle, receipt mark, no settle control.
   - Click a row to edit, one form at a time.

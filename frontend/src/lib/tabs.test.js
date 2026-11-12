@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formatMoney } from "./money";
-import { assignableCategories, isStale, tabSentence } from "./tabs";
+import { assignableCategories, coveredCategories, isStale, tabPreviewSentence, tabSentence } from "./tabs";
 
 describe("tabSentence", () => {
   it("says who owes whom, never with a sign", () => {
@@ -34,5 +34,26 @@ describe("assignableCategories", () => {
     ];
 
     expect(assignableCategories(categories).map((c) => c.name)).toEqual(["Groceries", "Jan"]);
+  });
+});
+
+describe("tabPreviewSentence", () => {
+  it("says how the tab will read, in the future tense", () => {
+    expect(tabPreviewSentence("Sarah", -500)).toEqual({ text: `You'll owe Sarah ${formatMoney(500)}`, tone: "warning" });
+    expect(tabPreviewSentence("Sarah", 500)).toEqual({ text: `Sarah will owe you ${formatMoney(500)}`, tone: "default" });
+    expect(tabPreviewSentence("Sarah", 0)).toEqual({ text: "Settled", tone: "muted" });
+  });
+});
+
+describe("coveredCategories", () => {
+  it("drops tab groups and their tabs", () => {
+    const categories = [
+      { id: 1, name: "Takeout", parent: null, is_tab_group: false },
+      { id: 2, name: "Tabs", parent: null, is_tab_group: true },
+      { id: 3, name: "Sarah", parent: 2, is_tab_group: false },
+      { id: 4, name: "Food", parent: null, is_tab_group: false },
+      { id: 5, name: "Groceries", parent: 4, is_tab_group: false },
+    ];
+    expect(coveredCategories(categories).map((c) => c.id)).toEqual([1, 4, 5]);
   });
 });
