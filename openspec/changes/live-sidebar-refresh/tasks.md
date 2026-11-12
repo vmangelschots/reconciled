@@ -2,16 +2,16 @@
 
 ## 1. Change signal and reload helpers
 
-- [ ] 1.1 Add `src/lib/dataChanged.js` with `notifyDataChanged()` and `onDataChanged(listener) → unsubscribe`; verify with `dataChanged.test.js` (listeners called, unsubscribe stops calls, a throwing listener doesn't stop the others)
-- [ ] 1.2 In `src/api/client.js`, call `notifyDataChanged()` from `apiFetch` and `apiUpload` after a successful response to POST/PUT/PATCH/DELETE (including 204), and not for GET, non-2xx or network errors; verify with cases in `client.test.js` for each of those
-- [ ] 1.3 Add `src/lib/useCoalescedRefresh.js` (one load in flight, at most one queued, only the newest result applied, errors swallowed) and `src/lib/useOnVisible.js` (calls back on `visibilitychange` to `visible`, cleans up on unmount); verify with tests: three calls during a pending load give exactly two loads, an out-of-order older response is not applied, a rejected load keeps the previous value, and visibility `hidden` → `visible` fires once
+- [x] 1.1 Add `src/lib/dataChanged.js` with `notifyDataChanged()` and `onDataChanged(listener) → unsubscribe`; verify with `dataChanged.test.js` (listeners called, unsubscribe stops calls, a throwing listener doesn't stop the others)
+- [x] 1.2 In `src/api/client.js`, call `notifyDataChanged()` from `apiFetch` and `apiUpload` after a successful response to POST/PUT/PATCH/DELETE (including 204), and not for GET, non-2xx or network errors; verify with cases in `client.test.js` for each of those
+- [x] 1.3 Add `src/lib/useCoalescedRefresh.js` (one load in flight, at most one queued, only the newest result applied, errors swallowed) and `src/lib/useOnVisible.js` (calls back on `visibilitychange` to `visible`, cleans up on unmount); verify with tests: three calls during a pending load give exactly two loads, an out-of-order older response is not applied, a rejected load keeps the previous value, and visibility `hidden` → `visible` fires once
 
 ## 2. Shell providers stay current
 
-- [ ] 2.1 Rework `AccountsContext` to load through `useCoalescedRefresh`, reloading on `refreshKey`, on `onDataChanged` and on `useOnVisible`, and keeping `loaded` true after the first attempt; extend `AccountsContext.test.jsx`: a notified change shows the new total without re-render from outside, a tab-visible reload updates it, and a failing reload keeps the old total
-- [ ] 2.2 Rework `ReviewCountContext` the same way; add `ReviewCountContext.test.jsx` covering a notified change, tab-visible and a failed reload keeping the count
-- [ ] 2.3 In `BankSyncContext`, reload the status on `useOnVisible` (errors silent) so a sync that started while hidden starts polling; extend `BankSyncContext.test.jsx`: becoming visible while the server reports `running` shows it running, and when it ends `version` goes up
-- [ ] 2.4 Update the comments at the top of the three contexts and in `Layout.jsx` (`Shell`) to describe the new reload triggers; verify `npm run lint`
+- [x] 2.1 Rework `AccountsContext` to load through `useCoalescedRefresh`, reloading on `refreshKey`, on `onDataChanged` and on `useOnVisible`, and keeping `loaded` true after the first attempt; extend `AccountsContext.test.jsx`: a notified change shows the new total without re-render from outside, a tab-visible reload updates it, and a failing reload keeps the old total
+- [x] 2.2 Rework `ReviewCountContext` the same way; add `ReviewCountContext.test.jsx` covering a notified change, tab-visible and a failed reload keeping the count
+- [x] 2.3 In `BankSyncContext`, reload the status on `useOnVisible` (errors silent) so a sync that started while hidden starts polling; extend `BankSyncContext.test.jsx`: becoming visible while the server reports `running` shows it running, and when it ends `version` goes up
+- [x] 2.4 Update the comments at the top of the three contexts and in `Layout.jsx` (`Shell`) to describe the new reload triggers; verify `npm run lint`
 
 ## 3. Remove manual refresh calls
 

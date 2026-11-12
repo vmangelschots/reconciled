@@ -1,7 +1,8 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as accountsApi from "../api/accounts";
+import { notifyDataChanged } from "../lib/dataChanged";
 import { AccountsProvider, useAccounts } from "./AccountsContext";
 
 vi.mock("../api/accounts", () => ({ listAccounts: vi.fn() }));
@@ -61,5 +62,35 @@ describe("AccountsContext", () => {
 
     expect(await screen.findByText("default Revolut")).toBeInTheDocument();
     expect(screen.getByText("total 214000")).toBeInTheDocument();
+  });
+
+  it("reloads after a save is announced", async () => {
+    renderProbe();
+    expect(await screen.findByText("total 348200")).toBeInTheDocument();
+
+    accountsApi.listAccounts.mockResolvedValue([REVOLUT, { ...CRELAN, current_balance_cents: 131200 }]);
+    await act(async () => notifyDataChanged());
+    expect(screen.getByText("total 345200")).toBeInTheDocument();
+  });
+
+  it("reloads when the tab is shown again", async () => {
+    renderProbe();
+    expect(await screen.findByText("total 348200")).toBeInTheDocument();
+
+    accountsApi.listAccounts.mockResolvedValue([REVOLUT]);
+    await act(async () => {
+      Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(screen.getByText("total 214000")).toBeInTheDocument();
+  });
+
+  it("keeps the accounts shown when a reload fails", async () => {
+    renderProbe();
+    expect(await screen.findByText("total 348200")).toBeInTheDocument();
+
+    accountsApi.listAccounts.mockRejectedValue(new Error("offline"));
+    await act(async () => notifyDataChanged());
+    expect(screen.getByText("total 348200")).toBeInTheDocument();
   });
 });

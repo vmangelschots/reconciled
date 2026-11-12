@@ -1,10 +1,14 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { listAccounts } from "../api/accounts";
+import { onDataChanged } from "../lib/dataChanged";
+import { useCoalescedRefresh } from "../lib/useCoalescedRefresh";
+import { useOnVisible } from "../lib/useOnVisible";
 
 // The active accounts, shared by the sidebar, the account pills, the
 // overview and Import, plus the account last opened under Transactions
-// (remembered in this browser). Layout provides it and reloads the
-// accounts on every route change. See the transactions and ui-shell specs.
+// (remembered in this browser). Layout provides it. The accounts reload on
+// every route change, after any save the API client announces, and when the
+// tab is shown again - see the transactions and ui-shell specs.
 const STORAGE_KEY = "reconciled.lastAccount";
 
 function readStored() {
@@ -40,16 +44,18 @@ export function AccountsProvider({ refreshKey, children }) {
   const [loaded, setLoaded] = useState(false);
   const [lastOpenedId, setLastOpenedId] = useState(readStored);
 
-  const refresh = useCallback(() => {
-    listAccounts()
-      .then((list) => setAccounts((list ?? []).filter((a) => !a.archived)))
-      .catch(() => {})
-      .finally(() => setLoaded(true));
-  }, []);
+  // A failed reload keeps the accounts shown, without an error toast.
+  const refresh = useCoalescedRefresh(
+    listAccounts,
+    (list) => setAccounts((list ?? []).filter((a) => !a.archived)),
+    () => setLoaded(true),
+  );
 
   useEffect(() => {
     refresh();
   }, [refresh, refreshKey]);
+  useEffect(() => onDataChanged(refresh), [refresh]);
+  useOnVisible(refresh);
 
   const setLastOpened = useCallback((id) => {
     setLastOpenedId(id);

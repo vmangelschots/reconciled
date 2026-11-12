@@ -2,10 +2,13 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { getBankSync, syncNow as runSync } from "../api/bankSync";
 import { useToast } from "../components/ui/Toast";
 import { syncSummary } from "../lib/bankSync";
+import { useOnVisible } from "../lib/useOnVisible";
 
 // The household's bank sync, shared by the page headers' sync status and
 // Settings' Bank connections - see specs/bank-sync, "Sync status". Layout
-// provides it. `version` goes up whenever a sync ends, so pages can reload.
+// provides it. The status reloads on route changes and when the tab is shown
+// again, so a scheduled sync that started meanwhile gets polled too.
+// `version` goes up whenever a sync ends, so pages can reload.
 const POLL_MS = 3000;
 const RESULT_MS = 5000;
 
@@ -50,6 +53,10 @@ export function BankSyncProvider({ refreshKey, children }) {
       .then(setStatus)
       .catch(() => {});
   }, [refreshKey]);
+
+  useOnVisible(() => {
+    reload().catch(() => {});
+  });
 
   // A sync someone else started (the schedule, another member): poll until
   // it ends, then let the pages reload.
