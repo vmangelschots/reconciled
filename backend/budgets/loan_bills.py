@@ -60,7 +60,7 @@ def loan_lines(month, today):
                     # A hand link may point at a payment of another amount.
                     "paid_on": payment.date if payment is not None else None,
                     "paid_cents": -payment.amount_cents if payment is not None else None,
-                    "over_cents": None,
+                    "difference_cents": None,
                     "source": "loan",
                     "loan_account_id": loan.account_id,
                 }

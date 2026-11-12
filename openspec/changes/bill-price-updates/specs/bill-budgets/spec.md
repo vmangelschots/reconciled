@@ -184,8 +184,8 @@ month has ended.
 
 ### Requirement: When a Bills category is over
 A Bills category SHALL be over in a month when its spending is more than
-its budget for that month by more than the larger of 5% of the budget and
-1.00, whatever the bills' states. Its spending is the net outflow of the
+its budget for that month, by more than the larger of 5% of the budget and
+1.00 unless it is a loan category, whatever the bills' states. Its spending is the net outflow of the
 category and its subcategories, as for other budgets, so spending no bill
 accounts for also counts. A Bills category SHALL NOT be judged against the
 month's pace.
@@ -200,6 +200,12 @@ month's pace.
   spending equals its budget
 - **THEN** "Streaming" is not listed in Needs attention and its bar isn't
   in the warning colour
+
+#### Scenario: Insurance in a loan category
+- **WHEN** "Mortgage"'s loan bills are paid and 35.00 of insurance is also
+  categorized "Mortgage"
+- **THEN** "Mortgage" is 35.00 over: loan installments are exact, so loan
+  categories get no margin
 
 #### Scenario: A small price rise isn't over
 - **WHEN** "Streaming" has 40.97 of bills and Netflix was paid 2.00 more

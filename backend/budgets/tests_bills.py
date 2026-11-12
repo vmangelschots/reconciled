@@ -268,6 +268,9 @@ class BillStateTests(SimpleTestCase):
     def test_a_price_rise_is_paid_over(self):
         self.assertEqual(bill_state(1799, date(2026, 11, 5), out(1, 5, 1999), date(2026, 11, 19), False, False), "paid_over")
 
+    def test_a_price_drop_is_paid_under(self):
+        self.assertEqual(bill_state(1799, date(2026, 11, 5), out(1, 5, 1599), date(2026, 11, 19), False, False), "paid_under")
+
     def test_within_the_tolerance_is_paid(self):
         self.assertEqual(bill_state(1799, date(2026, 11, 5), out(1, 5, 1899), date(2026, 11, 19), False, False), "paid")
 
@@ -341,6 +344,24 @@ class BillRowsTests(TestCase):
         self._pay(date(2026, 11, 8), 1199, category=kids)
         row = self._rows(NOV_2026, date(2026, 11, 19))[self.streaming.id]
         self.assertEqual(row["bills"][1]["state"], "paid")
+
+    def test_paid_under_and_its_difference(self):
+        self._pay(date(2026, 11, 5), 1599)
+        netflix = self._rows(NOV_2026, date(2026, 11, 19))[self.streaming.id]["bills"][0]
+        self.assertEqual((netflix["state"], netflix["difference_cents"]), ("paid_under", -200))
+
+    def test_payments_that_pay_no_bill(self):
+        self._pay(date(2026, 11, 5), 1799)
+        Transaction.objects.create(account=self.account, date=date(2026, 11, 18), amount_cents=-799, payee="PayPal", category=self.streaming)
+        row = self._rows(NOV_2026, date(2026, 11, 19))[self.streaming.id]
+        self.assertEqual(row["extras"], [{"id": row["extras"][0]["id"], "date": date(2026, 11, 18), "payee": "PayPal", "amount_cents": 799}])
+
+    def test_review_this_month_and_the_one_before(self):
+        today = date(2026, 11, 19)
+        self.assertEqual(
+            [self._rows(m, today)[self.streaming.id]["review"] for m in (NOV_2026, date(2026, 10, 1), date(2026, 9, 1))],
+            [True, True, False],
+        )
 
     def test_no_bills_no_row(self):
         empty = Category.objects.create(name="Internet", budget_kind="bills")
@@ -442,6 +463,14 @@ class BillsInTheMonthTests(TestCase):
         Bill.objects.filter(name="Spotify").update(day=8)
         for response in (self._summary(today=date(2026, 11, 8)), self._overview(today=date(2026, 11, 8))):
             self.assertEqual(response["attention"]["categories"], [])
+
+    def test_a_small_price_rise_isnt_over(self):
+        self._pay(date(2026, 11, 5), 1999)
+        self._pay(date(2026, 11, 9), 1199)
+        self._pay(date(2026, 11, 19), 1099)
+        summary = self._summary()
+        self.assertFalse(self._row(summary, self.streaming)["over_limit"])
+        self.assertEqual(summary["attention"]["categories"], [])
 
     def test_extra_spending_money_is_over(self):
         money = Category.objects.create(name="Spending money", budget_kind="bills")

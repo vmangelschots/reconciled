@@ -100,8 +100,10 @@ the switch-kind dialog's count.
 `month_outflows` also selects the payee.
 
 ### Over with a margin
-For Bills rows, `budget_rows` sets `over_limit = spent > limit +
-max(limit * 5 // 100, 100)`. `attention_categories` uses `over_limit`
+For Bills rows with manual bills, `budget_rows` sets `over_limit = spent >
+limit + max(limit * 5 // 100, 100)`. Loan categories keep `spent > limit`:
+installments are exact, so anything beyond them is a real extra (#61's
+insurance case). `attention_categories` uses `over_limit`
 for Bills rows instead of `spent > limit`, so the row, the figure, Needs
 attention and the bar agree. Monthly rows are unchanged. The row figure
 still shows "€N over" with the real difference once it is over, and

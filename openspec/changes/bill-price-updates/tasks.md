@@ -12,7 +12,7 @@
 
 ## 3. Review data and Add as bill
 
-- [ ] 3.1 Add `paid_under` and `difference_cents` to bill lines, `extras` (unmatched outflows with payee; empty for loan categories) and `review` (current or previous month) to Bills rows, and the over margin (larger of 5% and 1.00) to Bills rows' `over_limit` and `attention_categories`; verify with tests: 15.99 for 17.99 is paid under by 2.00, extras list the PayPal 7.99 with its payee, `review` is true for November and October on 19 November and false for September, Streaming 2.00 over its 40.97 is not over and not in Needs attention, Spending money 50.00 over still is
+- [x] 3.1 Add `paid_under` and `difference_cents` to bill lines, `extras` (unmatched outflows with payee; empty for loan categories) and `review` (current or previous month) to Bills rows, and the over margin (larger of 5% and 1.00) to Bills rows' `over_limit` and `attention_categories`; verify with tests: 15.99 for 17.99 is paid under by 2.00, extras list the PayPal 7.99 with its payee, `review` is true for November and October on 19 November and false for September, Streaming 2.00 over its 40.97 is not over and not in Needs attention, Spending money 50.00 over still is
 - [ ] 3.2 Add `POST categories/{id}/bills/from-payment/` (outflow in the category or its subcategories; day and amount from it; from its month on; refused for inflows, other categories, loan and non-Bills categories); verify with API tests for "A new subscription through PayPal" and each refusal
 
 ## 4. Frontend

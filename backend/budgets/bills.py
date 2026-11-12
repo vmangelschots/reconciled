@@ -26,6 +26,7 @@ class Outflow:
     id: int
     date: date
     cents: int  # positive: the amount that left
+    payee: str = ""
 
 
 def due_date(month, day):
@@ -72,11 +73,16 @@ def match(bills, outflows, month):
     return matches
 
 def bill_state(amount_cents, due, payment, ref_day, month_over, future):
-    """One of paid_over, paid, upcoming, due_soon, not_seen or missed, as of
-    `ref_day`. A future month's bills are upcoming; once a month has ended,
-    an unpaid bill is missed."""
+    """One of paid_over, paid_under, paid, upcoming, due_soon, not_seen or
+    missed, as of `ref_day`. A future month's bills are upcoming; once a
+    month has ended, an unpaid bill is missed."""
     if payment is not None:
-        return "paid_over" if payment.cents > amount_cents + paid_tolerance(amount_cents) else "paid"
+        tolerance = paid_tolerance(amount_cents)
+        if payment.cents > amount_cents + tolerance:
+            return "paid_over"
+        if payment.cents < amount_cents - tolerance:
+            return "paid_under"
+        return "paid"
     if future:
         return "upcoming"
     if month_over:
@@ -106,12 +112,12 @@ def month_outflows(category_ids_by_bills_category, month):
         Transaction.objects.counted_rows()
         .excluding_adjustments()
         .filter(category_id__in=owners, amount_cents__lt=0, date__gte=month, date__lt=month_range(month))
-        .values_list("id", "date", "amount_cents", "category_id")
+        .values_list("id", "date", "amount_cents", "category_id", "payee")
     )
     result = {owner: [] for owner in category_ids_by_bills_category}
-    for tx_id, tx_date, cents, category_id in rows:
+    for tx_id, tx_date, cents, category_id, payee in rows:
         for owner in owners[category_id]:
-            result[owner].append(Outflow(tx_id, tx_date, -cents))
+            result[owner].append(Outflow(tx_id, tx_date, -cents, payee))
     return result
 
 
@@ -125,6 +131,10 @@ def bill_rows(categories, children, month, today, loan_lines=None):
     budgets/loan_bills.py); they never take part in matching."""
     ref_day, month_over, future = as_of(month, today)
     loan_lines = loan_lines or {}
+    this_month = today.replace(day=1)
+    # Prompts to review a month only while it is fresh: this one and the one
+    # before, so last month can still be closed on the 2nd.
+    review = month in (this_month, (this_month - timedelta(days=1)).replace(day=1))
 
     bills_by_category = {}
     for category in categories:
@@ -155,13 +165,24 @@ def bill_rows(categories, children, month, today, loan_lines=None):
                     "state": state,
                     "paid_on": payment.date if payment else None,
                     "paid_cents": payment.cents if payment else None,
-                    "over_cents": payment.cents - bill.amount_cents if state == "paid_over" else None,
+                    "difference_cents": (
+                        payment.cents - bill.amount_cents if state in ("paid_over", "paid_under") else None
+                    ),
                     "source": "manual",
                     "loan_account_id": None,
                 }
             )
         lines = sorted([*lines, *loan_lines.get(category_id, [])], key=lambda line: (line["day"], line["source"] == "loan", line["id"]))
+        paid_ids = {payment.id for payment in matches.values()}
+        # Outflows that pay no bill; a loan category's never become bills.
+        extras = [] if loan_lines.get(category_id) else [
+            {"id": o.id, "date": o.date, "payee": o.payee, "amount_cents": o.cents}
+            for o in sorted(outflows.get(category_id, []), key=lambda o: (o.date, o.id))
+            if o.id not in paid_ids
+        ]
         result[category_id] = {
+            "extras": extras,
+            "review": review,
             "budget_cents": sum(line["amount_cents"] for line in lines),
             "bills": lines,
             "paid_count": sum(1 for line in lines if line["paid_on"] is not None),
