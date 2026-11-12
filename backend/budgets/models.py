@@ -149,9 +149,8 @@ class YearlyBudget(HouseholdScoped):
 class Bill(HouseholdScoped):
     """One fixed monthly bill of a Bills category: its amount, due on `day`
     (the month's last day when it has fewer days). It counts from
-    `from_month`, the first of the month it was added, and has no history:
-    an edit applies to every month it counts in. See
-    openspec/specs/bill-budgets."""
+    `from_month`, the first of the month it was added, through
+    `until_month` when it has ended. See openspec/specs/bill-budgets."""
 
     household_path = "category__household"
 
@@ -160,11 +159,17 @@ class Bill(HouseholdScoped):
     day = models.PositiveSmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(31)])
     amount_cents = models.BigIntegerField(validators=[MinValueValidator(1)])
     from_month = models.DateField()
+    # The last month it counts in, or null while it runs on. Changing a bill
+    # from a month on ends it the month before and starts a new one.
+    until_month = models.DateField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["day", "id"]
+
+    def counts_in(self, month):
+        return self.from_month <= month and (self.until_month is None or month <= self.until_month)
 
     def __str__(self):
         return f"{self.category.name}: {self.name} on the {self.day}"

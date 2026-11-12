@@ -51,6 +51,7 @@ def monthly_limits(period_start, loan_lines=None):
         Bill.objects.filter(
             category__in=budgeted_categories(), category__budget_kind=Category.BudgetKind.BILLS, from_month__lte=period_start
         )
+        .filter(Q(until_month__isnull=True) | Q(until_month__gte=period_start))
         .values("category_id")
         .annotate(total=Sum("amount_cents"))
     )

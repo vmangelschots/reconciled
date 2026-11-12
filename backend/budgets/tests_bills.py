@@ -105,15 +105,60 @@ class BillsApiTests(TestCase):
             ("Spotify", 21, 1099, "2026-11"),
         ])
 
-    def test_editing_keeps_the_start_month_and_left_out_bills_go(self):
+    def _bills(self):
+        return sorted((b.name, b.amount_cents, b.from_month, b.until_month) for b in Bill.objects.all())
+
+    def test_a_price_change_keeps_earlier_months(self):
         self._make_bills()
         netflix = Bill.objects.create(category=self.streaming, name="Netflix", day=5, amount_cents=1799, from_month=date(2026, 9, 1))
-        Bill.objects.create(category=self.streaming, name="Disney+", day=8, amount_cents=1199, from_month=date(2026, 9, 1))
-        response = self._set_bills(self.streaming, [{"id": netflix.id, "name": "Netflix", "day": 6, "amount_cents": 1999}])
+        response = self._set_bills(self.streaming, [{"id": netflix.id, "name": "Netflix", "day": 5, "amount_cents": 1999}])
         self.assertEqual(response.status_code, 200)
-        netflix.refresh_from_db()
-        self.assertEqual((netflix.day, netflix.amount_cents, netflix.from_month), (6, 1999, date(2026, 9, 1)))
-        self.assertEqual(Bill.objects.count(), 1)
+        self.assertEqual(self._bills(), [
+            ("Netflix", 1799, date(2026, 9, 1), date(2026, 10, 1)),
+            ("Netflix", 1999, NOV_2026, None),
+        ])
+        self.assertEqual([(b["name"], b["amount_cents"]) for b in response.json()["bills"]], [("Netflix", 1999)])
+
+    def test_removing_a_bill_keeps_earlier_months(self):
+        self._make_bills()
+        Bill.objects.create(category=self.streaming, name="Disney+", day=8, amount_cents=1199, from_month=date(2026, 9, 1))
+        self._set_bills(self.streaming, [])
+        self.assertEqual(self._bills(), [("Disney+", 1199, date(2026, 9, 1), date(2026, 10, 1))])
+
+    def test_a_change_in_the_bills_first_month(self):
+        self._make_bills()
+        spotify = Bill.objects.create(category=self.streaming, name="Spotify", day=21, amount_cents=1099, from_month=NOV_2026)
+        self._set_bills(self.streaming, [{"id": spotify.id, "name": "Spotify", "day": 21, "amount_cents": 1199}])
+        self.assertEqual(self._bills(), [("Spotify", 1199, NOV_2026, None)])
+        self._set_bills(self.streaming, [])
+        self.assertEqual(self._bills(), [])
+
+    def test_unchanged_bills_stay_one_bill(self):
+        self._make_bills()
+        netflix = Bill.objects.create(category=self.streaming, name="Netflix", day=5, amount_cents=1799, from_month=date(2026, 9, 1))
+        self._set_bills(self.streaming, [{"id": netflix.id, "name": "Netflix", "day": 5, "amount_cents": 1799}])
+        self.assertEqual(self._bills(), [("Netflix", 1799, date(2026, 9, 1), None)])
+
+    def test_saving_from_october_applies_from_october_on(self):
+        self._make_bills()
+        netflix = Bill.objects.create(category=self.streaming, name="Netflix", day=5, amount_cents=1799, from_month=date(2026, 9, 1))
+        response = self.client.put(
+            reverse("category-set-bills", args=[self.streaming.id]),
+            {"month": "2026-10", "bills": [{"id": netflix.id, "name": "Netflix", "day": 5, "amount_cents": 1999}]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self._bills(), [
+            ("Netflix", 1799, date(2026, 9, 1), date(2026, 9, 1)),
+            ("Netflix", 1999, date(2026, 10, 1), None),
+        ])
+
+    def test_an_ended_bill_isnt_an_id_to_edit(self):
+        self._make_bills()
+        old = Bill.objects.create(
+            category=self.streaming, name="Netflix", day=5, amount_cents=1799, from_month=date(2026, 9, 1), until_month=date(2026, 10, 1)
+        )
+        self.assertEqual(self._set_bills(self.streaming, [{"id": old.id, "name": "x", "day": 5, "amount_cents": 1}]).status_code, 400)
 
     def test_rejects_bad_lines(self):
         self._make_bills()
@@ -270,6 +315,13 @@ class BillRowsTests(TestCase):
         self.assertEqual(row["paid_count"], 2)
         self.assertEqual(row["due_to_date_cents"], 2998)
         self.assertEqual(row["unpaid_cents"], 1099)
+
+    def test_an_ended_bill_no_longer_counts(self):
+        Bill.objects.filter(name="Disney+").update(until_month=date(2026, 10, 1))
+        october = self._rows(date(2026, 10, 1), date(2026, 11, 19))[self.streaming.id]
+        november = self._rows(NOV_2026, date(2026, 11, 19))[self.streaming.id]
+        self.assertEqual([b["name"] for b in october["bills"]], ["Netflix", "Disney+", "Spotify"])
+        self.assertEqual([b["name"] for b in november["bills"]], ["Netflix", "Spotify"])
 
     def test_a_bill_counts_from_its_month(self):
         Bill.objects.create(category=self.streaming, name="Apple TV", day=12, amount_cents=999, from_month=NOV_2026)

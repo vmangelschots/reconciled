@@ -6,9 +6,9 @@
 
 ## 2. Bills from the viewed month on
 
-- [ ] 2.1 Add `Bill.until_month` with its migration and make `bill_rows` count a bill while `from_month <= M <= until_month`; verify with tests that an ended bill no longer counts and `makemigrations --check` is clean
-- [ ] 2.2 Add `apply_bills(category, month, lines)` and have `PUT .../bills/` take the viewed `month` (default: current) and apply from it on (new from M; change in place when it started in M, else end the old bill at M−1 and start a new one; missing bills deleted when they started in M, else ended at M−1; bills not counting in M untouched); verify with API tests for the spec scenarios: a price change in November keeps September and October at 17.99, removing Disney+ in November keeps October, a change in the bill's first month stays one bill, and saving from October applies from October on
-- [ ] 2.3 Verify backups keep the months: extend `backup/tests.py` so a bill ended in October plus its successor round-trip with the same months, and an older backup without `until_month` restores
+- [x] 2.1 Add `Bill.until_month` with its migration and make `bill_rows` count a bill while `from_month <= M <= until_month`; verify with tests that an ended bill no longer counts and `makemigrations --check` is clean
+- [x] 2.2 Add `apply_bills(category, month, lines)` and have `PUT .../bills/` take the viewed `month` (default: current) and apply from it on (new from M; change in place when it started in M, else end the old bill at M−1 and start a new one; missing bills deleted when they started in M, else ended at M−1; bills not counting in M untouched); verify with API tests for the spec scenarios: a price change in November keeps September and October at 17.99, removing Disney+ in November keeps October, a change in the bill's first month stays one bill, and saving from October applies from October on
+- [x] 2.3 Verify backups keep the months: extend `backup/tests.py` so a bill ended in October plus its successor round-trip with the same months, and an older backup without `until_month` restores
 
 ## 3. Review data and Add as bill
 

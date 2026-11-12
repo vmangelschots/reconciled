@@ -128,7 +128,7 @@ def bill_rows(categories, children, month, today, loan_lines=None):
 
     bills_by_category = {}
     for category in categories:
-        bills = [b for b in category.bills.all() if b.from_month <= month]
+        bills = [b for b in category.bills.all() if b.counts_in(month)]
         if bills:
             bills_by_category[category.id] = bills
     outflows = month_outflows(

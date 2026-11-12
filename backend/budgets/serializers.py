@@ -81,7 +81,9 @@ class CategorySerializer(serializers.ModelSerializer):
                 "amount_cents": bill.amount_cents,
                 "from_month": bill.from_month.isoformat()[:7],
             }
+            # The bills that count now; earlier and ended ones are history.
             for bill in sorted(category.bills.all(), key=lambda b: (b.day, b.id))
+            if bill.counts_in(utils.today().replace(day=1))
         ]
 
     def get_loans(self, category):
