@@ -126,7 +126,8 @@ def bill_rows(categories, children, month, today, loan_lines=None):
     `month`, as of today for the current month and the month's last day
     for a past one. `children` maps a parent id to its subcategories, whose
     outflows a parent's bills match too. A category without bills that
-    count in the month is left out: it has no budget. `loan_lines` are a
+    count in the month gets figures without bills (it has no budget), so its
+    payments still show to review. `loan_lines` are a
     loan category's bills, their states already set by the loan (see
     budgets/loan_bills.py); they never take part in matching."""
     ref_day, month_over, future = as_of(month, today)
@@ -136,11 +137,12 @@ def bill_rows(categories, children, month, today, loan_lines=None):
     # before, so last month can still be closed on the 2nd.
     review = month in (this_month, (this_month - timedelta(days=1)).replace(day=1))
 
-    bills_by_category = {}
-    for category in categories:
-        bills = [b for b in category.bills.all() if b.counts_in(month)]
-        if bills:
-            bills_by_category[category.id] = bills
+    # Every Bills category, with or without bills: one without still lists
+    # its payments, so its first bill can come from one - see
+    # openspec/specs/bill-budgets.
+    bills_by_category = {
+        category.id: [b for b in category.bills.all() if b.counts_in(month)] for category in categories
+    }
     outflows = month_outflows(
         {cid: [cid, *(sub.id for sub in children.get(cid, []))] for cid in bills_by_category},
         month,

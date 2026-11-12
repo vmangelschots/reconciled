@@ -206,6 +206,20 @@ function billsRow(row, through) {
   };
 }
 
+// A Bills category without bills: no budget yet, so it reads "€X spent",
+// but its sheet is the Bills sheet, where a payment can become its first
+// bill - see specs/bill-budgets.
+function emptyBillsRow(row, summary, byId, through) {
+  return {
+    ...monthlyRow(row, summary, byId),
+    bills: [],
+    billLines: [],
+    through,
+    review: reviewItems(row),
+    overCents: 0,
+  };
+}
+
 function yearlyRow(row, year) {
   return {
     id: row.category_id,
@@ -263,7 +277,11 @@ export function budgetList(summary, categories) {
   const yearly = summary.yearly;
   const all = [
     ...summary.categories.map((row) =>
-      row.kind === "bills" && row.limit_cents != null ? billsRow(row, yearly.through) : monthlyRow(row, summary, byId),
+      row.kind !== "bills"
+        ? monthlyRow(row, summary, byId)
+        : row.limit_cents != null
+          ? billsRow(row, yearly.through)
+          : emptyBillsRow(row, summary, byId, yearly.through),
     ),
     ...yearly.categories.map((row) =>
       row.kind === "target" ? targetRow(row, yearly.through) : yearlyRow(row, yearly.year),

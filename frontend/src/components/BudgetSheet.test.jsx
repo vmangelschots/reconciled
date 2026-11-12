@@ -552,3 +552,46 @@ describe("To review in a Bills sheet", () => {
   });
 });
 
+describe("A Bills category without bills", () => {
+  const EMPTY = { ...STREAMING, bills: [] };
+  const emptyRow = (fields = {}) => ({
+    ...GROCERIES_ROW, category_id: 7, category_name: "Streaming", kind: "bills", limit_cents: null, spent_cents: 799,
+    remaining_cents: null, bills: [], paid_count: 0, due_to_date_cents: 0, unpaid_cents: 0,
+    extras: [{ id: 91, date: "2026-10-18", payee: "PayPal", amount_cents: 799 }], review: true, ...fields,
+  });
+
+  function withRow(row) {
+    categoriesApi.listCategories.mockResolvedValue([...YEARLY_CATEGORIES, EMPTY]);
+    budgetsApi.getBudgetSummary.mockResolvedValue(summary({}, { categories: [GROCERIES_ROW, TRANSPORT_ROW, row] }));
+  }
+
+  async function openFromNoBudget() {
+    renderPage();
+    await userEvent.click(await screen.findByRole("button", { name: /No budget/ }));
+    await openRow("Streaming");
+  }
+
+  it("lists its payment to add as the first bill", async () => {
+    withRow(emptyRow());
+    await openFromNoBudget();
+    const review = await screen.findByRole("region", { name: "To review" });
+    expect(review).toHaveTextContent("PayPal");
+    expect(screen.getByText("No bills yet. Add one with Edit bills, or from a payment above.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Edit bills" })).toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "Streaming bills" })).toBeNull();
+
+    await userEvent.click(within(review).getByRole("button", { name: "Add as bill" }));
+    const name = within(review).getByLabelText("Bill name");
+    await userEvent.clear(name);
+    await userEvent.type(name, "Apple TV{Enter}");
+    expect(categoriesApi.addBillFromPayment).toHaveBeenCalledWith(7, 91, "Apple TV");
+  });
+
+  it("has nothing to review in an older month", async () => {
+    withRow(emptyRow({ review: false }));
+    await openFromNoBudget();
+    expect(await screen.findByText("No bills yet. Add one with Edit bills.")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "To review" })).toBeNull();
+  });
+});
+

@@ -28,7 +28,14 @@ const CHIP_ICON = {
 };
 
 // The month's bills, each with its state - see specs/bill-budgets.
-function BillList({ bills, through }) {
+function BillList({ bills, through, fromPayments = false }) {
+  if (bills.length === 0) {
+    return (
+      <p className="px-5 pb-3 text-sm text-ink-muted">
+        No bills yet. Add one with Edit bills{fromPayments ? ", or from a payment above" : ""}.
+      </p>
+    );
+  }
   return (
     <ul className="flex flex-col pb-2" aria-label="This month's bills">
       {bills.map((bill) => {
@@ -216,7 +223,7 @@ function BillsBody({ row, category, month, startMonth, spending, categories, onS
           </div>
         ) : (
           <>
-            <BillList bills={row.billLines} through={row.through} />
+            <BillList bills={row.billLines} through={row.through} fromPayments={!isLoan && row.review.length > 0} />
             {isLoan && (
               <div className="px-5 pb-4">
                 <BudgetEditor category={category} month={month} limitCents={row.limitCents} startMonth={startMonth} />
@@ -295,7 +302,7 @@ function SheetHeader({ row }) {
       <p className={cn("num text-sm font-medium", row.critical ? "text-critical" : "text-ink-primary")}>{row.figure}</p>
       {row.caption && <p className="text-xs text-ink-muted">{row.caption}</p>}
       {row.bar && <ProgressBar label={`${row.name} spent`} {...row.bar} />}
-      {row.bills && <BillBar label={`${row.name} bills`} bills={row.bills} overCents={row.overCents} />}
+      {row.bills?.length > 0 && <BillBar label={`${row.name} bills`} bills={row.bills} overCents={row.overCents} />}
     </div>
   );
 }

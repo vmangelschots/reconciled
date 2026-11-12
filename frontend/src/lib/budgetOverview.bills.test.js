@@ -73,8 +73,18 @@ describe("Bills rows", () => {
   });
 
   it("a Bills category without bills reads like one without a budget", () => {
-    const row = budgetList(summary([streaming([], { limit_cents: null, remaining_cents: null })]), []).noBudget.rows[0];
+    const row = budgetList(
+      summary([streaming([], {
+        limit_cents: null, remaining_cents: null, spent_cents: 799, review: true,
+        extras: [{ id: 91, date: "2026-11-18", payee: "PayPal", amount_cents: 799 }],
+      })]),
+      [],
+    ).noBudget.rows[0];
     expect(row.budgeted).toBe(false);
+    expect(row.figure).toBe(`${whole(799)} spent`);
+    // Still a Bills sheet, so its payment can become the first bill.
+    expect(row.bills).toEqual([]);
+    expect(row.review.map((i) => [i.kind, i.payment.amount_cents])).toEqual([["extra", 799]]);
   });
 });
 

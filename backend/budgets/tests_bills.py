@@ -363,9 +363,14 @@ class BillRowsTests(TestCase):
             [True, True, False],
         )
 
-    def test_no_bills_no_row(self):
+    def test_without_bills_its_payments_are_to_review(self):
         empty = Category.objects.create(name="Internet", budget_kind="bills")
-        self.assertNotIn(empty.id, self._rows(NOV_2026, date(2026, 11, 19)))
+        paypal = self._pay(date(2026, 11, 18), 799, category=empty)
+        today = date(2026, 11, 19)
+        row = self._rows(NOV_2026, today)[empty.id]
+        self.assertEqual((row["bills"], row["budget_cents"], row["review"]), ([], 0, True))
+        self.assertEqual([e["id"] for e in row["extras"]], [paypal.id])
+        self.assertFalse(self._rows(date(2026, 9, 1), today)[empty.id]["review"])
 
 
 class BillsInTheMonthTests(TestCase):
@@ -430,6 +435,9 @@ class BillsInTheMonthTests(TestCase):
         summary = self._summary()
         self.assertIsNone(self._row(summary, empty)["limit_cents"])
         self.assertEqual(summary["totals"]["outside_cents"], 2500)
+        row = self._row(summary, empty)
+        self.assertFalse(row["over_limit"])
+        self.assertEqual(([e["amount_cents"] for e in row["extras"]], row["review"]), ([2500], True))
 
     def test_pace_with_bills(self):
         # The spec's example: on 10 November, 900.00 of limits of which 300.00
