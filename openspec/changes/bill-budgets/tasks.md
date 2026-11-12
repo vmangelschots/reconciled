@@ -35,7 +35,7 @@
 
 ## 7. Integration check
 
-- [ ] 7.1 Run backend tests (`python manage.py test`) and the app locally: make "Streaming" a Bills category with three bills, add matching transactions, and confirm the row, sheet, Needs attention (missed after the grace period), the tile marker and per-day, and that nothing is "ahead of pace"; switch it back to monthly and confirm the dialog
+- [x] 7.1 Run backend tests (`python manage.py test`) and the app locally: make "Streaming" a Bills category with three bills, add matching transactions, and confirm the row, sheet, Needs attention (missed after the grace period), the tile marker and per-day, and that nothing is "ahead of pace"; switch it back to monthly and confirm the dialog
 
 ## Workflow follow-up
 
