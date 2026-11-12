@@ -21,7 +21,6 @@ import { aiOutcomeLines, displayReason, sourceSplit } from "../lib/categorizeOut
 import { cn } from "../lib/cn";
 import { formatDateSpan, formatShortDate } from "../lib/dates";
 import { formatMoney } from "../lib/money";
-import { useReviewCount } from "../review/ReviewCountContext";
 
 // How long a resolved group or row takes to collapse; it's removed from the
 // list once both this and its save are done. Matches duration-200 below.
@@ -100,7 +99,6 @@ function Collapsible({ leaving, children }) {
 
 export function ReviewPage() {
   const toast = useToast();
-  const { refresh: refreshCount } = useReviewCount();
   const [groups, setGroups] = useState(null);
   const [uncategorizedCount, setUncategorizedCount] = useState(0);
   const [categories, setCategories] = useState([]);
@@ -197,7 +195,6 @@ export function ReviewPage() {
         await confirmCategories(ids, categoryId);
       }
       updateGroup(group.key, (g) => ({ ...g, settled: true }));
-      refreshCount();
     } catch (e) {
       pendingFocus.current = focusTarget(group);
       updateGroup(group.key, (g) => ({ ...g, leaving: false, failed: true }));
@@ -220,7 +217,6 @@ export function ReviewPage() {
     try {
       await updateTransaction(row.id, { category: categoryId });
       updateRow(group.key, row.id, { settled: true });
-      refreshCount();
     } catch (e) {
       pendingFocus.current = { kind: "row", id: row.id };
       updateRow(group.key, row.id, { leaving: false });
@@ -247,7 +243,6 @@ export function ReviewPage() {
         noMatchOf: result.categorized_count === 0 ? result.attempted_count : null,
         aiLines: aiOutcomeLines(result.ai),
       });
-      refreshCount();
     } catch (e) {
       setBackfill((prev) => ({ ...prev, running: false }));
       toast.error(errorMessage(e));

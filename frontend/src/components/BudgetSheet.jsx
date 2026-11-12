@@ -2,7 +2,6 @@ import { Link } from "react-router-dom";
 import { useSpendingCell } from "../hooks/useSpendingCell";
 import { cn } from "../lib/cn";
 import { monthLabel } from "../lib/months";
-import { useReviewCount } from "../review/ReviewCountContext";
 import { BudgetEditor } from "./BudgetEditor";
 import { SpendingRows } from "./SpendingRows";
 import { DialogTitle } from "./ui/Dialog";
@@ -10,11 +9,7 @@ import { ProgressBar } from "./ui/ProgressBar";
 import { Sheet } from "./ui/Sheet";
 
 function SheetBody({ row, category, month, startMonth, categories, onSaved, onClose, onChanged }) {
-  const { refresh: refreshReviewCount } = useReviewCount();
-  const spending = useSpendingCell({ category: row.id, month }, () => {
-    onChanged();
-    refreshReviewCount();
-  });
+  const spending = useSpendingCell({ category: row.id, month }, onChanged);
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">

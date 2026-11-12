@@ -1023,7 +1023,7 @@ export function LoanSchedulePage() {
   const id = Number(accountId);
   const [searchParams] = useSearchParams();
   const focus = Number(searchParams.get("installment")) || null;
-  const { accounts, refresh: refreshAccounts } = useAccounts();
+  const { accounts } = useAccounts();
   const toast = useToast();
   const [account, setAccount] = useState(null);
   // undefined while loading, null when the loan isn't set up.
@@ -1064,7 +1064,6 @@ export function LoanSchedulePage() {
   function handleChanged(updated) {
     setLoan(updated);
     setMode(null);
-    refreshAccounts();
   }
 
   function startCorrecting(paymentCents = null) {
@@ -1102,7 +1101,6 @@ export function LoanSchedulePage() {
       onRemoved={() => {
         setLoan(null);
         setEditing(false);
-        refreshAccounts();
       }}
     />
   );

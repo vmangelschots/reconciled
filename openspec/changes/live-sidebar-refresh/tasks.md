@@ -15,7 +15,7 @@
 
 ## 3. Remove manual refresh calls
 
-- [ ] 3.1 Remove the post-save `refreshAccounts()` / `refreshReviewCount()` / `refreshCount()` calls and their unused hook destructurings from `TransactionsPage`, `ImportPage`, `ReviewPage`, `LoanSchedulePage`, `SpendingSheet` and `BudgetSheet`, keeping each page's own `reload()`; update any of their tests that asserted those calls, and verify `npm test` and `npm run lint` pass
+- [x] 3.1 Remove the post-save `refreshAccounts()` / `refreshReviewCount()` / `refreshCount()` calls and their unused hook destructurings from `TransactionsPage`, `ImportPage`, `ReviewPage`, `LoanSchedulePage`, `SpendingSheet` and `BudgetSheet`, keeping each page's own `reload()`; update any of their tests that asserted those calls, and verify `npm test` and `npm run lint` pass
 
 ## 4. Integration check
 

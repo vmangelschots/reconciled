@@ -1,4 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { notifyDataChanged } from "../lib/dataChanged";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -96,7 +97,11 @@ describe("ImportPage transfer matches", () => {
 
 describe("ImportPage review line", () => {
   it("says how many were categorized and links to the Review page", async () => {
-    importsApi.commitImport.mockResolvedValue({ created_count: 20, confirmed_transfer_count: 0, categorized_count: 14 });
+    // Like the real API client, the commit announces a change.
+    importsApi.commitImport.mockImplementation(async () => {
+      notifyDataChanged();
+      return { created_count: 20, confirmed_transfer_count: 0, categorized_count: 14 };
+    });
     await uploadAndPreview();
 
     await userEvent.click(screen.getByRole("button", { name: /confirm import/i }));
@@ -106,8 +111,8 @@ describe("ImportPage review line", () => {
     ).toBeGreaterThan(0);
     expect(screen.getByText("14 got a category (14 from your history).", { selector: "p" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Review 14 guesses" })).toHaveAttribute("href", "/review");
-    // The nav's Review count is refreshed after the commit, not just on the
-    // next navigation.
+    // The nav's Review count reloads after the commit, not just on the next
+    // navigation.
     await waitFor(() => expect(transactionsApi.getReviewCount).toHaveBeenCalledTimes(2));
   });
 
