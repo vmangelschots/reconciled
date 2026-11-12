@@ -22,6 +22,9 @@ class CategorySerializer(serializers.ModelSerializer):
     yearly_history = serializers.SerializerMethodField()
     monthly_limits = serializers.SerializerMethodField()
     bills = serializers.SerializerMethodField()
+    # The loans that set this category's budget - see
+    # openspec/specs/bill-budgets.
+    loans = serializers.SerializerMethodField()
 
     class Meta:
         model = Category
@@ -37,6 +40,7 @@ class CategorySerializer(serializers.ModelSerializer):
             "yearly_history",
             "monthly_limits",
             "bills",
+            "loans",
             "created_at",
             "updated_at",
         ]
@@ -79,6 +83,14 @@ class CategorySerializer(serializers.ModelSerializer):
             }
             for bill in sorted(category.bills.all(), key=lambda b: (b.day, b.id))
         ]
+
+    def get_loans(self, category):
+        loans = self.context.get("loans")
+        if loans is None:
+            from .views import loans_by_category
+
+            loans = self.context["loans"] = loans_by_category()
+        return loans.get(category.id, [])
 
     def validate_parent(self, parent):
         if parent is None:

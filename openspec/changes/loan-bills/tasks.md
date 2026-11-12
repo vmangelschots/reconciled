@@ -2,9 +2,9 @@
 
 ## 1. Loan categories: adopt, release and guards
 
-- [ ] 1.1 Add `budgets/loan_categories.py` (`loan_categories`, `adopt`, `release`; imports only models) and call it from `set_up_loan`, `edit_loan` (only when the category changed) and `remove_loan`; verify with tests: setting up "House A" with "Mortgage" (1,400.00 limit) deletes the limit and makes it Bills; a second loan joining keeps it; clearing the only loan's category, or removing its setup, makes it monthly without a limit; removing one of two loans keeps it Bills; editing only the rate doesn't touch the category
-- [ ] 1.2 Reject `set_budget`, `set_limit` and `set_bills` on a loan category with "Its loans set this budget. Change it on the loan.", and add `loans` ([{account_id, name}], active accounts only, one prefetch query) to `CategorySerializer`; verify with API tests for each rejection, the serialized loans, and that an archived loan account doesn't count
-- [ ] 1.3 Add a `budgets` data migration adopting every current payment category of a loan on an active account (reverse: back to monthly); verify with a migration test (`MigrationExecutor` or a direct call of the migration function) that a category with a limit and a loan ends up Bills with no limit, and `makemigrations --check` is clean
+- [x] 1.1 Add `budgets/loan_categories.py` (`loan_categories`, `adopt`, `release`; imports only models) and call it from `set_up_loan`, `edit_loan` (only when the category changed) and `remove_loan`; verify with tests: setting up "House A" with "Mortgage" (1,400.00 limit) deletes the limit and makes it Bills; a second loan joining keeps it; clearing the only loan's category, or removing its setup, makes it monthly without a limit; removing one of two loans keeps it Bills; editing only the rate doesn't touch the category
+- [x] 1.2 Reject `set_budget`, `set_limit` and `set_bills` on a loan category with "Its loans set this budget. Change it on the loan.", and add `loans` ([{account_id, name}], active accounts only, one prefetch query) to `CategorySerializer`; verify with API tests for each rejection, the serialized loans, and that an archived loan account doesn't count
+- [x] 1.3 Add a `budgets` data migration adopting every current payment category of a loan on an active account (reverse: back to monthly); verify with a migration test (`MigrationExecutor` or a direct call of the migration function) that a category with a limit and a loan ends up Bills with no limit, and `makemigrations --check` is clean
 
 ## 2. Loan bill lines
 

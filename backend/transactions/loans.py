@@ -18,6 +18,7 @@ from django.db import IntegrityError
 from django.db import transaction as db_transaction
 
 from accounts.models import Account, Loan, LoanCorrection
+from budgets.loan_categories import adopt, release
 
 from .adjustments import ADJUSTMENT_PAYEE
 from .models import Transaction
@@ -356,6 +357,7 @@ def _check_bank_balance(today, bank_balance_cents, bank_balance_date):
 
 
 @db_transaction.atomic
+@db_transaction.atomic
 def set_up_loan(account, today, bank_balance_cents=None, bank_balance_date=None, **terms):
     """Give `account` its loan terms, line it up on `today` and match what
     is already due. With what the bank says is owed (today, or on a day up
@@ -365,6 +367,9 @@ def set_up_loan(account, today, bank_balance_cents=None, bank_balance_date=None,
         raise LoanError("This loan is already set up.")
     _check_bank_balance(today, bank_balance_cents, bank_balance_date)
     loan = Loan.objects.create(account=account, setup_date=today, **terms)
+    # The payment category now takes its budget from the loans - see
+    # openspec/specs/loan-schedules.
+    adopt(loan.payment_category)
     if bank_balance_cents is not None:
         correction = LoanCorrection.objects.create(
             loan=loan, date=bank_balance_date or today, balance_cents=bank_balance_cents
@@ -391,9 +396,13 @@ def edit_loan(loan, today, **terms):
     matched again."""
     loan = Loan.objects.select_for_update().get(pk=loan.pk)
     repost = changes_schedule(loan, terms)
+    old_category_id = loan.payment_category_id
     for field, value in terms.items():
         setattr(loan, field, value)
     loan.save()
+    if loan.payment_category_id != old_category_id:
+        adopt(loan.payment_category)
+        release(old_category_id)
     if repost:
         _repost(loan, today)
     else:
@@ -456,7 +465,9 @@ def remove_loan(loan):
     loan.adjustments.update(
         loan_installment=None, loan_payment=None, loan_linked_by_hand=False, loan_correction=None
     )
+    category_id = loan.payment_category_id
     loan.delete()
+    release(category_id)
 
 
 @dataclass(frozen=True)
