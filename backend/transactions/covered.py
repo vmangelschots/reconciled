@@ -19,8 +19,6 @@ from budgets.models import Category
 from .models import Transaction
 
 OFF_BANK_NAME = "Paid by others"
-PAIR_ERROR = "This row is half of a covered entry. Change it on its tab."
-TAB_HALF_ERROR = "The tab half of a covered entry can only move to another tab."
 
 
 class CoveredError(Exception):
@@ -75,11 +73,6 @@ def covered_rows(tab):
     return Transaction.objects.filter(category=tab, covered_cost__isnull=False)
 
 
-def is_pair_row(txn):
-    """True for either half of a covered entry."""
-    return txn.covered_tab_row_id is not None or Transaction.objects.filter(covered_tab_row=txn).exists()
-
-
 @db_transaction.atomic
 def create(tab, data):
     """Record a covered entry on `tab`; returns its tab half."""
@@ -112,14 +105,3 @@ def update(tab_row, data):
 def delete(tab_row):
     """Remove both halves; the cost goes with its tab half."""
     tab_row.delete()
-
-
-def check_category_change(txn, category):
-    """Raise CoveredError when giving `category` to `txn` would break a
-    covered entry: the cost never changes outside this module, and the
-    tab half only moves to another tab."""
-    if txn.covered_tab_row_id is not None:
-        raise CoveredError("category", PAIR_ERROR)
-    if Transaction.objects.filter(covered_tab_row=txn).exists():
-        if category is None or not category.is_tab:
-            raise CoveredError("category", TAB_HALF_ERROR)

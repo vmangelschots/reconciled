@@ -36,9 +36,23 @@ def tab_rows(categories):
     return (
         Transaction.objects.counted_rows()
         .filter(category__in=categories)
-        .select_related("split_parent")
+        .select_related("split_parent", "covered_cost__category__parent")
         .order_by("date", "id")
     )
+
+
+def covered_cost(row):
+    """The cost half when `row` is the tab half of a covered entry
+    (transactions/covered.py), else None."""
+    return getattr(row, "covered_cost", None)
+
+
+def row_kind(row):
+    """"covered" for a covered entry, else "lent" for money out and
+    "repaid" for money in."""
+    if covered_cost(row) is not None:
+        return "covered"
+    return "lent" if row.amount_cents < 0 else "repaid"
 
 
 def summarize(category, rows):

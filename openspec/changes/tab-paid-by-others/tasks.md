@@ -8,8 +8,8 @@
 ## 2. Covered entries backend
 
 - [x] 2.1 Add `transactions/covered.py` with `create`, `update` and `delete`. They work on both halves atomically, create the off-bank account lazily, and reject an amount of zero or less and a category that is a tab or tab group. Verify in `tests_covered.py` with the "Record what the tab's person paid for" and "A covered entry's category is not a tab" scenarios, including that `tabs.tab_detail` and `reports.spending.month_spending` see the right amounts.
-- [ ] 2.2 Add `POST`, `PATCH` and `DELETE` under `/tabs/{id}/covered/`. Add `kind`, `covered_category` and `notes` to the tab detail rows. Verify in `tests_tab_api.py` with the edit and delete scenarios, and that a 404 is returned for a row that isn't a covered entry on that tab.
-- [ ] 2.3 Guard the pair:
+- [x] 2.2 Add `POST`, `PATCH` and `DELETE` under `/tabs/{id}/covered/`. Add `kind`, `covered_category` and `notes` to the tab detail rows. Verify in `tests_tab_api.py` with the edit and delete scenarios, and that a 404 is returned for a row that isn't a covered entry on that tab.
+- [x] 2.3 Guard the pair:
   - Reject recategorizing either half through transaction update, bulk categorize and split. The tab half may still move to another tab.
   - Reject re-parenting a tab with covered entries out of its tab group.
 

@@ -155,24 +155,3 @@ class EditCoveredTests(CoveredTestCase):
         self.assertEqual(tab_detail(self.sarah).balance_cents, 0)
         spent, _ = month_spending(date(2026, 11, 1))
         self.assertNotIn(self.takeout.id, spent)
-
-
-class CategoryGuardTests(CoveredTestCase):
-    def test_the_cost_never_changes_category_outside_covered(self):
-        cost = self.entry().covered_cost
-
-        with self.assertRaises(CoveredError):
-            covered.check_category_change(cost, Category.objects.create(name="Restaurants"))
-
-    def test_the_tab_half_only_moves_to_another_tab(self):
-        tab_row = self.entry()
-
-        covered.check_category_change(tab_row, self.jan)
-        for category in (None, self.takeout):
-            with self.assertRaises(CoveredError):
-                covered.check_category_change(tab_row, category)
-
-    def test_an_ordinary_row_is_unaffected(self):
-        row = self.lend(1000)
-
-        covered.check_category_change(row, self.takeout)

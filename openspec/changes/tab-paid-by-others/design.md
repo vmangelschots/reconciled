@@ -102,12 +102,16 @@ Alternatives considered:
 
 ### 4. Guards that keep the pair consistent
 
-- **Recategorizing.** The generic transaction update, bulk categorize and
-  split paths reject changing the category of a row that is either half
-  of a covered entry, except for moving the tab half to another tab. The
-  supported way to change an entry is through `covered.py`.
-- **Re-parenting.** `CategorySerializer.validate_parent` rejects moving a
-  tab out of its tab group while it has covered tab halves.
+- **Recategorizing.** The generic `TransactionViewSet` leaves out every
+  row of the off-bank account, so update, delete, split and transfer
+  return 404 for either half. Bulk confirm-categories skips them too. The
+  only way to change an entry is through `covered.py` on its tab. This is
+  stricter than "the tab half may move to another tab", but nothing needs
+  that move yet.
+- **Re-parenting.** `CategorySerializer` rejects moving a tab with covered
+  entries out of a tab group (to another tab group is fine). It also
+  rejects turning off `is_tab_group` on a group whose tabs have covered
+  entries.
 - **Deleting a tab.** The existing "transactions still assigned" check
   already blocks it.
 
