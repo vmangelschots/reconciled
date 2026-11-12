@@ -36,6 +36,9 @@ export function BudgetsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const month = isMonth(searchParams.get("month")) ? searchParams.get("month") : currentMonth();
   const setMonth = (m) => setSearchParams({ month: m }, { replace: true });
+  // A category in the address opens its sheet, so the Forecast page can link
+  // straight to a bill or budget.
+  const linkedCategory = Number(searchParams.get("category")) || null;
   const [summary, setSummary] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const [highlightId, setHighlightId] = useState(null);
@@ -51,7 +54,7 @@ export function BudgetsPage() {
   }, []);
 
   useEffect(() => {
-    setSelectedId(null);
+    setSelectedId(linkedCategory);
     reloadSummary();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [month]);
@@ -115,6 +118,11 @@ export function BudgetsPage() {
     );
   }
 
+  function closeSheet() {
+    setSelectedId(null);
+    if (linkedCategory) setSearchParams({ month }, { replace: true });
+  }
+
   const loaded = summary && categories;
   const list = loaded ? budgetList(summary, categories) : null;
   const selected = list ? ([...list.rows, ...list.noBudget.rows].find((r) => r.id === selectedId) ?? null) : null;
@@ -156,7 +164,7 @@ export function BudgetsPage() {
         wide={isWide}
         onSaved={handleBudgetSaved}
         onChanged={reloadAll}
-        onClose={() => setSelectedId(null)}
+        onClose={closeSheet}
       />
     </section>
   );

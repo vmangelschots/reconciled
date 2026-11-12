@@ -1,21 +1,25 @@
 import { apiFetch } from "./client";
 
-export function listRecurringTransactions(accountId) {
-  return apiFetch(`/api/recurring-transactions/?account=${accountId}`);
+export function getForecast(horizonDays) {
+  return apiFetch(`/api/forecast/?horizon_days=${horizonDays}`);
 }
 
-export function createRecurringTransaction(data) {
-  return apiFetch("/api/recurring-transactions/", { method: "POST", body: data });
+export function listExpectedItems() {
+  return apiFetch("/api/expected-items/");
 }
 
-export function updateRecurringTransaction(id, data) {
-  return apiFetch(`/api/recurring-transactions/${id}/`, { method: "PATCH", body: data });
+export function getExpectedItemOptions() {
+  return apiFetch("/api/expected-items/options/");
 }
 
-export function deleteRecurringTransaction(id) {
-  return apiFetch(`/api/recurring-transactions/${id}/`, { method: "DELETE" });
+export function createExpectedItem(data) {
+  return apiFetch("/api/expected-items/", { method: "POST", body: data });
 }
 
-export function getForecast(accountId, horizonDays) {
-  return apiFetch(`/api/forecast/?account=${accountId}&horizon_days=${horizonDays}`);
+export function updateExpectedItem(id, data) {
+  return apiFetch(`/api/expected-items/${id}/`, { method: "PATCH", body: data });
+}
+
+export function deleteExpectedItem(id) {
+  return apiFetch(`/api/expected-items/${id}/`, { method: "DELETE" });
 }

@@ -115,8 +115,8 @@ balance.
 ### Requirement: Accounts are listed by tier
 Wherever active accounts are listed or offered (the accounts list, the
 sidebar, account pills, the Overview's Accounts tile, transfer targets,
-and the Import and Forecast account choices), they SHALL be ordered by
-tier and then by name.
+the Import account choice and the accounts an expected item can be
+recognised by), they SHALL be ordered by tier and then by name.
 
 #### Scenario: A house after everyday accounts
 - **WHEN** the active accounts are "House" (property), "Crelan"
@@ -135,9 +135,10 @@ transactions.
 Covered entries (see the `repayment-tabs` capability) SHALL be kept apart
 from the user's accounts. No account list, choice or total SHALL show
 where they are kept: the accounts list, the sidebar, account pills,
-transfer targets, the Import, bank sync and Forecast account choices, the
-Overview's Accounts tile and import reminders, and net worth. They SHALL
-NOT change any account's balance.
+transfer targets, the Import and bank sync account choices, the accounts
+an expected item can be recognised by, the Overview's Accounts tile and
+import reminders, and net worth. They SHALL NOT change any account's
+balance.
 
 #### Scenario: Accounts list after a covered entry
 - **WHEN** the user has "Crelan" and "Revolut" and records that Sarah paid

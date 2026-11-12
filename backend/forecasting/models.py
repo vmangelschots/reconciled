@@ -1,37 +1,41 @@
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 
-from households.scoping import HouseholdScoped
+from households.scoping import HouseholdOwned
 
 
-class RecurringTransaction(HouseholdScoped):
-    household_path = "account__household"
+class ExpectedItem(HouseholdOwned):
+    """Money the user expects every month that no bill, loan or budget
+    already forecasts, such as a salary: about `amount_cents` on `day` (the
+    month's last day when it has fewer). It is recognised by its category or
+    by the account a transfer goes to or comes from - exactly one of the
+    two. See openspec/specs/forecasting."""
 
-    class Frequency(models.TextChoices):
-        WEEKLY = "weekly", "Weekly"
-        BIWEEKLY = "biweekly", "Biweekly"
-        MONTHLY = "monthly", "Monthly"
-        YEARLY = "yearly", "Yearly"
+    class Direction(models.TextChoices):
+        IN = "in", "In"
+        OUT = "out", "Out"
 
-    account = models.ForeignKey(
-        "accounts.Account", on_delete=models.CASCADE, related_name="recurring_transactions"
-    )
-    amount_cents = models.BigIntegerField()
-    payee = models.CharField(max_length=255)
+    name = models.CharField(max_length=255)
+    direction = models.CharField(max_length=3, choices=Direction.choices)
+    amount_cents = models.BigIntegerField(validators=[MinValueValidator(1)])
+    day = models.PositiveSmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(31)])
+    # SET_NULL: deleting the category or account leaves the item visible,
+    # asking how to recognise it.
     category = models.ForeignKey(
-        "budgets.Category",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="recurring_transactions",
+        "budgets.Category", null=True, blank=True, on_delete=models.SET_NULL, related_name="expected_items"
     )
-    frequency = models.CharField(max_length=10, choices=Frequency.choices)
-    start_date = models.DateField()
-    end_date = models.DateField(null=True, blank=True)
+    account = models.ForeignKey(
+        "accounts.Account", null=True, blank=True, on_delete=models.SET_NULL, related_name="expected_items"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        ordering = ["start_date"]
+        ordering = ["day", "name", "id"]
+
+    @property
+    def signed_cents(self):
+        return self.amount_cents if self.direction == self.Direction.IN else -self.amount_cents
 
     def __str__(self):
-        return f"{self.payee} ({self.frequency}, from {self.start_date})"
+        return f"{self.name} ({self.direction}, on the {self.day})"

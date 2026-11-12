@@ -34,8 +34,8 @@ SHALL be able to download one.
 A backup SHALL hold every account; every transaction, with its splits,
 transfer links, value adjustments, notes and category guesses; categories
 and tabs; monthly limits; yearly budgets; bills with the months they
-count in; the budget settings; recurring
-transactions; loan setups and their balance corrections, with the links
+count in; the budget settings; expected items; loan setups and their
+balance corrections, with the links
 between scheduled adjustments and their installments, corrections and
 payments; the remembered import mappings; when each account was last
 imported into; and bank account links with their seen bank lines. Rows SHALL keep
@@ -98,6 +98,18 @@ SHALL get new ids.
 - **WHEN** Netflix was 17.99 until October and is 19.99 from November, and
   a backup of it is restored
 - **THEN** October still expects 17.99 and November 19.99
+
+#### Scenario: Expected items survive
+- **WHEN** "Salary" is expected in, 4,500.00 on the 25th, recognised by
+  "Salary", and a backup of it is restored
+- **THEN** "Salary" is still expected the same way
+
+#### Scenario: A backup with recurring transactions
+- **WHEN** a backup made before expected items holds a monthly recurring
+  "Salary" of +4,500.00 starting 25 March in category "Salary", a weekly
+  one, and a monthly one without a category
+- **THEN** it restores with "Salary" as an expected item in, 4,500.00 on
+  the 25th, recognised by "Salary", and without the other two
 
 ### Requirement: What a backup leaves out
 A backup SHALL NOT hold login users or their passwords. It SHALL NOT hold

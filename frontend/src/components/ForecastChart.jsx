@@ -1,159 +1,148 @@
-import { useMemo, useState } from "react";
-import { Button } from "./ui/Button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/Table";
-import { formatMoney, formatMoneyCompact } from "../lib/money";
+import { useMemo } from "react";
+import {
+  CartesianGrid,
+  ComposedChart,
+  Line,
+  ReferenceDot,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import { BelowZeroGradient, LowLabel, belowZeroStroke, showsLow } from "./chart/projection";
+import { ChartTooltip } from "./ui/ChartTooltip";
+import { formatMoneyCompact, formatMoneyWhole } from "../lib/money";
 
-const WIDTH = 760;
-const HEIGHT = 280;
-const PADDING = { top: 16, right: 16, bottom: 28, left: 64 };
+const HEIGHT = 240;
+const GRADIENT_ID = "forecast-below-zero";
+// Items listed in a day's tooltip before "+N more".
+const TOOLTIP_ITEMS = 3;
 
-function niceTicks(min, max, count = 4) {
-  if (min === max) return [min];
-  const step = (max - min) / (count - 1);
-  return Array.from({ length: count }, (_, i) => Math.round(min + step * i));
+function localDate(isoDate) {
+  const [y, m, d] = isoDate.split("-").map(Number);
+  return new Date(y, m - 1, d);
 }
 
-export function ForecastChart({ points }) {
-  const [hoverIndex, setHoverIndex] = useState(null);
-  const [showTable, setShowTable] = useState(false);
+export function longDay(isoDate) {
+  return localDate(isoDate).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+}
 
-  const plot = useMemo(() => {
-    const values = points.map((p) => p.balance_cents);
-    const min = Math.min(...values, 0);
-    const max = Math.max(...values, 0);
-    const span = max - min || 1;
-    const innerWidth = WIDTH - PADDING.left - PADDING.right;
-    const innerHeight = HEIGHT - PADDING.top - PADDING.bottom;
+function tickLabel(isoDate, monthly) {
+  return localDate(isoDate).toLocaleDateString(
+    undefined,
+    monthly ? { month: "short" } : { day: "numeric", month: "short" },
+  );
+}
 
-    const x = (i) => PADDING.left + (i / (points.length - 1 || 1)) * innerWidth;
-    const y = (value) => PADDING.top + innerHeight - ((value - min) / span) * innerHeight;
+// Weeks over 30 days (Mondays), months over 90 (the 1st).
+function ticksFor(points, monthly) {
+  return points
+    .map((p) => p.date)
+    .filter((d) => (monthly ? d.endsWith("-01") : localDate(d).getDay() === 1));
+}
 
-    const path = points.map((p, i) => `${i === 0 ? "M" : "L"} ${x(i)} ${y(p.balance_cents)}`).join(" ");
-    const ticks = niceTicks(min, max);
-    const zeroVisible = min < 0 && max > 0;
+export function ForecastTooltip({ active, payload }) {
+  if (!active || !payload?.length) return null;
+  const row = payload[0].payload;
+  const shown = row.items.slice(0, TOOLTIP_ITEMS);
+  const more = row.items.length - shown.length;
+  return (
+    <ChartTooltip title={longDay(row.date)}>
+      <strong className="text-ink-primary">{formatMoneyWhole(row.balance_cents)}</strong>
+      {shown.map((item, i) => (
+        <span key={i} className="flex justify-between gap-3 text-xs text-ink-secondary">
+          <span className="truncate">{item.name}</span>
+          <span className="num">{formatMoneyWhole(item.amount_cents, { signed: true })}</span>
+        </span>
+      ))}
+      {more > 0 && <span className="text-xs text-ink-muted">+{more} more</span>}
+    </ChartTooltip>
+  );
+}
 
-    return { x, y, path, ticks, zeroVisible, min, max };
-  }, [points]);
-
+/**
+ * The Everyday forecast as a solid stepped line from today (Recharts). See
+ * the forecasting spec's "The forecast chart".
+ * - points: [{date, balance_cents}] from today to the horizon's end.
+ * - items: the forecast's items; a day's tooltip lists those dated on it,
+ *   leaving out spread budgets, which show in the slope.
+ * - lowest: the lowest point after today, labelled when below today.
+ * - critical: false while no income is expected, so nothing turns red.
+ * - width: optional fixed width; tests pass one, as jsdom has no layout.
+ */
+export function ForecastChart({ points, items = [], lowest, critical = true, width }) {
+  const monthly = points.length > 31;
+  const rows = useMemo(() => {
+    const byDay = new Map();
+    items
+      .filter((i) => i.source !== "budget")
+      .forEach((i) => byDay.set(i.date, [...(byDay.get(i.date) ?? []), i]));
+    return points.map((p) => ({ ...p, items: byDay.get(p.date) ?? [] }));
+  }, [points, items]);
+  const ticks = useMemo(() => ticksFor(points, monthly), [points, monthly]);
+  const values = points.map((p) => p.balance_cents);
   if (points.length === 0) return null;
 
-  const hovered = hoverIndex != null ? points[hoverIndex] : null;
-  const lastPoint = points[points.length - 1];
-
-  function handleMove(event) {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const relativeX = ((event.clientX - rect.left) / rect.width) * WIDTH;
-    const innerWidth = WIDTH - PADDING.left - PADDING.right;
-    const ratio = (relativeX - PADDING.left) / innerWidth;
-    const index = Math.round(ratio * (points.length - 1));
-    setHoverIndex(Math.max(0, Math.min(points.length - 1, index)));
-  }
+  const today = points[0];
+  const showLow = showsLow(lowest, today.balance_cents);
+  const chart = (
+    <ComposedChart data={rows} width={width} height={HEIGHT} margin={{ top: 24, right: 8, left: 0, bottom: 0 }}>
+      <BelowZeroGradient id={GRADIENT_ID} values={values} />
+      <CartesianGrid vertical={false} stroke="var(--chart-gridline)" />
+      <XAxis
+        dataKey="date"
+        ticks={ticks}
+        tickFormatter={(d) => tickLabel(d, monthly)}
+        tick={{ fill: "var(--ink-muted)", fontSize: 11 }}
+        axisLine={{ stroke: "var(--chart-baseline)" }}
+        tickLine={false}
+      />
+      <YAxis
+        domain={[(min) => Math.min(min, 0), (max) => Math.max(max, 0)]}
+        tickFormatter={formatMoneyCompact}
+        tickCount={4}
+        tick={{ fill: "var(--ink-muted)", fontSize: 11 }}
+        axisLine={false}
+        tickLine={false}
+        width={56}
+      />
+      <Tooltip
+        content={<ForecastTooltip />}
+        cursor={{ stroke: "var(--ink-muted)", strokeWidth: 1 }}
+        isAnimationActive={false}
+      />
+      <Line
+        dataKey="balance_cents"
+        type="stepAfter"
+        stroke={belowZeroStroke(values, GRADIENT_ID, critical)}
+        strokeWidth={2}
+        dot={false}
+        activeDot={{ r: 4, className: "chart-hover-dot" }}
+        isAnimationActive={false}
+      />
+      {showLow && (
+        <ReferenceDot
+          x={lowest.date}
+          y={lowest.balance_cents}
+          r={0}
+          label={<LowLabel lowest={lowest} critical={critical} />}
+        />
+      )}
+    </ComposedChart>
+  );
 
   return (
-    <div className="relative mb-6 max-w-full">
-      <svg
-        viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-        role="img"
-        aria-label="Projected account balance over time"
-        onMouseMove={handleMove}
-        onMouseLeave={() => setHoverIndex(null)}
-        className="h-auto w-full rounded-lg bg-surface"
-      >
-        {plot.ticks.map((tick) => (
-          <g key={tick}>
-            <line
-              x1={PADDING.left}
-              x2={WIDTH - PADDING.right}
-              y1={plot.y(tick)}
-              y2={plot.y(tick)}
-              className="chart-gridline"
-            />
-            <text x={PADDING.left - 8} y={plot.y(tick)} className="chart-axis-label" textAnchor="end" dy="0.32em">
-              {formatMoneyCompact(tick)}
-            </text>
-          </g>
-        ))}
-
-        {plot.zeroVisible && (
-          <line
-            x1={PADDING.left}
-            x2={WIDTH - PADDING.right}
-            y1={plot.y(0)}
-            y2={plot.y(0)}
-            className="chart-baseline"
-          />
-        )}
-
-        <text x={PADDING.left} y={HEIGHT - 6} className="chart-axis-label">
-          {points[0].date}
-        </text>
-        <text x={WIDTH - PADDING.right} y={HEIGHT - 6} className="chart-axis-label" textAnchor="end">
-          {lastPoint.date}
-        </text>
-
-        <path d={plot.path} className="chart-line" fill="none" />
-
-        <circle cx={plot.x(points.length - 1)} cy={plot.y(lastPoint.balance_cents)} r="4" className="chart-end-dot" />
-        <text
-          x={plot.x(points.length - 1) - 8}
-          y={plot.y(lastPoint.balance_cents) - 10}
-          className="chart-end-label"
-          textAnchor="end"
-        >
-          {formatMoney(lastPoint.balance_cents)}
-        </text>
-
-        {hovered && (
-          <>
-            <line
-              x1={plot.x(hoverIndex)}
-              x2={plot.x(hoverIndex)}
-              y1={PADDING.top}
-              y2={HEIGHT - PADDING.bottom}
-              className="chart-crosshair"
-            />
-            <circle cx={plot.x(hoverIndex)} cy={plot.y(hovered.balance_cents)} r="4" className="chart-hover-dot" />
-          </>
-        )}
-      </svg>
-
-      {hovered && (
-        <div
-          className="absolute right-2 top-2 flex flex-col gap-0.5 rounded-md border border-border bg-surface px-2.5 py-1.5 pointer-events-none"
-          aria-hidden="true"
-        >
-          <strong className="text-ink-primary">{formatMoney(hovered.balance_cents)}</strong>
-          <span className="text-xs text-ink-secondary">{hovered.date}</span>
-        </div>
-      )}
-
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        className="mt-2"
-        onClick={() => setShowTable((v) => !v)}
-      >
-        {showTable ? "Hide table" : "Show as table"}
-      </Button>
-
-      {showTable && (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Date</TableHead>
-              <TableHead>Projected balance</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {points.map((p) => (
-              <TableRow key={p.date}>
-                <TableCell>{p.date}</TableCell>
-                <TableCell>{formatMoney(p.balance_cents)}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+    <div
+      role="img"
+      aria-label={`Forecast balance, from ${formatMoneyWhole(today.balance_cents)} today`}
+      className="max-w-full rounded-lg bg-surface"
+    >
+      {width ? (
+        chart
+      ) : (
+        <ResponsiveContainer width="100%" height={HEIGHT}>
+          {chart}
+        </ResponsiveContainer>
       )}
     </div>
   );

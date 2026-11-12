@@ -7,7 +7,8 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from accounts.models import Account
-from forecasting.models import RecurringTransaction
+from budgets.models import Bill, Category
+from forecasting.models import ExpectedItem
 from transactions.adjustments import set_value
 from transactions.models import Transaction
 from transactions.splits import SplitLine, save_split
@@ -86,17 +87,16 @@ class EverydayBalanceTests(BalanceCase):
         self.assertEqual(body["tier"], "savings")
         self.assertEqual(body["points"][-1]["balance_cents"], 501000)
 
+    def bills(self):
+        """Two bills: 200.00 on the 29th and 50.00 on the 3rd, from October."""
+        streaming = Category.objects.create(name="Bills", budget_kind="bills")
+        for name, day, cents in (("Rent", 29, 20000), ("Phone", 3, 5000)):
+            Bill.objects.create(category=streaming, name=name, day=day, amount_cents=cents, from_month=date(2026, 10, 1))
+
     def test_two_accounts_add_up_in_the_projection(self):
-        crelan = Account.objects.create(name="Crelan", account_type="cash", starting_balance_cents=10000)
+        Account.objects.create(name="Crelan", account_type="cash", starting_balance_cents=10000)
         self.txn(50000, date(2026, 10, 1))
-        for account, day, cents in ((self.checking, 5, -20000), (crelan, 10, -5000)):
-            RecurringTransaction.objects.create(
-                account=account,
-                amount_cents=cents,
-                payee="Bill",
-                frequency="monthly",
-                start_date=TODAY + timedelta(days=day),
-            )
+        self.bills()
         body = self.everyday()
         projected = {p["date"]: p["balance_cents"] for p in body["projection"]}
         self.assertEqual(body["projection"][0], {"date": "2026-10-24", "balance_cents": 60000})
@@ -105,20 +105,28 @@ class EverydayBalanceTests(BalanceCase):
         self.assertEqual(len(body["projection"]), 31)
         self.assertEqual(body["lowest"], {"date": "2026-11-03", "balance_cents": 35000})
 
+    def test_the_same_as_the_forecast_over_30_days(self):
+        self.bills()
+        with patch("budgets.utils.today", lambda: TODAY):
+            forecast = self.client.get(reverse("forecast"), {"horizon_days": 30}).json()
+        self.assertEqual(self.everyday()["projection"], forecast["points"])
+
     def test_past_month_has_no_projection(self):
-        RecurringTransaction.objects.create(
-            account=self.checking,
-            amount_cents=-100,
-            payee="Bill",
-            frequency="monthly",
-            start_date=TODAY + timedelta(days=5),
-        )
+        self.bills()
         self.assertIsNone(self.everyday(month="2026-09")["projection"])
 
-    def test_nothing_scheduled_has_no_projection(self):
+    def test_nothing_expected_has_no_projection(self):
         body = self.everyday()
         self.assertIsNone(body["projection"])
         self.assertIsNone(body["lowest"])
+
+    def test_bills_but_no_salary(self):
+        self.bills()
+        self.assertFalse(self.everyday()["has_income"])
+        ExpectedItem.objects.create(
+            name="Salary", direction="in", amount_cents=450000, day=25, category=Category.objects.create(name="Salary")
+        )
+        self.assertTrue(self.everyday()["has_income"])
 
     def test_a_malformed_month_is_rejected(self):
         response = self.client.get(reverse("report-everyday-balance"), {"month": "october"})

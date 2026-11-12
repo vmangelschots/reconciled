@@ -1,386 +1,459 @@
 import { useEffect, useState } from "react";
-import { listAccounts } from "../api/accounts";
-import { listCategories } from "../api/categories";
+import { Link, useSearchParams } from "react-router-dom";
+import { Info } from "lucide-react";
 import {
-  createRecurringTransaction,
-  deleteRecurringTransaction,
+  createExpectedItem,
+  deleteExpectedItem,
+  getExpectedItemOptions,
   getForecast,
-  listRecurringTransactions,
-  updateRecurringTransaction,
+  listExpectedItems,
+  updateExpectedItem,
 } from "../api/forecasting";
 import { CategoryCombobox } from "../components/CategoryCombobox";
-import { ForecastChart } from "../components/ForecastChart";
+import { ForecastChart, longDay } from "../components/ForecastChart";
+import { Amount } from "../components/ui/Amount";
 import { Button } from "../components/ui/Button";
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/Card";
+import { DialogTitle } from "../components/ui/Dialog";
+import { EmptyState } from "../components/ui/EmptyState";
 import { Input } from "../components/ui/Input";
 import { Label } from "../components/ui/Label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/Select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../components/ui/Table";
-import { useToast } from "../components/ui/Toast";
-import { cn } from "../lib/cn";
-import { formatShortDate } from "../lib/dates";
-import { Amount } from "../components/ui/Amount";
 import { PageHeader } from "../components/ui/PageHeader";
+import { Panel } from "../components/ui/Panel";
+import { PillSwitch } from "../components/ui/PillSwitch";
+import { SegmentedControl } from "../components/ui/SegmentedControl";
+import { Sheet } from "../components/ui/Sheet";
+import { Stat } from "../components/ui/Stat";
+import { StatusBadge } from "../components/ui/StatusBadge";
+import { useToast } from "../components/ui/Toast";
+import { useMediaQuery } from "../hooks/useMediaQuery";
+import { cn } from "../lib/cn";
+import { staleImports } from "../lib/importFreshness";
+import { formatMoneyWhole, parseCents } from "../lib/money";
+import { formatDayMonth } from "../lib/yearlyBudgets";
 
-const FREQUENCIES = [
-  { value: "weekly", label: "Weekly" },
-  { value: "biweekly", label: "Biweekly" },
-  { value: "monthly", label: "Monthly" },
-  { value: "yearly", label: "Yearly" },
+const HORIZONS = [
+  { value: 30, label: "30 days" },
+  { value: 90, label: "90 days" },
 ];
 
-const HORIZON_PRESETS = [
-  { label: "30 days", value: 30 },
-  { label: "90 days", value: 90 },
-  { label: "1 year", value: 365 },
-];
+const whole = (cents) => formatMoneyWhole(cents);
 
+function errorText(e) {
+  return e.data ? Object.values(e.data).flat().join(" ") : e.message;
+}
 
+/**
+ * The Everyday forecast: what's coming over 30 or 90 days, from bills,
+ * loans, budgets and expected items - see openspec/specs/forecasting.
+ */
 export function ForecastingPage() {
-  const [accounts, setAccounts] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [accountId, setAccountId] = useState(null);
-  const [recurring, setRecurring] = useState([]);
-  const [horizonDays, setHorizonDays] = useState(90);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const days = Number(searchParams.get("days")) === 30 ? 30 : 90;
   const [forecast, setForecast] = useState(null);
-  const [editingId, setEditingId] = useState(null);
-  const [pendingIds, setPendingIds] = useState(new Set());
-  const toast = useToast();
+  const [expected, setExpected] = useState(null);
+  const [options, setOptions] = useState({ categories: [], accounts: [] });
+  const [error, setError] = useState(null);
+  // null when closed; otherwise { item } to edit, or { direction } to add.
+  const [sheet, setSheet] = useState(null);
+  const isWide = useMediaQuery("(min-width: 640px)");
 
-  function setPending(id, isPending) {
-    setPendingIds((prev) => {
-      const next = new Set(prev);
-      if (isPending) {
-        next.add(id);
-      } else {
-        next.delete(id);
-      }
-      return next;
-    });
+  function load() {
+    return Promise.all([getForecast(days), listExpectedItems(), getExpectedItemOptions()])
+      .then(([f, items, opts]) => {
+        setForecast(f);
+        setExpected(items);
+        setOptions(opts);
+        setError(null);
+      })
+      .catch((e) => setError(e.message));
   }
 
   useEffect(() => {
-    Promise.all([listAccounts(), listCategories()]).then(([accts, cats]) => {
-      setAccounts(accts);
-      setCategories(cats);
-      if (accts.length > 0) setAccountId(accts[0].id);
-    });
-  }, []);
-
-  function reloadRecurring() {
-    if (!accountId) return undefined;
-    return listRecurringTransactions(accountId).then(setRecurring);
-  }
-
-  function reloadForecast() {
-    if (!accountId) return undefined;
-    return getForecast(accountId, horizonDays).then(setForecast).catch((e) => toast.error(e.message));
-  }
-
-  useEffect(() => {
-    reloadRecurring();
+    load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accountId]);
+  }, [days]);
 
-  useEffect(() => {
-    reloadForecast();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accountId, horizonDays]);
-
-  async function handleCreate(values) {
-    await createRecurringTransaction({ ...values, account: accountId });
-    toast.success("Recurring transaction added.");
-    await Promise.all([reloadRecurring(), reloadForecast()]);
-  }
-
-  async function handleSave(id, values) {
-    await updateRecurringTransaction(id, values);
-    toast.success("Recurring transaction updated.");
-    setEditingId(null);
-    await Promise.all([reloadRecurring(), reloadForecast()]);
-  }
-
-  async function handleDelete(id) {
-    setPending(id, true);
-    try {
-      await deleteRecurringTransaction(id);
-      toast.success("Recurring transaction deleted.");
-      await Promise.all([reloadRecurring(), reloadForecast()]);
-    } catch (e) {
-      toast.error(e.data ? Object.values(e.data).flat().join(" ") : e.message);
-    } finally {
-      setPending(id, false);
-    }
-  }
-
-  function categoryName(id) {
-    return categories.find((c) => c.id === id)?.name ?? "Uncategorized";
-  }
-
-  if (accounts.length === 0) {
-    return (
-      <section>
-        <PageHeader title="Forecast" />
-        <p className="mt-2 text-sm text-ink-secondary">Add an account first.</p>
-      </section>
-    );
-  }
+  const loading = !forecast && !error;
+  const openExpected = (id) => setSheet({ item: expected.find((i) => i.id === id) });
+  const addIncome = () => setSheet({ direction: "in" });
 
   return (
     <section className="flex flex-col gap-6">
-      <PageHeader title="Forecast" />
+      <PageHeader title="Forecast">
+        <PillSwitch
+          label="Horizon"
+          options={HORIZONS}
+          value={days}
+          onChange={(value) => setSearchParams(value === 90 ? {} : { days: String(value) }, { replace: true })}
+        />
+      </PageHeader>
 
-      <div className="flex flex-col gap-1.5">
-        <Label>Account</Label>
-        <Select value={accountId != null ? String(accountId) : ""} onValueChange={(v) => setAccountId(Number(v))}>
-          <SelectTrigger className="w-56" aria-label="Account">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {accounts.map((a) => (
-              <SelectItem key={a.id} value={String(a.id)}>
-                {a.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+      <div className="grid gap-4 lg:grid-cols-3 lg:items-start">
+        <Panel loading={loading} error={error} className="lg:col-span-2">
+          {forecast && expected && (
+            <ForecastSummary forecast={forecast} hasExpected={expected.length > 0} onAddIncome={addIncome} />
+          )}
+        </Panel>
+        <ExpectedPanel
+          items={expected}
+          loading={loading}
+          onAdd={() => setSheet({ direction: "out" })}
+          onAddIncome={addIncome}
+          onOpen={openExpected}
+          className="lg:col-start-3 lg:row-start-1"
+        />
+        {forecast && <ComingUp forecast={forecast} onOpenExpected={openExpected} className="lg:col-span-2" />}
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Recurring transactions</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <RecurringForm categories={categories} onSubmit={handleCreate} submitLabel="Add recurring transaction" />
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Payee</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-                <TableHead>Frequency</TableHead>
-                <TableHead>Start</TableHead>
-                <TableHead>End</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {recurring.map((r) =>
-                editingId === r.id ? (
-                  <TableRow key={r.id}>
-                    <TableCell colSpan={7}>
-                      <RecurringForm
-                        initialValues={r}
-                        categories={categories}
-                        submitLabel="Save"
-                        onSubmit={(values) => handleSave(r.id, values)}
-                        onCancel={() => setEditingId(null)}
-                      />
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  <TableRow key={r.id}>
-                    <TableCell>{r.payee}</TableCell>
-                    <TableCell className="text-right">
-                      <Amount cents={r.amount_cents} signed />
-                    </TableCell>
-                    <TableCell>{FREQUENCIES.find((f) => f.value === r.frequency)?.label}</TableCell>
-                    <TableCell className="whitespace-nowrap">{formatShortDate(r.start_date)}</TableCell>
-                    <TableCell>{r.end_date ?? "—"}</TableCell>
-                    <TableCell>{categoryName(r.category)}</TableCell>
-                    <TableCell className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={pendingIds.has(r.id)}
-                        onClick={() => setEditingId(r.id)}
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        disabled={pendingIds.has(r.id)}
-                        onClick={() => handleDelete(r.id)}
-                      >
-                        Delete
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ),
-              )}
-              {recurring.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-ink-secondary">
-                    No recurring transactions yet.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-[15px] font-semibold text-ink-primary">Projected balance</h2>
-          <div className="flex gap-2">
-            {HORIZON_PRESETS.map((preset) => (
-              <Button
-                key={preset.value}
-                type="button"
-                variant={horizonDays === preset.value ? "default" : "outline"}
-                size="sm"
-                onClick={() => setHorizonDays(preset.value)}
-              >
-                {preset.label}
-              </Button>
-            ))}
-          </div>
-        </div>
-
-        {forecast && (
-          <>
-            <ForecastChart points={forecast.points} />
-            <h3 className="text-sm font-semibold text-ink-primary">Upcoming scheduled items</h3>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Payee</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {forecast.occurrences.map((o, i) => (
-                  <TableRow key={`${o.recurring_transaction_id}-${o.date}-${i}`}>
-                    <TableCell className="whitespace-nowrap">{formatShortDate(o.date)}</TableCell>
-                    <TableCell>{o.payee}</TableCell>
-                    <TableCell className="text-right">
-                      <Amount cents={o.amount_cents} signed />
-                    </TableCell>
-                  </TableRow>
-                ))}
-                {forecast.occurrences.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={3} className="text-ink-secondary">
-                      Nothing scheduled in this window.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </>
-        )}
-      </div>
+      <ExpectedSheet
+        key={sheet ? (sheet.item?.id ?? `new-${sheet.direction}`) : "closed"}
+        sheet={sheet}
+        options={options}
+        wide={isWide}
+        onClose={() => setSheet(null)}
+        onSaved={() => {
+          setSheet(null);
+          load();
+        }}
+      />
     </section>
   );
 }
 
-function RecurringForm({ initialValues, categories, onSubmit, onCancel, submitLabel }) {
-  const [payee, setPayee] = useState(initialValues?.payee ?? "");
-  const [amount, setAmount] = useState(
-    initialValues ? (initialValues.amount_cents / 100).toString() : "",
+function ForecastSummary({ forecast, hasExpected, onAddIncome }) {
+  const { points, lowest, items, missed, has_income: hasIncome, horizon_days: horizonDays } = forecast;
+  const today = points[0];
+  const end = points[points.length - 1];
+  const nothing = items.length === 0;
+  const stale = staleImports(forecast.accounts ?? [])?.text;
+  const lowCritical = hasIncome && lowest && lowest.balance_cents < 0;
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-3 gap-3">
+        <Stat label="Today" size="sm" value={whole(today.balance_cents)} detail={longDay(today.date)} />
+        {nothing ? (
+          <span />
+        ) : (
+          <Stat
+            label="Lowest"
+            size="sm"
+            value={whole(lowest.balance_cents)}
+            detail={formatDayMonth(lowest.date)}
+            tone={lowCritical ? "critical" : "default"}
+          />
+        )}
+        <Stat label={`In ${horizonDays} days`} size="sm" value={whole(end.balance_cents)} detail={formatDayMonth(end.date)} />
+      </div>
+      <div className="flex flex-col gap-1 text-xs text-ink-muted">
+        <span>Bills, loans, budgets and expected items. Spending without a budget isn&apos;t included.</span>
+        {stale && <span className="text-warning">{stale}</span>}
+      </div>
+      {!hasIncome && hasExpected && (
+        <div className="flex items-start gap-2 rounded-lg bg-surface-2 px-3 py-2.5 text-sm text-ink-secondary">
+          <Info className="mt-0.5 h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
+          <p>
+            Only money going out is counted. Add your salary to see the whole picture.{" "}
+            <button type="button" onClick={onAddIncome} className="text-accent hover:underline">
+              Add expected income
+            </button>
+          </p>
+        </div>
+      )}
+      {nothing && missed.length === 0 ? (
+        <EmptyState>Nothing expected in the next {horizonDays} days.</EmptyState>
+      ) : (
+        <ForecastChart points={points} items={items} lowest={lowest} critical={hasIncome} />
+      )}
+    </div>
   );
-  const [frequency, setFrequency] = useState(initialValues?.frequency ?? "monthly");
-  const [startDate, setStartDate] = useState(
-    initialValues?.start_date ?? new Date().toISOString().slice(0, 10),
+}
+
+const budgetMonth = (link) => link.month.slice(0, 7);
+
+function itemTarget(item) {
+  const { link, source } = item;
+  if (source === "installment") return `/transactions/${link.account}/schedule?installment=${link.installment}`;
+  if (source === "expected") return null;
+  return `/budgets?month=${budgetMonth(link)}&category=${link.category}`;
+}
+
+function itemCaption(item, missed) {
+  const { source, detail, late_since: lateSince } = item;
+  let caption;
+  if (source === "bill") caption = `Bill · ${detail.category}`;
+  else if (source === "installment") caption = `Loan · installment ${detail.number} of ${detail.of}`;
+  else if (source === "target") caption = `Yearly · due ${formatDayMonth(detail.due)}`;
+  else if (source === "budget") {
+    const kind = detail.kind === "yearly" ? "Yearly budget" : "Budget";
+    caption = `${kind} · ${whole(detail.total_cents)} left, spread to ${formatDayMonth(detail.until)}`;
+  } else caption = `Expected · ${detail.category ?? `→ ${detail.account}`}`;
+  if (missed) return "Missed · not counted";
+  if (lateSince) return `${caption} · due ${formatDayMonth(lateSince)}`;
+  return caption;
+}
+
+function ComingUp({ forecast, onOpenExpected, className }) {
+  const balances = new Map(forecast.points.map((p) => [p.date, p.balance_cents]));
+  const days = new Map();
+  const add = (date, entry) => days.set(date, [...(days.get(date) ?? []), entry]);
+  forecast.missed.forEach((item) => add(item.date, { item, missed: true }));
+  forecast.items.forEach((item) => add(item.date, { item, missed: false }));
+  if (days.size === 0) return null;
+  const critical = forecast.has_income;
+
+  return (
+    <Panel title="Coming up" flush className={className}>
+      <ul>
+        {[...days.keys()].sort().map((date) => {
+          const balance = balances.get(date);
+          return (
+            <li key={date}>
+              <div className="flex items-center justify-between bg-surface-2 px-5 py-1.5 text-xs">
+                <span className="font-medium tracking-wide text-ink-muted uppercase">{longDay(date)}</span>
+                {balance !== undefined && (
+                  <span className={cn("num", critical && balance < 0 ? "text-critical" : "text-ink-secondary")}>
+                    {whole(balance)}
+                  </span>
+                )}
+              </div>
+              <ul className="divide-y divide-border">
+                {days.get(date).map(({ item, missed }, i) => (
+                  <ItemRow key={`${item.source}-${item.name}-${i}`} item={item} missed={missed} onOpenExpected={onOpenExpected} />
+                ))}
+              </ul>
+            </li>
+          );
+        })}
+      </ul>
+    </Panel>
   );
-  const [endDate, setEndDate] = useState(initialValues?.end_date ?? "");
-  const [category, setCategory] = useState(initialValues?.category ?? null);
-  const [submitting, setSubmitting] = useState(false);
+}
+
+function ItemRow({ item, missed, onOpenExpected }) {
+  const target = itemTarget(item);
+  const rowClass = cn(
+    "flex min-h-11 w-full items-center gap-3 px-5 py-2 text-left hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:outline-none",
+    missed && "opacity-60",
+  );
+  const content = (
+    <>
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="flex items-center gap-2 text-sm text-ink-primary">
+          <span className="truncate">{item.name}</span>
+          {item.late_since && !missed && <StatusBadge tone="warning">Not seen</StatusBadge>}
+        </span>
+        <span className="truncate text-xs text-ink-muted">{itemCaption(item, missed)}</span>
+      </span>
+      <Amount cents={item.amount_cents} signed className={cn("text-sm", missed && "line-through")} />
+    </>
+  );
+  return (
+    <li>
+      {target ? (
+        <Link to={target} className={rowClass}>
+          {content}
+        </Link>
+      ) : (
+        <button type="button" onClick={() => onOpenExpected(item.link.expected)} className={rowClass}>
+          {content}
+        </button>
+      )}
+    </li>
+  );
+}
+
+const STATUS = {
+  received: (i) => ({ text: `Received ${formatDayMonth(i.received_on)}`, tone: "text-positive" }),
+  next: (i) => ({ text: `Next ${formatDayMonth(i.next_on)}`, tone: "text-ink-muted" }),
+  late: () => ({ text: "Not seen yet · expected tomorrow", tone: "text-warning" }),
+  unrecognisable: () => ({ text: "Choose how to recognise it", tone: "text-warning" }),
+  budgeted: () => ({ text: "Already in a budget, not counted", tone: "text-ink-muted" }),
+};
+
+function ExpectedPanel({ items, loading, onAdd, onAddIncome, onOpen, className }) {
+  const empty = items && items.length === 0;
+  return (
+    <Panel
+      title="Expected"
+      flush
+      loading={loading}
+      className={className}
+      actions={
+        !empty && (
+          <Button variant="outline" size="sm" onClick={onAdd}>
+            Add item
+          </Button>
+        )
+      }
+    >
+      {empty ? (
+        <EmptyState
+          className="px-5"
+          action={
+            <Button size="sm" onClick={onAddIncome}>
+              Add expected income
+            </Button>
+          }
+        >
+          Income such as your salary goes here, so the forecast knows what comes in.
+        </EmptyState>
+      ) : (
+        <ul className="divide-y divide-border">
+          {(items ?? []).map((item) => {
+            const status = STATUS[item.status](item);
+            const signed = item.direction === "in" ? item.amount_cents : -item.amount_cents;
+            return (
+              <li key={item.id}>
+                <button
+                  type="button"
+                  onClick={() => onOpen(item.id)}
+                  className="flex min-h-11 w-full items-center gap-3 px-5 py-2 text-left hover:bg-surface-2 focus-visible:bg-surface-2 focus-visible:outline-none"
+                >
+                  <span className="num w-6 shrink-0 text-sm text-ink-muted">{item.day}</span>
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate text-sm text-ink-primary">{item.name}</span>
+                    <span className={cn("truncate text-xs", status.tone)}>{status.text}</span>
+                  </span>
+                  <span className="num shrink-0 text-sm">{formatMoneyWhole(signed, { signed: true })}</span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Panel>
+  );
+}
+
+const DIRECTIONS = [
+  { value: "in", label: "In" },
+  { value: "out", label: "Out" },
+];
+
+const HINTS = {
+  in: "Counts as received when money comes in here this month.",
+  out: "Counts as paid when money goes out here this month.",
+};
+
+function ExpectedSheet({ sheet, options, wide, onClose, onSaved }) {
+  const item = sheet?.item;
+  const [direction, setDirection] = useState(item?.direction ?? sheet?.direction ?? "in");
+  const [name, setName] = useState(item?.name ?? "");
+  const [amount, setAmount] = useState(item ? (item.amount_cents / 100).toFixed(2) : "");
+  const [day, setDay] = useState(item ? String(item.day) : "");
+  const [category, setCategory] = useState(item?.category ?? null);
+  const [account, setAccount] = useState(item?.account ?? null);
+  const [busy, setBusy] = useState(false);
   const toast = useToast();
 
-  async function handleSubmit(event) {
+  const accountName = options.accounts.find((a) => a.id === account)?.name;
+
+  async function save(event) {
     event.preventDefault();
-    setSubmitting(true);
+    const cents = parseCents(amount);
+    setBusy(true);
     try {
-      await onSubmit({
-        payee,
-        amount_cents: Math.round(parseFloat(amount || "0") * 100),
-        frequency,
-        start_date: startDate,
-        end_date: endDate || null,
-        category,
-      });
-      if (!initialValues) {
-        setPayee("");
-        setAmount("");
-        setEndDate("");
-      }
+      const body = { name, direction, amount_cents: cents ?? 0, day: Number(day), category, account };
+      if (item) await updateExpectedItem(item.id, body);
+      else await createExpectedItem(body);
+      toast.success(item ? `${name} updated.` : `${name} added.`);
+      onSaved();
     } catch (e) {
-      toast.error(e.data ? Object.values(e.data).flat().join(" ") : e.message);
+      toast.error(errorText(e));
     } finally {
-      setSubmitting(false);
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    setBusy(true);
+    try {
+      await deleteExpectedItem(item.id);
+      toast.success(`${item.name} deleted.`);
+      onSaved();
+    } catch (e) {
+      toast.error(errorText(e));
+      setBusy(false);
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className={cn("flex flex-wrap items-end gap-4")}>
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="rt-payee">Payee</Label>
-        <Input id="rt-payee" value={payee} onChange={(e) => setPayee(e.target.value)} required />
-      </div>
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="rt-amount">Amount</Label>
-        <Input
-          id="rt-amount"
-          type="number"
-          step="0.01"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          className="w-28"
-          required
-        />
-      </div>
-      <div className="flex flex-col gap-1.5">
-        <Label>Frequency</Label>
-        <Select value={frequency} onValueChange={setFrequency}>
-          <SelectTrigger className="w-32" aria-label="Frequency">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {FREQUENCIES.map((f) => (
-              <SelectItem key={f.value} value={f.value}>
-                {f.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="rt-start">Start date</Label>
-        <Input
-          id="rt-start"
-          type="date"
-          value={startDate}
-          onChange={(e) => setStartDate(e.target.value)}
-          required
-        />
-      </div>
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="rt-end">End date (optional)</Label>
-        <Input id="rt-end" type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-      </div>
-      <div className="flex flex-col gap-1.5">
-        <Label>Category</Label>
-        <CategoryCombobox
-          categories={categories}
-          value={category}
-          onSelect={setCategory}
-          placeholder="Uncategorized"
-          aria-label="Category"
-          className="w-40"
-        />
-      </div>
-      <Button type="submit" disabled={submitting}>
-        {submitLabel}
-      </Button>
-      {onCancel && (
-        <Button type="button" variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
-      )}
-    </form>
+    <Sheet open={Boolean(sheet)} onClose={onClose} wide={wide}>
+      <form onSubmit={save} className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        <div className="border-b border-border px-5 py-4 pr-10">
+          <DialogTitle className="text-base">{item ? item.name : "Expected item"}</DialogTitle>
+          <p className="mt-1 text-xs text-ink-muted">Money you expect every month that no bill, loan or budget covers.</p>
+        </div>
+        <div className="flex flex-col gap-4 px-5 py-4">
+          <SegmentedControl label="In or out" options={DIRECTIONS} value={direction} onChange={setDirection} className="self-start" />
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="expected-name">Name</Label>
+            <Input id="expected-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Salary" required />
+          </div>
+          <div className="flex gap-3">
+            <div className="flex flex-1 flex-col gap-1.5">
+              <Label htmlFor="expected-amount">About</Label>
+              <Input
+                id="expected-amount"
+                inputMode="decimal"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="4500.00"
+                required
+              />
+            </div>
+            <div className="flex w-24 flex-col gap-1.5">
+              <Label htmlFor="expected-day">Day</Label>
+              <Input
+                id="expected-day"
+                type="number"
+                min={1}
+                max={31}
+                value={day}
+                onChange={(e) => setDay(e.target.value)}
+                required
+              />
+            </div>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label>Recognise by</Label>
+            <CategoryCombobox
+              categories={options.categories.map((c) => ({ ...c, is_tab: false }))}
+              value={category}
+              onSelect={(id) => {
+                setCategory(id);
+                setAccount(null);
+              }}
+              transferAccounts={options.accounts}
+              transferAccountId={account}
+              transferAccountName={accountName}
+              direction={direction}
+              onSelectTransfer={(id) => {
+                setAccount(id);
+                setCategory(null);
+              }}
+              clearLabel="Choose a category or account"
+              placeholder="Choose a category or account"
+              aria-label="Recognise by"
+            />
+            <p className="text-xs text-ink-muted">{HINTS[direction]}</p>
+          </div>
+        </div>
+        <div className="mt-auto flex items-center gap-2 border-t border-border px-5 py-3">
+          {item && (
+            <Button type="button" variant="ghost" onClick={remove} disabled={busy} className="mr-auto text-critical">
+              Delete
+            </Button>
+          )}
+          <Button type="button" variant="outline" onClick={onClose} disabled={busy} className={cn(!item && "ml-auto")}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={busy}>
+            Save
+          </Button>
+        </div>
+      </form>
+    </Sheet>
   );
 }

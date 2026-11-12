@@ -124,3 +124,13 @@ describe("Stat, PageHeader, ListRow and EmptyState", () => {
     expect(screen.getByText("Everything is in order.")).toBeInTheDocument();
   });
 });
+
+describe("Stat sizes", () => {
+  it("has a small size with a date beneath the figure", () => {
+    render(<Stat label="Lowest" value="€312" detail="27 Nov" size="sm" tone="critical" />);
+    const value = screen.getByText("€312");
+    expect(value).toHaveClass("text-lg", "text-critical");
+    expect(value).not.toHaveClass("text-2xl");
+    expect(screen.getByText("27 Nov")).toHaveClass("text-ink-muted");
+  });
+});

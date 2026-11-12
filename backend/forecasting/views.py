@@ -1,43 +1,70 @@
-from datetime import date
-
 from rest_framework import viewsets
+from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from accounts.models import Account
+from accounts.models import Account, tier_position
+from budgets import utils as budget_utils
+from reports.views import import_freshness
 
-from .models import RecurringTransaction
-from .serializers import RecurringTransactionSerializer
-from .utils import generate_forecast
+from .expected import allowed_accounts, allowed_categories, blocked_category_ids, pot_tier
+from .forecast import HORIZONS, everyday_forecast
+from .models import ExpectedItem
+from .serializers import ExpectedItemSerializer
 
 
-class RecurringTransactionViewSet(viewsets.ModelViewSet):
-    serializer_class = RecurringTransactionSerializer
+class ExpectedItemViewSet(viewsets.ModelViewSet):
+    """Expected items, each with where it stands this month - see
+    openspec/specs/forecasting."""
+
+    serializer_class = ExpectedItemSerializer
 
     def get_queryset(self):
-        queryset = RecurringTransaction.objects.select_related("account", "category").all()
-        account_id = self.request.query_params.get("account")
-        if account_id:
-            queryset = queryset.filter(account_id=account_id)
-        return queryset
+        return ExpectedItem.objects.select_related("category", "account")
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        if self.request.method == "GET":
+            context.update(blocked=blocked_category_ids(), tier=pot_tier())
+        return context
+
+    @action(detail=False, methods=["get"])
+    def options(self, request):
+        """What an item may be recognised by: categories without a budget,
+        then accounts outside the pot."""
+        return Response(
+            {
+                "categories": [
+                    {"id": c.id, "name": c.name, "parent": c.parent_id, "parent_name": c.parent.name if c.parent else None}
+                    for c in allowed_categories()
+                ],
+                "accounts": [{"id": a.id, "name": a.name, "tier": a.tier} for a in allowed_accounts()],
+            }
+        )
 
 
 class ForecastView(APIView):
-    def get(self, request):
-        account_id = request.query_params.get("account")
-        if not account_id:
-            return Response({"detail": "account query param is required."}, status=400)
-        try:
-            account = Account.objects.visible().get(pk=account_id)
-        except (Account.DoesNotExist, ValueError):
-            return Response({"detail": "Account not found."}, status=404)
+    """The Everyday forecast over 30 or 90 days - see
+    openspec/specs/forecasting."""
 
+    def get(self, request):
         try:
             horizon_days = int(request.query_params.get("horizon_days", 90))
         except ValueError:
-            return Response({"detail": "horizon_days must be an integer."}, status=400)
-        if horizon_days <= 0:
-            return Response({"detail": "horizon_days must be positive."}, status=400)
-
-        forecast = generate_forecast(account, horizon_days, today=date.today())
+            horizon_days = None
+        if horizon_days not in HORIZONS:
+            return Response({"detail": "horizon_days must be 30 or 90."}, status=400)
+        forecast = everyday_forecast(budget_utils.today(), horizon_days)
+        # The pot's accounts with when they were last imported, for the
+        # stale-import line - see the forecasting spec.
+        accounts = [
+            a
+            for a in Account.objects.visible().filter(archived=False).order_by(tier_position(), "name", "id")
+            if a.tier == forecast["tier"]
+        ]
+        freshness = import_freshness(accounts)
+        forecast["accounts"] = [
+            {"id": a.id, "name": a.name, "account_type": a.account_type, "tier": a.tier, **freshness[a.id]}
+            for a in accounts
+        ]
         return Response(forecast)

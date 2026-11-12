@@ -205,8 +205,11 @@ class OffBankIsNotAnAccountTests(CoveredTestCase):
 
         self.assertEqual(response.status_code, 400)
 
-    def test_not_a_forecast_or_import_account(self):
-        self.assertEqual(self.api.get("/api/forecast/", {"account": self.off_bank.pk}).status_code, 404)
+    def test_not_an_expected_item_or_import_account(self):
+        options = self.api.get("/api/expected-items/options/").json()
+        self.assertNotIn(self.off_bank.pk, [a["id"] for a in options["accounts"]])
+        item = {"name": "x", "direction": "out", "amount_cents": 1, "day": 1, "account": self.off_bank.pk}
+        self.assertEqual(self.api.post("/api/expected-items/", item, format="json").status_code, 400)
         upload = SimpleUploadedFile("a.csv", b"date,amount\n2026-01-01,1\n")
         response = self.api.post("/api/import-sessions/", {"account": self.off_bank.pk, "file": upload}, format="multipart")
         self.assertEqual(response.status_code, 400)

@@ -56,14 +56,16 @@ A malformed month SHALL be rejected.
   "Balance"
 
 ### Requirement: Everyday money projection
-For the current month, the system SHALL project the active Everyday
-accounts' total for the 30 days after today, using the forecast of each
-account, and report the projection's lowest balance and its date. For any
-other month there SHALL be no projection.
+For the current month, the system SHALL project the Everyday money for the
+30 days after today, using the Everyday forecast (see the `forecasting`
+capability), and report the projection's lowest balance and its date. For
+any other month there SHALL be no projection.
 
 #### Scenario: Two accounts add up
-- **WHEN** "Revolut" and "Crelan" both have recurring transactions
-- **THEN** each projected day is the sum of both accounts' forecasts
+- **WHEN** "Revolut" and "Crelan" are both Everyday accounts and bills are
+  due in the next 30 days
+- **THEN** each projected day is the Everyday forecast of both accounts
+  together, the same as on the Forecast page over 30 days
 
 #### Scenario: Past month has no projection
 - **WHEN** the chosen month is before the current one
@@ -96,7 +98,7 @@ a Y axis that spans it. A tooltip over it SHALL say "Projected". A past
 month SHALL show neither and SHALL be captioned "To 30 Sep".
 
 #### Scenario: Current month
-- **WHEN** the current month is shown and a recurring bill is due in 5 days
+- **WHEN** the current month is shown and a bill is due in 5 days
 - **THEN** the dashed line steps down in 5 days
 
 #### Scenario: Past month
@@ -106,9 +108,9 @@ month SHALL show neither and SHALL be captioned "To 30 Sep".
 
 ### Requirement: Lowest projected point
 The chart SHALL label the projection's lowest point ("Low €312 · 27 Nov")
-only when it falls after today and below today's balance. A projection
-that goes below zero SHALL show that part and the label in the critical
-colour.
+only when it falls after today and below today's balance. When income is
+expected (see the `forecasting` capability), a projection that goes below
+zero SHALL show that part and the label in the critical colour.
 
 #### Scenario: A low ahead
 - **WHEN** the balance is 1,840.00 and falls to 312.00 on 27 November
@@ -119,18 +121,8 @@ colour.
 - **THEN** no low is labelled
 
 #### Scenario: Running short
-- **WHEN** the projection reaches -150.00
+- **WHEN** income is expected and the projection reaches -150.00
 - **THEN** the part below zero and its label use the critical colour
-
-### Requirement: Projection without recurring transactions
-When nothing is scheduled in the 30 days after today, the line SHALL stop
-at today and the chart SHALL link to Forecast.
-
-#### Scenario: Nothing scheduled
-- **WHEN** no Everyday account has a recurring transaction or a loan
-  installment in the next 30 days
-- **THEN** there is no dashed line, and a "Set up recurring transactions"
-  link opens Forecast
 
 ### Requirement: Projection warns about stale imports
 When a projection is shown and an active Everyday account was last
@@ -225,3 +217,26 @@ drawing a history line.
 #### Scenario: No earlier month end
 - **WHEN** the net worth series has only the current month
 - **THEN** the chart says it appears after the first month end
+
+### Requirement: Projection with nothing expected
+When nothing is forecast in the 30 days after today, the line SHALL stop
+at today and the chart SHALL offer "Add expected income", opening Forecast
+over 30 days.
+
+#### Scenario: Nothing expected
+- **WHEN** there are no bills, budgets, loan installments from an Everyday
+  account or expected items in the next 30 days
+- **THEN** there is no dashed line, and an "Add expected income" link
+  opens /forecast?days=30
+
+### Requirement: Projection without expected income
+When the projection is shown and no income is expected, the chart SHALL
+say "No income expected" as a muted link to Forecast over 30 days, not in
+the warning colour. The part below zero and the low label SHALL NOT use
+the critical colour.
+
+#### Scenario: Bills but no salary
+- **WHEN** bills are due in the next 30 days, no income is expected, and
+  the projection falls below zero
+- **THEN** the chart says "No income expected", linking to
+  /forecast?days=30, and shows the low point without the critical colour
