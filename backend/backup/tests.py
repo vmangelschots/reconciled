@@ -19,7 +19,7 @@ from decimal import Decimal
 from accounts.models import Account, Loan, LoanCorrection
 from banksync.models import BankCredentials
 from budgets.models import Bill, BudgetSettings, Category, CategoryLimit, YearlyBudget
-from forecasting.models import RecurringTransaction
+from forecasting.models import ExpectedItem
 from households.context import household_context
 from households.models import Household
 from households.testing import TestCase
@@ -101,10 +101,8 @@ class BackupTestCase(TestCase):
         settings = BudgetSettings.load()
         settings.start_month = date(2026, 1, 1)
         settings.save()
-        RecurringTransaction.objects.create(
-            account=self.crelan, amount_cents=-80000, payee="Rent", category=self.household,
-            frequency="monthly", start_date=date(2026, 1, 1),
-        )
+        self.salary = Category.objects.create(name="Salary")
+        ExpectedItem.objects.create(name="Salary", direction="in", amount_cents=450000, day=25, category=self.salary)
 
         transfer = self.txn(self.crelan, -5000, "To Revolut")
         link_transfer(transfer, self.revolut)
@@ -147,7 +145,7 @@ class BuildBackupTests(BackupTestCase):
     def test_the_envelope(self):
         backup = build_backup()
         self.assertEqual(backup["app"], "reconciled")
-        self.assertEqual(backup["format_version"], 2)
+        self.assertEqual(backup["format_version"], 3)
         self.assertEqual(backup["migrations"]["imports"], "0004_backfill_imported_accounts")
         self.assertEqual(set(backup["migrations"]), set(DATA_APPS))
         # A transfer (2 sides), the split (its parts are inside it), the AI
@@ -202,7 +200,7 @@ class ReadBackupTests(BackupTestCase):
         self.assertRefused(content[: len(content) // 2], UNREADABLE)
 
     def test_a_newer_format_version_is_refused(self):
-        self.assertRefused(self.envelope(format_version=3), NEWER)
+        self.assertRefused(self.envelope(format_version=4), NEWER)
 
     def test_a_backup_from_a_newer_app_is_refused(self):
         migrations = {**json.loads(self.file_content())["migrations"], "accounts": "0099_from_the_future"}
@@ -330,6 +328,45 @@ class RestoreBackupTests(BackupTestCase):
         self.assertFalse(Bill.objects.exists())
         self.assertTrue(Category.objects.filter(name="Groceries").exists())
 
+    def test_expected_items_survive(self):
+        content = self.file_content()
+        ExpectedItem.objects.all().delete()
+        restore_backup(read_backup(content))
+        item = ExpectedItem.objects.get()
+        self.assertEqual(
+            (item.name, item.direction, item.amount_cents, item.day, item.category.name),
+            ("Salary", "in", 450000, 25, "Salary"),
+        )
+
+    def test_a_backup_with_recurring_transactions(self):
+        envelope = json.loads(self.file_content())
+        envelope["format_version"] = 2
+        envelope["migrations"]["forecasting"] = "0001_initial"
+        salary = next(r["pk"] for r in envelope["data"] if r["model"] == "budgets.category" and r["fields"]["name"] == "Salary")
+        crelan = next(r["pk"] for r in envelope["data"] if r["model"] == "accounts.account" and r["fields"]["name"] == "Crelan")
+        envelope["data"] = [r for r in envelope["data"] if r["model"] != "forecasting.expecteditem"]
+
+        def recurring(pk, **fields):
+            base = {"account": crelan, "amount_cents": 450000, "payee": "Salary", "category": salary,
+                    "frequency": "monthly", "start_date": "2026-03-25", "end_date": None,
+                    "created_at": "2026-03-01T09:00:00+00:00", "updated_at": "2026-03-01T09:00:00+00:00"}
+            return {"model": "forecasting.recurringtransaction", "pk": pk, "fields": {**base, **fields}}
+
+        envelope["data"] += [
+            recurring(1),
+            recurring(2, payee="Weekly", frequency="weekly"),
+            recurring(3, payee="Uncategorized", category=None),
+            recurring(4, payee="Rent", amount_cents=-80000, category=next(
+                r["pk"] for r in envelope["data"] if r["model"] == "budgets.category" and r["fields"]["name"] == "Groceries"
+            )),
+        ]
+        restore_backup(read_backup(json.dumps(envelope)))
+        item = ExpectedItem.objects.get()
+        self.assertEqual(
+            (item.name, item.direction, item.amount_cents, item.day, item.category.name, item.account),
+            ("Salary", "in", 450000, 25, "Salary", None),
+        )
+
     def test_a_covered_entry_survives(self):
         takeout = Category.objects.create(name="Takeout")
         covered.create(self.tab, covered.CoveredInput(date(2026, 11, 11), "Sushi Palace", 1500, takeout))
@@ -418,7 +455,7 @@ class BackupApiTests(BackupTestCase):
 
     def test_restore_from_a_newer_version(self):
         envelope = json.loads(self.client.get(reverse("backup")).content)
-        envelope["format_version"] = 3
+        envelope["format_version"] = 4
         response = self.upload(json.dumps(envelope).encode())
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["detail"], NEWER)

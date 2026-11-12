@@ -27,7 +27,7 @@ from accounts.models import Account, Loan, LoanCorrection
 from backup.format import DATA_APPS
 from banksync.models import BankAccountLink, BankConnection, BankCredentials, SeenBankLine
 from budgets.models import BudgetSettings, Category, CategoryLimit, YearlyBudget
-from forecasting.models import RecurringTransaction
+from forecasting.models import ExpectedItem
 from imports.models import AccountImportSettings, ImportSession
 from transactions.models import Transaction
 
@@ -145,9 +145,7 @@ class Case(TestCase):
             account=account,
             start_date=date(2026, 1, 1),
         )
-        recurring = RecurringTransaction.objects.create(
-            account=account, amount_cents=-1, payee=label, frequency="monthly", start_date=date(2026, 1, 1)
-        )
+        expected = ExpectedItem.objects.create(name=label, direction="out", amount_cents=1, day=1, account=account)
         session = ImportSession.objects.create(account=account, file_format="csv", raw_content=label)
         CategoryLimit.objects.create(category=category, limit_cents=1)
         YearlyBudget.objects.create(category=category, from_year=2026, amount_cents=1)
@@ -164,7 +162,7 @@ class Case(TestCase):
             "txn": txn,
             "connection": connection,
             "link": link,
-            "recurring": recurring,
+            "expected": expected,
             "session": session,
         }
 
@@ -254,7 +252,7 @@ class ForeignIdTests(Case):
             ("api/^transactions/", theirs["txn"]),
             ("api/^tabs/", theirs["category"]),
             ("api/^import-sessions/", theirs["session"]),
-            ("api/^recurring-transactions/", theirs["recurring"]),
+            ("api/^expected-items/", theirs["expected"]),
             ("api/bank-sync/connections/", theirs["connection"]),
             ("api/bank-sync/links/", theirs["link"]),
         ]
@@ -290,7 +288,7 @@ class ForeignBodyTests(Case):
         mine, theirs = self.mine, self.theirs
         my_txn = mine["txn"].pk
         txn = {"date": "2026-01-01", "amount_cents": -1, "payee": "x"}
-        recurring = {"amount_cents": -1, "payee": "x", "frequency": "monthly", "start_date": "2026-01-01"}
+        expected = {"name": "x", "direction": "out", "amount_cents": 1, "day": 1}
         return [
             ("post", "api/^transactions/$", "/api/transactions/", {**txn, "account": theirs["account"].pk}),
             (
@@ -329,15 +327,15 @@ class ForeignBodyTests(Case):
             ("patch", None, f"/api/categories/{mine['parent'].pk}/", {"parent": theirs["parent"].pk}),
             (
                 "post",
-                "api/^recurring-transactions/$",
-                "/api/recurring-transactions/",
-                {**recurring, "account": theirs["account"].pk},
+                "api/^expected-items/$",
+                "/api/expected-items/",
+                {**expected, "account": theirs["account"].pk},
             ),
             (
                 "post",
-                "api/^recurring-transactions/$",
-                "/api/recurring-transactions/",
-                {**recurring, "account": mine["account"].pk, "category": theirs["category"].pk},
+                "api/^expected-items/$",
+                "/api/expected-items/",
+                {**expected, "category": theirs["category"].pk},
             ),
             (
                 "post",

@@ -16,7 +16,8 @@ An older one loads into the current models: fields added since take their
 default and fields removed since are ignored. A migration that reshapes
 existing data (more than adding a field with a default) must bump
 FORMAT_VERSION and add a converter here from the previous version. Version 1 is
-from before households; its rows already are one household's.
+from before households; its rows already are one household's. Version 3
+replaced recurring transactions with expected items (_expected_from_recurring).
 """
 
 import json
@@ -34,8 +35,8 @@ from django.utils import timezone
 from banksync.sync import household_lock
 from households.context import current_household
 
-FORMAT_VERSION = 2
-READABLE_VERSIONS = {1, 2}
+FORMAT_VERSION = 3
+READABLE_VERSIONS = {1, 2, 3}
 APP_MARKER = "reconciled"
 
 # Every model in the data apps is either backed up or excluded on purpose;
@@ -50,7 +51,7 @@ BACKED_UP_MODELS = [
     "budgets.Bill",
     "budgets.BudgetSettings",
     "transactions.Transaction",
-    "forecasting.RecurringTransaction",
+    "forecasting.ExpectedItem",
     "imports.ImportSession",
     "imports.AccountImportSettings",
     "banksync.BankAccountLink",
@@ -171,6 +172,8 @@ def read_backup(content):
     if any((app_label, name) not in known for app_label, name in migrations.items()):
         raise BackupError(NEWER)
 
+    if envelope["format_version"] < 3:
+        data = _expected_from_recurring(data)
     labels = {model._meta.label_lower for model in backed_up_models()}
     if any(not isinstance(row, dict) or row.get("model") not in labels for row in data):
         raise BackupError(UNREADABLE)
@@ -179,6 +182,66 @@ def read_backup(content):
     except (DeserializationError, ValueError, TypeError, LookupError):
         raise BackupError(UNREADABLE) from None
     return data
+
+
+RECURRING = "forecasting.recurringtransaction"
+BUDGET_KINDS = {"yearly", "target", "bills"}
+
+
+def _expected_from_recurring(data):
+    """Version 2 -> 3: monthly recurring transactions that haven't ended and
+    have a category an expected item may use become expected items; the
+    others are dropped. The same rule as the migration
+    forecasting/0003_recurring_to_expected, read from the file's own rows."""
+    if not all(isinstance(row, dict) and isinstance(row.get("fields"), dict) for row in data):
+        raise BackupError(UNREADABLE)
+    fields_of = lambda model: [row["fields"] | {"pk": row.get("pk")} for row in data if row.get("model") == model]  # noqa: E731
+    limited = {f.get("category") for f in fields_of("budgets.categorylimit")}
+    loans = {f.get("payment_category") for f in fields_of("accounts.loan")} - {None}
+    categories = fields_of("budgets.category")
+    covering = {
+        c["pk"] for c in categories
+        if c.get("budget_kind") in BUDGET_KINDS or c["pk"] in limited or c["pk"] in loans or c.get("is_tab_group")
+    }
+    blocked = covering | {c["pk"] for c in categories if c.get("parent") in covering}
+    today = timezone.localdate().isoformat()
+
+    converted = []
+    for row in data:
+        if row.get("model") != RECURRING:
+            converted.append(row)
+            continue
+        f = row["fields"]
+        try:
+            amount = int(f.get("amount_cents") or 0)
+            day = int(str(f.get("start_date"))[8:10])
+        except ValueError:
+            raise BackupError(UNREADABLE) from None
+        usable = (
+            f.get("frequency") == "monthly"
+            and (not f.get("end_date") or str(f["end_date"]) >= today)
+            and amount != 0
+            and f.get("category") is not None
+            and f["category"] not in blocked
+        )
+        if usable:
+            converted.append(
+                {
+                    "model": "forecasting.expecteditem",
+                    "pk": row.get("pk"),
+                    "fields": {
+                        "name": f.get("payee") or "",
+                        "direction": "in" if amount > 0 else "out",
+                        "amount_cents": abs(amount),
+                        "day": day,
+                        "category": f["category"],
+                        "account": None,
+                        "created_at": f.get("created_at"),
+                        "updated_at": f.get("updated_at"),
+                    },
+                }
+            )
+    return converted
 
 
 def clear_household(household, *, keep_credentials=True):
@@ -200,7 +263,7 @@ def clear_household(household, *, keep_credentials=True):
         get("accounts.Loan"),
         ImportSession,
         get("imports.AccountImportSettings"),
-        get("forecasting.RecurringTransaction"),
+        get("forecasting.ExpectedItem"),
         get("budgets.CategoryLimit"),
         get("budgets.YearlyBudget"),
         get("budgets.Bill"),
