@@ -65,7 +65,7 @@ function SheetBody({ row, category, month, startMonth, categories, onSaved, onCl
         <p className={cn("num text-sm font-medium", row.critical ? "text-critical" : "text-ink-primary")}>{row.figure}</p>
         {row.caption && <p className="text-xs text-ink-muted">{row.caption}</p>}
         {row.bar && <ProgressBar label={`${row.name} spent`} {...row.bar} />}
-        {row.bills && <BillBar label={`${row.name} bills`} bills={row.bills} />}
+        {row.bills && <BillBar label={`${row.name} bills`} bills={row.bills} overCents={row.overCents} />}
       </div>
       {row.billLines?.length > 0 && <BillList bills={row.billLines} through={row.through} />}
       <div className="border-b border-border px-5 py-4">

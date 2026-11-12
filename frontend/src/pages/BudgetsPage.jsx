@@ -260,7 +260,7 @@ function BudgetRow({ row, highlight, onOpen }) {
         </span>
         <span className="order-3 col-span-2 sm:order-none sm:col-span-1">
           {row.bar && <ProgressBar label={`${row.name} spent`} {...row.bar} />}
-          {row.bills && <BillBar label={`${row.name} bills`} bills={row.bills} />}
+          {row.bills && <BillBar label={`${row.name} bills`} bills={row.bills} overCents={row.overCents} />}
         </span>
         <span
           className={cn(
