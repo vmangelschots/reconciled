@@ -28,13 +28,14 @@ from budgets.summary import (
 )
 from budgets.utils import month_range
 from budgets.yearly import budgeted_period, prorated_cents, target_counts, values_for_year, yearly_rows
-from reports.balances import tier_balance
+from reports.balances import net_worth_at, tier_balance
 from transactions.loans import DUE, MISSED, UPCOMING, installment_states
 
 from .expected import blocked_category_ids, month_status, pot_tier
 from .models import ExpectedItem
 
 HORIZONS = (30, 90)
+NET_WORTH_YEARS = (1, 3, 5)
 
 # Bill states still to be paid, and so forecast.
 OPEN_BILL_STATES = {"upcoming", "due_soon", "not_seen"}
@@ -130,28 +131,30 @@ def _bill_items(budgets, today, end):
     return items, missed
 
 
-def _installment_items(today, end, tier):
+def _installment_items(today, end, tier, interest=False):
+    """Installments of loans paid from `tier` (every active loan when None),
+    each taking its payment - or only its interest with `interest`, as net
+    worth sees it: the principal lowers the debt by as much as it leaves."""
     items, missed = [], []
     this_month = today.replace(day=1)
     loans = Loan.objects.filter(account__archived=False).select_related("account", "paid_from").prefetch_related(
         "corrections", "adjustments"
     )
     for loan in loans:
-        if loan.paid_from.tier != tier:
+        if tier is not None and loan.paid_from.tier != tier:
             continue
         for installment, state, _ in installment_states(loan, today):
             if installment.date > end:
                 break
+            cents = -(installment.interest_cents if interest else installment.payment_cents)
             link = {"account": loan.account_id, "installment": installment.number}
             detail = {"loan": loan.account.name, "number": installment.number, "of": loan.term_months}
             if state == MISSED and installment.date >= this_month:
-                missed.append(_item(installment.date, -installment.payment_cents, loan.account.name, "installment",
-                                    detail, link))
+                missed.append(_item(installment.date, cents, loan.account.name, "installment", detail, link))
             if state not in (DUE, UPCOMING) or installment.date < this_month:
                 continue
             day, late_since = _when(installment.date, today)
-            items.append(_item(day, -installment.payment_cents, loan.account.name, "installment", detail, link,
-                               late_since))
+            items.append(_item(day, cents, loan.account.name, "installment", detail, link, late_since))
     return items, missed
 
 
@@ -271,11 +274,16 @@ def _yearly_items(budgets, today, end):
     return items
 
 
-def _expected_items(today, end, tier):
+def _expected_items(today, end, tier, transfers=True):
+    """Expected items on their days. Without `transfers`, items recognised
+    by an account are left out: for net worth they move money between the
+    user's own accounts."""
     items = []
     blocked = blocked_category_ids()
     this_month = today.replace(day=1)
     for item in ExpectedItem.objects.select_related("category", "account"):
+        if not transfers and item.account_id is not None:
+            continue
         status = month_status(item, today, blocked=blocked, tier=tier)
         if status.next_on is None:
             continue
@@ -343,4 +351,60 @@ def everyday_forecast(today, horizon_days):
         "points": points,
         "lowest": lowest,
         "has_income": ExpectedItem.objects.filter(direction=ExpectedItem.Direction.IN).exists(),
+    }
+
+
+def _month_end(month):
+    return month_range(month) - timedelta(days=1)
+
+
+def net_worth_forecast(today, months):
+    """Net worth from today to the end of the month `months` months after
+    this one, as {start_cents, months: [{month, total_cents,
+    change_cents}], has_income, empty}: this month at today, then one row
+    per month end. Built from the Everyday forecast's items, counted the net
+    worth way: a loan installment is its interest, for every active loan,
+    and an item recognised by an account is a transfer between the user's
+    own accounts. Investments and property keep today's value. See
+    openspec/specs/forecasting."""
+    this_month = today.replace(day=1)
+    last_month = this_month
+    for _ in range(months):
+        last_month = month_range(last_month)
+    end = _month_end(last_month)
+    start = net_worth_at(today)
+    budgets = _Budgets(today)
+
+    bills, _ = _bill_items(budgets, today, end)
+    installments, _ = _installment_items(today, end, None, interest=True)
+    items = [
+        *bills,
+        *installments,
+        *_monthly_budget_items(budgets, today, end),
+        *_yearly_items(budgets, today, end),
+        *_expected_items(today, end, None, transfers=False),
+    ]
+    items = [i for i in items if today < i["date"] <= end]
+
+    # The current month reports today, as net worth history does, so the
+    # rest of this month counts towards the next month's change.
+    first_ahead = month_range(this_month)
+    by_month = {}
+    for item in items:
+        for day, cents in (item.get("per_day") or {item["date"]: item["amount_cents"]}).items():
+            key = max(day.replace(day=1), first_ahead)
+            by_month[key] = by_month.get(key, 0) + cents
+
+    rows = [{"month": this_month.strftime("%Y-%m"), "total_cents": start, "change_cents": 0}]
+    total, month = start, first_ahead
+    while month <= last_month:
+        change = by_month.get(month, 0)
+        total += change
+        rows.append({"month": month.strftime("%Y-%m"), "total_cents": total, "change_cents": change})
+        month = month_range(month)
+    return {
+        "start_cents": start,
+        "months": rows,
+        "has_income": ExpectedItem.objects.filter(direction=ExpectedItem.Direction.IN).exists(),
+        "empty": not items,
     }

@@ -23,3 +23,7 @@ export function updateExpectedItem(id, data) {
 export function deleteExpectedItem(id) {
   return apiFetch(`/api/expected-items/${id}/`, { method: "DELETE" });
 }
+
+export function getNetWorthForecast(years) {
+  return apiFetch(`/api/forecast/net-worth/?years=${years}`);
+}

@@ -43,7 +43,7 @@ function shortMonth(month) {
 
 // Januaries once the range spans years, otherwise evenly spaced months,
 // and never more than MAX_TICKS of either.
-function xTicks(rows) {
+export function xTicks(rows) {
   const months = rows.map((r) => r.month);
   const januaries = months.filter((m) => m.endsWith("-01"));
   const candidates = months.length > 24 && januaries.length > 1 ? januaries : months;
@@ -51,13 +51,22 @@ function xTicks(rows) {
   return candidates.filter((_, i) => (candidates.length - 1 - i) % step === 0);
 }
 
-function tickLabel(month, spansYears) {
+export function tickLabel(month, spansYears) {
   return spansYears ? month.slice(0, 4) : shortMonth(month);
 }
 
 export function NetWorthTooltip({ active, payload }) {
   if (!active || !payload?.length) return null;
   const row = payload[0].payload;
+  if (row.total_cents === undefined) {
+    // A projected month: the total and the change, without tiers.
+    return (
+      <ChartTooltip title={`${monthLabel(row.month)} · Projected`}>
+        <strong className="text-ink-primary">{whole(row.projected_cents)}</strong>
+        <span className="text-xs text-ink-muted">{formatMoneyWhole(row.change_cents, { signed: true })}</span>
+      </ChartTooltip>
+    );
+  }
   return (
     <ChartTooltip title={monthLabel(row.month)}>
       <strong className="text-ink-primary">{whole(row.total_cents)}</strong>
@@ -81,7 +90,9 @@ export function NetWorthTooltip({ active, payload }) {
 
 /**
  * Net worth at each month's end (Recharts). See specs/balance-history.
- * - months: [{ month, total_cents, tiers, change_cents }], oldest first.
+ * - months: [{ month, total_cents, tiers, change_cents }], oldest first,
+ *   then any projected months as { month, projected_cents, change_cents }.
+ *   The current month carries both totals, so the dashed line joins it.
  * - selectedMonth: the overview's month, marked on the line.
  * - sideColumn: the narrow column, where the tooltip opens leftward over
  *   the main column so it doesn't cover the line.
@@ -91,9 +102,10 @@ export function NetWorthChart({ months, selectedMonth, sideColumn = false, width
   const height = sideColumn ? SIDE_HEIGHT : HEIGHT;
   const ticks = useMemo(() => xTicks(months), [months]);
   const spansYears = months.length > 24;
-  const last = months[months.length - 1];
-  const selected = months.find((m) => m.month === selectedMonth);
-  const values = months.map((m) => m.total_cents);
+  const history = months.filter((m) => m.total_cents !== undefined);
+  const last = history[history.length - 1];
+  const selected = history.find((m) => m.month === selectedMonth);
+  const values = months.map((m) => m.total_cents ?? m.projected_cents);
   const zeroInRange = Math.min(...values) <= 0 && Math.max(...values) >= 0;
 
   const chart = (
@@ -133,6 +145,17 @@ export function NetWorthChart({ months, selectedMonth, sideColumn = false, width
         activeDot={{ r: 4, className: "chart-hover-dot" }}
         isAnimationActive={false}
       />
+      <Line
+        dataKey="projected_cents"
+        type="linear"
+        stroke="var(--chart-series-1)"
+        strokeWidth={2}
+        strokeDasharray="5 5"
+        dot={false}
+        activeDot={{ r: 4, className: "chart-hover-dot" }}
+        isAnimationActive={false}
+        connectNulls={false}
+      />
       <ReferenceDot
         x={last.month}
         y={last.total_cents}
@@ -164,7 +187,7 @@ export function NetWorthChart({ months, selectedMonth, sideColumn = false, width
   return (
     <div
       role="img"
-      aria-label={`Net worth over ${months.length} months, ending at ${whole(last.total_cents)}`}
+      aria-label={`Net worth over ${history.length} months, ending at ${whole(last.total_cents)}`}
       className="rounded-lg bg-surface"
     >
       {width ? (
@@ -182,13 +205,28 @@ function withChanges(months) {
   return months.map((m, i) => ({ ...m, change_cents: i > 0 ? m.total_cents - months[i - 1].total_cents : null }));
 }
 
-/** The Net worth panel: its range buttons, the chart, and its empty state. */
-export function NetWorthPanel({ months, loading, error, selectedMonth, sideColumn, width }) {
+// The history, then the projection, joined at the current month.
+function withProjection(history, projection) {
+  if (!projection?.length || history.length === 0) return history;
+  const current = history[history.length - 1];
+  return [
+    ...history.slice(0, -1),
+    { ...current, projected_cents: current.total_cents },
+    ...projection.map((p) => ({ month: p.month, projected_cents: p.total_cents, change_cents: p.change_cents })),
+  ];
+}
+
+/**
+ * The Net worth panel: its range buttons, the chart, and its empty state.
+ * The range chooses how much history shows; the projection (the next 12
+ * months, from the net worth forecast) always follows it.
+ */
+export function NetWorthPanel({ months, projection, loading, error, selectedMonth, sideColumn, width }) {
   const [range, setRange] = useState("all");
   const rows = useMemo(() => withChanges(months ?? []), [months]);
   const ranges = availableRanges(rows.length);
   const shown = ranges.find((r) => r.value === range) ?? RANGES[RANGES.length - 1];
-  const visible = shown.months === Infinity ? rows : rows.slice(-shown.months);
+  const visible = withProjection(shown.months === Infinity ? rows : rows.slice(-shown.months), projection);
 
   return (
     <Panel

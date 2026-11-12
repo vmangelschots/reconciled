@@ -94,3 +94,42 @@ describe("NetWorthTooltip", () => {
     expect(screen.queryByText("Property")).not.toBeInTheDocument();
   });
 });
+
+function projection(after, count = 12) {
+  const [y, m] = after.split("-").map(Number);
+  return Array.from({ length: count }, (_, i) => {
+    const d = new Date(y, m + i, 1);
+    return {
+      month: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+      total_cents: 2000000 + i * 50000,
+      change_cents: 50000,
+    };
+  });
+}
+
+describe("Net worth projection", () => {
+  it("draws the history solid and the next 12 months dashed (History and a year ahead)", () => {
+    const { container } = renderPanel(18, { projection: projection("2023-06") });
+    const lines = container.querySelectorAll(".recharts-line-curve");
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).not.toHaveAttribute("stroke-dasharray");
+    expect(lines[1]).toHaveAttribute("stroke-dasharray", "5 5");
+    expect(screen.getByRole("img", { name: /over 18 months/ })).toBeInTheDocument();
+  });
+
+  it("keeps the projection after the 1Y range (The 1Y range)", async () => {
+    renderPanel(18, { projection: projection("2023-06") });
+    await userEvent.click(screen.getByRole("button", { name: "1Y" }));
+    expect(screen.getByRole("img", { name: /over 12 months/ })).toBeInTheDocument();
+    expect(document.querySelectorAll(".recharts-line-curve")).toHaveLength(2);
+  });
+
+  it("says Projected and leaves out the tiers (Hover a projected month)", () => {
+    const row = { month: "2027-03", projected_cents: 2100000, change_cents: 50000 };
+    render(<NetWorthTooltip active payload={[{ payload: row }]} />);
+    expect(screen.getByText(/March 2027 · Projected/)).toBeInTheDocument();
+    expect(screen.getByText("€21,000")).toBeInTheDocument();
+    expect(screen.getByText("+€500")).toBeInTheDocument();
+    expect(screen.queryByText("Everyday")).toBeNull();
+  });
+});

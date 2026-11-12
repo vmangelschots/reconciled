@@ -8,7 +8,7 @@ from budgets import utils as budget_utils
 from reports.views import import_freshness
 
 from .expected import allowed_accounts, allowed_categories, blocked_category_ids, pot_tier
-from .forecast import HORIZONS, everyday_forecast
+from .forecast import HORIZONS, NET_WORTH_YEARS, everyday_forecast, net_worth_forecast
 from .models import ExpectedItem
 from .serializers import ExpectedItemSerializer
 
@@ -62,6 +62,28 @@ class ForecastView(APIView):
             for a in Account.objects.visible().filter(archived=False).order_by(tier_position(), "name", "id")
             if a.tier == forecast["tier"]
         ]
+        freshness = import_freshness(accounts)
+        forecast["accounts"] = [
+            {"id": a.id, "name": a.name, "account_type": a.account_type, "tier": a.tier, **freshness[a.id]}
+            for a in accounts
+        ]
+        return Response(forecast)
+
+
+class NetWorthForecastView(APIView):
+    """Net worth month by month over 1, 3 or 5 years - see
+    openspec/specs/forecasting."""
+
+    def get(self, request):
+        try:
+            years = int(request.query_params.get("years", 1))
+        except ValueError:
+            years = None
+        if years not in NET_WORTH_YEARS:
+            return Response({"detail": "years must be 1, 3 or 5."}, status=400)
+        forecast = net_worth_forecast(budget_utils.today(), 12 * years)
+        # Every active account counts in net worth, so each can be stale.
+        accounts = list(Account.objects.visible().filter(archived=False).order_by(tier_position(), "name", "id"))
         freshness = import_freshness(accounts)
         forecast["accounts"] = [
             {"id": a.id, "name": a.name, "account_type": a.account_type, "tier": a.tier, **freshness[a.id]}

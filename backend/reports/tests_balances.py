@@ -32,6 +32,12 @@ class BalanceCase(TestCase):
         self.assertEqual(response.status_code, 200, response.content)
         return response.json()
 
+    def bills(self):
+        """Two bills: 200.00 on the 29th and 50.00 on the 3rd, from October."""
+        streaming = Category.objects.create(name="Bills", budget_kind="bills")
+        for name, day, cents in (("Rent", 29, 20000), ("Phone", 3, 5000)):
+            Bill.objects.create(category=streaming, name=name, day=day, amount_cents=cents, from_month=date(2026, 10, 1))
+
     def net_worth(self):
         response = self.client.get(reverse("report-net-worth"))
         self.assertEqual(response.status_code, 200, response.content)
@@ -87,12 +93,6 @@ class EverydayBalanceTests(BalanceCase):
         self.assertEqual(body["tier"], "savings")
         self.assertEqual(body["points"][-1]["balance_cents"], 501000)
 
-    def bills(self):
-        """Two bills: 200.00 on the 29th and 50.00 on the 3rd, from October."""
-        streaming = Category.objects.create(name="Bills", budget_kind="bills")
-        for name, day, cents in (("Rent", 29, 20000), ("Phone", 3, 5000)):
-            Bill.objects.create(category=streaming, name=name, day=day, amount_cents=cents, from_month=date(2026, 10, 1))
-
     def test_two_accounts_add_up_in_the_projection(self):
         Account.objects.create(name="Crelan", account_type="cash", starting_balance_cents=10000)
         self.txn(50000, date(2026, 10, 1))
@@ -136,6 +136,23 @@ class EverydayBalanceTests(BalanceCase):
 @patch("reports.views._today", lambda: TODAY)
 class NetWorthTests(BalanceCase):
     """The net worth scenarios in openspec/specs/balance-history."""
+
+    def test_a_year_ahead(self):
+        self.txn(410000, date(2026, 9, 1))
+        self.bills()
+        ExpectedItem.objects.create(
+            name="Salary", direction="in", amount_cents=450000, day=25, category=Category.objects.create(name="Salary")
+        )
+        body = self.client.get(reverse("report-net-worth")).json()
+        projection = body["projection"]
+        self.assertEqual((projection[0]["month"], projection[-1]["month"], len(projection)), ("2026-11", "2027-10", 12))
+        with patch("budgets.utils.today", lambda: TODAY):
+            forecast = self.client.get(reverse("forecast-net-worth"), {"years": 1}).json()
+        self.assertEqual(projection, forecast["months"][1:])
+        self.assertEqual(forecast["months"][0]["total_cents"], body["months"][-1]["total_cents"])
+
+    def test_nothing_forecast_has_no_projection(self):
+        self.assertIsNone(self.client.get(reverse("report-net-worth")).json()["projection"])
 
     def test_tiers_add_up(self):
         Account.objects.create(name="House", account_type="property", starting_balance_cents=53000000)

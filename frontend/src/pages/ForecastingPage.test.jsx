@@ -10,6 +10,7 @@ import { formatDayMonth } from "../lib/yearlyBudgets";
 
 vi.mock("../api/forecasting", () => ({
   getForecast: vi.fn(),
+  getNetWorthForecast: vi.fn(),
   listExpectedItems: vi.fn(),
   getExpectedItemOptions: vi.fn(),
   createExpectedItem: vi.fn(),
@@ -65,6 +66,15 @@ function forecast(overrides = {}) {
   };
 }
 
+function netWorth(overrides = {}) {
+  const months = Array.from({ length: 13 }, (_, i) => {
+    const day = new Date(2026, 10 + i, 1);
+    const month = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, "0")}`;
+    return { month, total_cents: 7700000 + i * 202500, change_cents: i ? 202500 : 0 };
+  });
+  return { start_cents: 7700000, months, has_income: true, empty: false, accounts: [], ...overrides };
+}
+
 const SALARY = {
   id: 1, name: "Salary", direction: "in", amount_cents: 450000, day: 25, category: 5, account: null,
   status: "received", received_on: "2026-11-24", next_on: "2026-12-25",
@@ -96,6 +106,7 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(new Date(2026, 10, 12, 10));
   forecastingApi.getForecast.mockResolvedValue(forecast());
+  forecastingApi.getNetWorthForecast.mockResolvedValue(netWorth());
   forecastingApi.listExpectedItems.mockResolvedValue([SALARY]);
   forecastingApi.getExpectedItemOptions.mockResolvedValue(OPTIONS);
   forecastingApi.createExpectedItem.mockResolvedValue({});
@@ -264,5 +275,46 @@ describe("The Expected panel", () => {
     expect(names).toContain("Salary");
     expect(names).toContain("→ Spaarrekening");
     expect(names).not.toContain("Streaming");
+  });
+});
+
+describe("The net worth view", () => {
+  it("switches to net worth over a year (Switching to net worth)", async () => {
+    renderPage();
+    await screen.findByText("Coming up");
+    await userEvent.click(screen.getByRole("button", { name: "Net worth" }));
+
+    await screen.findByText("Change");
+    expect(forecastingApi.getNetWorthForecast).toHaveBeenCalledWith(1);
+    expect(screen.getByRole("button", { name: "1 year" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "3 years" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "90 days" })).toBeNull();
+    expect(screen.queryByText("Coming up")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Expected" })).toBeInTheDocument();
+  });
+
+  it("opens five years from the address (A link to five years)", async () => {
+    renderPage("/forecast?view=net-worth&years=5");
+    await screen.findByText("In 5 years");
+    expect(forecastingApi.getNetWorthForecast).toHaveBeenCalledWith(5);
+    expect(screen.getByRole("button", { name: "5 years" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("shows today, the change and the end (One year)", async () => {
+    renderPage("/forecast?view=net-worth");
+    await screen.findByText("Change");
+    expect(within(stat("Today")).getByText("€77,000")).toBeInTheDocument();
+    expect(within(stat("Change")).getByText("+€24,300")).toBeInTheDocument();
+    const end = within(stat("In 1 year"));
+    expect(end.getByText("€101,300")).toBeInTheDocument();
+    expect(end.getByText(new Date(2027, 10, 1).toLocaleDateString(undefined, { month: "short", year: "numeric" }))).toBeInTheDocument();
+    expect(screen.getByText(/Loans count their interest/)).toBeInTheDocument();
+  });
+
+  it("says when nothing is expected (Nothing in net worth either)", async () => {
+    forecastingApi.getNetWorthForecast.mockResolvedValue(netWorth({ empty: true }));
+    renderPage("/forecast?view=net-worth&years=3");
+    expect(await screen.findByText("Nothing expected in the next 3 years.")).toBeInTheDocument();
+    expect(screen.queryByText("Change")).toBeNull();
   });
 });

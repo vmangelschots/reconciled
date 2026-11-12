@@ -12,7 +12,7 @@ from budgets.models import Category
 from budgets.summary import budget_rows, budget_totals, yearly_spent_cents
 from budgets.utils import month_range, parse_month
 from budgets.yearly import yearly_rows
-from forecasting.forecast import everyday_forecast
+from forecasting.forecast import everyday_forecast, net_worth_forecast
 from imports.models import ImportSession
 from transactions.categorize import needs_review, uncategorized
 from transactions.covered import account_label
@@ -143,7 +143,11 @@ class NetWorthView(APIView):
     def get(self, request):
         today = _today()
         sync_loans(today)
-        return Response({"months": month_end_balances(today)})
+        # The next 12 months of the net worth forecast, after the current
+        # month, which the history already reports - see balance-history.
+        forecast = net_worth_forecast(today, 12)
+        projection = None if forecast["empty"] else forecast["months"][1:]
+        return Response({"months": month_end_balances(today), "projection": projection})
 
 
 MAX_REPORT_MONTHS = 24
