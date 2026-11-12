@@ -48,8 +48,8 @@ under or over the month finished. A future month SHALL have no verdict.
 - **THEN** the headline shows the limits without a verdict
 
 ### Requirement: Needs a look
-The page SHALL list the monthly and yearly warnings of the Overview's Needs
-attention panel for the viewed month, with the same rules, order and wording,
+The page SHALL list the monthly, yearly and bill warnings of the Overview's
+Needs attention panel for the viewed month, with the same rules, order and wording,
 and SHALL leave the section out when there are none. Clicking an item SHALL
 open that budget's sheet. Rows in the list SHALL keep their place.
 
@@ -59,20 +59,29 @@ open that budget's sheet. Rows in the list SHALL keep their place.
 - **THEN** Needs a look lists both, and both also stay in their place in the
   list
 
+#### Scenario: A missed bill
+- **WHEN** on 28 November Spotify, due on the 21st, was missed
+- **THEN** Needs a look lists "Spotify missed", and the headline counts it
+
 #### Scenario: Nothing to show
 - **WHEN** nothing needs a look
 - **THEN** the section isn't shown
 
 ### Requirement: One list of budgets
-The page SHALL list monthly, yearly and yearly-on-a-date budgets in one list
-in category order, with subcategories under their parent whatever their kind.
-A subcategory whose parent isn't listed SHALL read "Parent / Sub". Tab groups
-and tabs SHALL NOT be listed.
+The page SHALL list monthly, yearly, yearly-on-a-date and Bills budgets in
+one list in category order, with subcategories under their parent whatever
+their kind. A subcategory whose parent isn't listed SHALL read "Parent /
+Sub". Tab groups and tabs SHALL NOT be listed.
 
 #### Scenario: Mixed kinds under one parent
 - **WHEN** "Car" has the monthly subcategory "Fuel", the yearly "Repairs" and
   the on-a-date "Insurance"
 - **THEN** all three are listed under "Car"
+
+#### Scenario: A Bills subcategory
+- **WHEN** "Home" has the monthly subcategory "Energy" and the Bills
+  subcategory "Internet"
+- **THEN** both are listed under "Home"
 
 #### Scenario: Rows don't move with spending
 - **WHEN** "Groceries" goes over its limit
@@ -133,13 +142,19 @@ figures count.
 - **THEN** the page says to 31 Oct, and "Clothing" counts 180.00
 
 ### Requirement: Pace on rows
-For the current month, each monthly and yearly bar SHALL show a pace marker. A
-budget listed in Needs a look for being ahead of pace SHALL be shown in the
-warning colour. Other months SHALL show neither.
+For the current month, each monthly and yearly bar SHALL show a pace marker.
+Bills rows SHALL NOT show one. A budget listed in Needs a look for being
+ahead of pace SHALL be shown in the warning colour. Other months SHALL show
+no marker.
 
 #### Scenario: Monthly warning agrees with the Overview
 - **WHEN** on 24 October "Utilities" has spent 90% of its limit
 - **THEN** its bar is amber, and it is listed in Needs a look
+
+#### Scenario: A Bills row has no marker
+- **WHEN** the user views the current month and "Streaming" is a Bills
+  category
+- **THEN** its bar has no pace marker
 
 #### Scenario: A past month has no pace
 - **WHEN** the user views September
