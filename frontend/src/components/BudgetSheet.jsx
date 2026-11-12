@@ -1,4 +1,4 @@
-import { AlertTriangle, CalendarClock, Check } from "lucide-react";
+import { AlertTriangle, CalendarClock, Check, Landmark } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useSpendingCell } from "../hooks/useSpendingCell";
 import { BILL_TONE, billLabel } from "../lib/budgetOverview";
@@ -29,7 +29,17 @@ function BillList({ bills, through }) {
         return (
           <li key={bill.id} className="flex items-center gap-3 px-5 py-1.5">
             <span className="num w-6 shrink-0 text-right text-sm text-ink-muted">{bill.day}</span>
-            <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-primary">{bill.name}</span>
+            {bill.source === "loan" ? (
+              <Link
+                to={`/transactions/${bill.loan_account_id}/schedule`}
+                className="flex min-w-0 flex-1 items-center gap-1.5 text-sm font-medium text-ink-primary hover:underline"
+              >
+                <span className="truncate">{bill.name}</span>
+                <Landmark className="h-3.5 w-3.5 shrink-0 text-ink-muted" aria-label="From a loan" />
+              </Link>
+            ) : (
+              <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-primary">{bill.name}</span>
+            )}
             <span className="num text-sm text-ink-primary">{formatMoney(bill.amount_cents)}</span>
             <span className="flex min-w-20 shrink-0 justify-end">
               {label && (

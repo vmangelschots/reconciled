@@ -428,3 +428,47 @@ describe("Bills in the sheet", () => {
     expect(categoriesApi.setCategoryBills).not.toHaveBeenCalled();
   });
 });
+
+describe("A loan category in the sheet", () => {
+  const LOANS = [{ account_id: 4, name: "House A" }, { account_id: 5, name: "House B" }];
+  const MORTGAGE = {
+    id: 8, name: "Mortgage", parent: null, budget_kind: "bills", monthly_limits: { default_cents: null, override_count: 0 },
+    yearly: null, yearly_history: [], bills: [], loans: LOANS,
+  };
+  const loanLine = (account, name, cents, state, extra = {}) => ({
+    ...bill(`loan-${account}-12`, name, 7, cents, state, extra), source: "loan", loan_account_id: account,
+  });
+  const MORTGAGE_ROW = {
+    ...GROCERIES_ROW, category_id: 8, category_name: "Mortgage", kind: "bills", limit_cents: 147000, spent_cents: 105000,
+    remaining_cents: 42000, paid_count: 1, due_to_date_cents: 147000, unpaid_cents: 42000,
+    bills: [
+      loanLine(4, "House A", 105000, "paid", { paid_on: "2026-10-08", paid_cents: 105000 }),
+      loanLine(5, "House B", 42000, "not_seen"),
+    ],
+  };
+
+  beforeEach(() => {
+    categoriesApi.listCategories.mockResolvedValue([...YEARLY_CATEGORIES, MORTGAGE]);
+    budgetsApi.getBudgetSummary.mockResolvedValue(summary({}, { categories: [GROCERIES_ROW, TRANSPORT_ROW, MORTGAGE_ROW] }));
+  });
+
+  it("says which loans set the budget, without a kind switch", async () => {
+    renderPage();
+    await openRow("Mortgage");
+    expect(await screen.findByText(/Set by 2 loans/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "House A" })).toHaveAttribute("href", "/transactions/4/schedule");
+    expect(screen.queryByRole("form", { name: "Budget for Mortgage" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Bills" })).toBeNull();
+  });
+
+  it("marks each loan bill and links it to its schedule", async () => {
+    renderPage();
+    await openRow("Mortgage");
+    const list = await screen.findByRole("list", { name: "This month's bills" });
+    const houseB = within(list).getByRole("link", { name: /House B/ });
+    expect(houseB).toHaveAttribute("href", "/transactions/5/schedule");
+    expect(within(houseB).getByLabelText("From a loan")).toBeInTheDocument();
+    expect(within(list).getAllByRole("listitem")[1]).toHaveTextContent("Not seen");
+  });
+});
+

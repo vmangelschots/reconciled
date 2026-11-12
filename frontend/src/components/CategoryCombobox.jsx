@@ -1,6 +1,6 @@
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList, CommandSeparator } from "cmdk";
-import { Check, ChevronsUpDown, HandCoins, History, Plus, Sparkles, Split } from "lucide-react";
+import { Check, ChevronsUpDown, HandCoins, History, Landmark, Plus, Sparkles, Split } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { displayReason } from "../lib/categorizeOutcome";
 import { categoryDisplayLabel, rankCategories, treeOrder } from "../lib/categoryTree";
@@ -390,6 +390,16 @@ export function CategoryCombobox({
                     {value === c.id && <Check className="h-3.5 w-3.5 shrink-0" />}
                     <span className="min-w-0 flex-1 truncate">{nested || hinted ? c.name : label}</span>
                     {hinted && <span className="shrink-0 text-xs text-ink-muted">{parent.name}</span>}
+                    {c.loans?.length > 0 && (
+                      // A loan category: its loans set its budget - see specs/bill-budgets.
+                      <span
+                        data-testid="loan-category"
+                        title={`Budget set by loans: ${c.loans.map((l) => l.name).join(", ")}`}
+                        className="shrink-0"
+                      >
+                        <Landmark className="h-3.5 w-3.5 text-ink-muted" aria-hidden="true" />
+                      </span>
+                    )}
                   </CommandItem>
                 );
               })}

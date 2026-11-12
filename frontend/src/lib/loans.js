@@ -1,4 +1,5 @@
 // Helpers for the loan schedule page - see the loan-schedules spec.
+import { formatMoneyWhole } from "./money";
 
 // 300 -> "300 months (25 years)", 270 -> "270 months (22 years 6 months)"
 export function termLabel(months) {
@@ -41,4 +42,50 @@ export function scheduleWindow(installments, focus = null, keepDate = null) {
     start = Math.min(start, after >= 0 ? after : installments.length - 1);
   }
   return { start, end };
+}
+
+const names = (loans) => {
+  const list = loans.map((l) => l.name);
+  return list.length <= 1 ? list.join("") : `${list.slice(0, -1).join(", ")} and ${list.at(-1)}`;
+};
+
+// What a category's own budget is, in words, or null when it has none.
+function ownBudget(category) {
+  if (category.budget_kind === "bills") {
+    const count = category.bills?.length ?? 0;
+    return count > 0 ? `${count} ${count === 1 ? "bill" : "bills"}` : null;
+  }
+  if (category.budget_kind === "yearly" || category.budget_kind === "target") {
+    return category.yearly ? `${formatMoneyWhole(category.yearly.amount_cents)} yearly budget` : null;
+  }
+  const { default_cents: defaultCents, override_count: overrides = 0 } = category.monthly_limits ?? {};
+  if (defaultCents != null) return `${formatMoneyWhole(defaultCents)} monthly budget`;
+  return overrides > 0 ? "monthly budget" : null;
+}
+
+/**
+ * What saving this loan with payment category `chosenId` does to budgets,
+ * as notes for under the field: [{ tone: "warning" | "muted", text }]. A
+ * chosen category with its own budget loses it; one that follows other loans
+ * gets this one too; the category left behind goes back to no budget when no
+ * other loan pays into it. See the loan-schedules spec.
+ */
+export function paymentCategoryNotes(chosenId, previousId, accountId, categoriesById) {
+  const notes = [];
+  const others = (category) => (category.loans ?? []).filter((l) => l.account_id !== accountId);
+  const chosen = chosenId != null ? categoriesById[chosenId] : null;
+  if (chosen && chosenId !== previousId) {
+    const joined = others(chosen);
+    const own = ownBudget(chosen);
+    if (joined.length > 0) {
+      notes.push({ tone: "muted", text: `Joins ${names(joined)} in ${chosen.name}'s bills.` });
+    } else if (own) {
+      notes.push({ tone: "warning", text: `${chosen.name}'s ${own} will be replaced by this loan's payment.` });
+    }
+  }
+  const previous = previousId != null ? categoriesById[previousId] : null;
+  if (previous && chosenId !== previousId && others(previous).length === 0) {
+    notes.push({ tone: "muted", text: `${previous.name} goes back to no budget.` });
+  }
+  return notes;
 }

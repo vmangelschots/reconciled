@@ -1,5 +1,6 @@
-import { Plus, X } from "lucide-react";
-import { useState } from "react";
+import { Landmark, Plus, X } from "lucide-react";
+import { Fragment, useState } from "react";
+import { Link } from "react-router-dom";
 import { setCategoryBills, setCategoryBudget, setCategoryLimit } from "../api/categories";
 import { cn } from "../lib/cn";
 import { formatMoney } from "../lib/money";
@@ -152,7 +153,34 @@ function BillLines({ lines, onChange }) {
  * `limitCents` is the limit shown for the
  * viewed `month`; `startMonth` is the budgeting start month (ISO date).
  */
-export function BudgetEditor({ category, month, limitCents, startMonth, onSaved, onCancel }) {
+// A loan category's budget comes from its loans, so there is nothing to
+// edit here - see specs/bill-budgets.
+function LoanBudget({ loans }) {
+  return (
+    <p className="flex items-start gap-1.5 text-sm text-ink-secondary">
+      <Landmark className="mt-0.5 h-4 w-4 shrink-0 text-ink-muted" aria-hidden="true" />
+      <span>
+        Set by {loans.length === 1 ? "1 loan" : `${loans.length} loans`}:{" "}
+        {loans.map((loan, i) => (
+          <Fragment key={loan.account_id}>
+            {i > 0 && ", "}
+            <Link to={`/transactions/${loan.account_id}/schedule`} className="text-accent hover:underline">
+              {loan.name}
+            </Link>
+          </Fragment>
+        ))}
+        . Change it on the loan pages.
+      </span>
+    </p>
+  );
+}
+
+export function BudgetEditor(props) {
+  if (props.category.loans?.length > 0) return <LoanBudget loans={props.category.loans} />;
+  return <KindEditor {...props} />;
+}
+
+function KindEditor({ category, month, limitCents, startMonth, onSaved, onCancel }) {
   const initialKind = category.budget_kind ?? "monthly";
   const [kind, setKind] = useState(initialKind);
   const [amount, setAmount] = useState(

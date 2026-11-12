@@ -27,7 +27,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { useToast } from "../components/ui/Toast";
 import { cn } from "../lib/cn";
 import { formatShortDate } from "../lib/dates";
-import { currentIndex, scheduleWindow, termLabel } from "../lib/loans";
+import { currentIndex, paymentCategoryNotes, scheduleWindow, termLabel } from "../lib/loans";
 import { formatMoney, formatMoneyWhole } from "../lib/money";
 
 const monthYear = new Intl.DateTimeFormat(undefined, { month: "short", year: "numeric", timeZone: "UTC" });
@@ -558,6 +558,12 @@ function LoanForm({ account, loan, categories, payers, onSaved, onCancel, onRemo
   const terms = toTerms(fields);
   const termsKey = JSON.stringify(terms);
   const set = (name) => (e) => setFields((f) => ({ ...f, [name]: e.target.value }));
+  const categoryNotes = paymentCategoryNotes(
+    fields.category,
+    loan?.payment_category ?? null,
+    account.id,
+    Object.fromEntries(categories.map((c) => [c.id, c])),
+  );
 
   useEffect(() => {
     if (!terms) {
@@ -654,6 +660,19 @@ function LoanForm({ account, loan, categories, payers, onSaved, onCancel, onRemo
             placeholder="Optional"
             aria-label="Payment category"
           />
+          {categoryNotes.map((note) => (
+            <p
+              key={note.text}
+              className={cn("flex items-start gap-1.5 text-xs", note.tone === "warning" ? "text-warning" : "text-ink-muted")}
+            >
+              {note.tone === "warning" ? (
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              ) : (
+                <Landmark className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              )}
+              {note.text}
+            </p>
+          ))}
         </div>
       </div>
 
@@ -755,7 +774,7 @@ function InstallmentState({ installment, onLink, onUnlink }) {
     const missed = installment.state === "missed";
     const Icon = missed ? AlertTriangle : Clock;
     return (
-      <span className={cn("flex flex-wrap items-center gap-1.5", missed ? "text-warning" : "text-ink-muted")}>
+      <span className={cn("flex flex-wrap items-center gap-1.5", missed ? "text-critical" : "text-ink-muted")}>
         <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
           <Icon className="h-4 w-4" aria-hidden="true" />
           {missed ? "Missed" : "Due"}

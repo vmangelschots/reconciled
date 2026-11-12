@@ -14,9 +14,9 @@
 
 ## 3. Frontend
 
-- [ ] 3.1 Add `paymentCategoryNote(category, loan, categoriesById)` to `lib/loans.js` (warning naming the replaced monthly / yearly / bills budget; muted "Joins … in …'s bills"; muted "… goes back to no budget"; null otherwise) and render it under the payment category in `LoanForm`; verify with `loans.test.js` cases for each branch and a `LoanSchedulePage` test showing the amber warning when picking "Mortgage" with a limit
-- [ ] 3.2 Mark loan categories in `CategoryCombobox` (muted `Landmark`, title "Budget set by loans: …"), show "Set by N loans: …" with schedule links instead of the form in `BudgetEditor`, and mark loan lines (icon + schedule link) in the sheet's `BillList`; verify with component tests for the picker icon and title, the Mortgage editor without a kind switch, and a loan line linking to `/transactions/<id>/schedule`
-- [ ] 3.3 Show "Missed" in the critical colour on the loan schedule and the Overview's missed-loan item; verify by updating the existing `LoanSchedulePage` and `OverviewPage` tests to expect `text-critical`; then run `npm test`, `npm run lint`, `npm run build`
+- [x] 3.1 Add `paymentCategoryNote(category, loan, categoriesById)` to `lib/loans.js` (warning naming the replaced monthly / yearly / bills budget; muted "Joins … in …'s bills"; muted "… goes back to no budget"; null otherwise) and render it under the payment category in `LoanForm`; verify with `loans.test.js` cases for each branch and a `LoanSchedulePage` test showing the amber warning when picking "Mortgage" with a limit
+- [x] 3.2 Mark loan categories in `CategoryCombobox` (muted `Landmark`, title "Budget set by loans: …"), show "Set by N loans: …" with schedule links instead of the form in `BudgetEditor`, and mark loan lines (icon + schedule link) in the sheet's `BillList`; verify with component tests for the picker icon and title, the Mortgage editor without a kind switch, and a loan line linking to `/transactions/<id>/schedule`
+- [x] 3.3 Show "Missed" in the critical colour on the loan schedule and the Overview's missed-loan item; verify by updating the existing `LoanSchedulePage` and `OverviewPage` tests to expect `text-critical`; then run `npm test`, `npm run lint`, `npm run build`
 
 ## 4. Integration check
 

@@ -293,9 +293,10 @@ function missedLoanItem(loan) {
   return {
     key: `loan-${loan.account_id}`,
     to: `/transactions/${loan.account_id}/schedule?installment=${loan.installment}`,
-    icon: <AlertTriangle className="h-4 w-4 text-warning" />,
+    icon: <AlertTriangle className="h-4 w-4 text-critical" />,
     primary: `${loan.name}: payment of ${formatDayMonth(loan.date)} not seen`,
     secondary: `Installment ${loan.installment} of ${loan.term_months} · ${formatMoney(loan.payment_cents)} from ${loan.paid_from_name}`,
+    tone: "text-critical",
   };
 }
 
