@@ -1,4 +1,5 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
+import { notifyDataChanged } from "../lib/dataChanged";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -90,7 +91,11 @@ describe("Value adjustments in the ledger", () => {
   });
 
   it("deletes an adjustment and refreshes the balances", async () => {
-    transactionsApi.deleteTransaction.mockResolvedValue({});
+    // Like the real API client, the delete announces a change.
+    transactionsApi.deleteTransaction.mockImplementation(async () => {
+      notifyDataChanged();
+      return {};
+    });
     renderLedger(HOUSE.id);
     const table = await findTable();
     const row = (await table.findByText("Value adjustment")).closest("tr");
@@ -101,7 +106,7 @@ describe("Value adjustments in the ledger", () => {
 
     expect(transactionsApi.deleteTransaction).toHaveBeenCalledWith(9);
     await waitFor(() => expect(screen.queryByText("Value adjustment")).toBeNull());
-    expect(accountsApi.listAccounts.mock.calls.length).toBeGreaterThan(accountLoads);
+    await waitFor(() => expect(accountsApi.listAccounts.mock.calls.length).toBeGreaterThan(accountLoads));
   });
 });
 

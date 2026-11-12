@@ -129,4 +129,30 @@ describe("BankSyncContext", () => {
     expect(screen.getByText("version 0")).toBeInTheDocument();
     expect(screen.getByText("state synced")).toBeInTheDocument();
   });
+
+  it("picks up a sync that started while the tab was hidden", async () => {
+    await renderProbe();
+    expect(screen.getByText("state synced")).toBeInTheDocument();
+
+    bankSyncApi.getBankSync.mockResolvedValue(status(true));
+    await act(async () => {
+      Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(screen.getByText("state running")).toBeInTheDocument();
+
+    bankSyncApi.getBankSync.mockResolvedValue(status(false));
+    await act(async () => vi.advanceTimersByTime(3000));
+    expect(screen.getByText("version 1")).toBeInTheDocument();
+  });
+
+  it("keeps the status when reloading on return fails", async () => {
+    await renderProbe();
+    bankSyncApi.getBankSync.mockRejectedValue(new Error("offline"));
+    await act(async () => {
+      Object.defineProperty(document, "visibilityState", { configurable: true, get: () => "visible" });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(screen.getByText("state synced")).toBeInTheDocument();
+  });
 });

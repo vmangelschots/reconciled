@@ -33,7 +33,6 @@ import { cn } from "../lib/cn";
 import { formatShortDate } from "../lib/dates";
 import { formatMoney, formatMoneyWhole } from "../lib/money";
 import { VALUED_TYPES } from "../lib/tiers";
-import { useReviewCount } from "../review/ReviewCountContext";
 
 // The plain Transactions address opens the account last opened here, or
 // the first active one. See the transactions spec.
@@ -100,7 +99,7 @@ function addressDate(value) {
 export function TransactionsPage() {
   const { accountId: accountParam } = useParams();
   const accountId = Number(accountParam);
-  const { accounts, loaded: accountsLoaded, setLastOpened, refresh: refreshAccounts } = useAccounts();
+  const { accounts, loaded: accountsLoaded, setLastOpened } = useAccounts();
   const navigate = useNavigate();
   const [categories, setCategories] = useState([]);
   // An archived account isn't in the active list; it is fetched by id.
@@ -125,7 +124,6 @@ export function TransactionsPage() {
   const toast = useToast();
   // Confirming, changing or deleting a guessed category changes the nav's
   // Review count, so every save here refreshes it.
-  const { refresh: refreshReviewCount } = useReviewCount();
 
   function setPending(id, isPending) {
     setPendingIds((prev) => {
@@ -219,7 +217,6 @@ export function TransactionsPage() {
       await linkTransfer(transaction.id, transferAccountId);
     }
     toast.success("Transaction updated.");
-    refreshReviewCount();
     setEditing(null);
     await reload();
   }
@@ -229,11 +226,8 @@ export function TransactionsPage() {
     try {
       await deleteTransaction(id);
       toast.success("Transaction deleted.");
-      refreshReviewCount();
       setTransactions((prev) => prev.filter((t) => t.id !== id));
-      // Deleting can change the account's balance, and the amounts of the
-      // value adjustments after it.
-      refreshAccounts();
+      // Deleting can change the amounts of the value adjustments after it.
       if (VALUED_TYPES.has(account?.account_type)) reload();
     } catch (e) {
       toast.error(e.data ? Object.values(e.data).flat().join(" ") : e.message);
@@ -282,7 +276,6 @@ export function TransactionsPage() {
     try {
       replaceTransaction(await saveSplit(transaction.id, parts));
       toast.success(transaction.parts?.length ? "Split updated." : "Transaction split.");
-      refreshReviewCount();
       closeSplit(transaction.id);
     } catch (e) {
       toast.error(e.data?.detail || e.message);
@@ -297,7 +290,6 @@ export function TransactionsPage() {
     try {
       replaceTransaction(await unsplit(transaction.id, keep));
       toast.success("Transaction unsplit.");
-      refreshReviewCount();
       closeSplit(transaction.id);
     } catch (e) {
       toast.error(e.data?.detail || e.message);
@@ -336,7 +328,6 @@ export function TransactionsPage() {
     try {
       await updateTransaction(transactionId, { category: categoryId });
       toast.success("Category updated.");
-      refreshReviewCount();
     } catch (e) {
       setRowCategory(transactionId, previous.category, categoryId, previous.transfer, previous.category_confirmed);
       toast.error(e.data ? Object.values(e.data).flat().join(" ") : e.message);
@@ -356,7 +347,6 @@ export function TransactionsPage() {
       const { transaction } = await linkTransfer(transactionId, targetAccountId);
       updateRow(transactionId, (t) => (stillPlaceholder(t) ? transaction : t));
       toast.success(`Marked as a transfer with ${target?.name}.`);
-      refreshReviewCount();
     } catch (e) {
       updateRow(transactionId, (t) => (stillPlaceholder(t) ? { ...t, ...previous } : t));
       toast.error(e.data ? Object.values(e.data).flat().join(" ") : e.message);
@@ -377,7 +367,6 @@ export function TransactionsPage() {
       setTransactions((prev) => mapRows(prev, (t) => (t.category === tempId ? { ...t, category: created.id } : t)));
       await updateTransaction(transactionId, { category: created.id });
       toast.success(`Created "${name}" and assigned it.`);
-      refreshReviewCount();
     } catch (e) {
       if (!created) setCategories((prev) => prev.filter((c) => c.id !== tempId));
       setRowCategory(
@@ -458,10 +447,7 @@ export function TransactionsPage() {
           account={account}
           open={settingValue}
           onOpenChange={setSettingValue}
-          onSaved={() => {
-            refreshAccounts();
-            reload();
-          }}
+          onSaved={reload}
         />
       )}
 
@@ -470,10 +456,7 @@ export function TransactionsPage() {
           account={account}
           open={importingPortfolio}
           onOpenChange={setImportingPortfolio}
-          onSaved={() => {
-            refreshAccounts();
-            reload();
-          }}
+          onSaved={reload}
         />
       )}
 

@@ -1,4 +1,5 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { notifyDataChanged } from "../lib/dataChanged";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -223,6 +224,11 @@ describe("ReviewPage groups", () => {
   it("refreshes the nav count after a confirm", async () => {
     transactionsApi.getReviewGroups.mockResolvedValue({ groups: [IKEA], uncategorized_count: 0 });
     transactionsApi.getReviewCount.mockResolvedValue({ count: 1 });
+    // Like the real API client, the confirm announces a change.
+    transactionsApi.confirmCategories.mockImplementation(async () => {
+      notifyDataChanged();
+      return {};
+    });
     render(
       <MemoryRouter>
         <ToastProvider>

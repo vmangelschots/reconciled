@@ -1,7 +1,6 @@
 import { Link } from "react-router-dom";
 import { formatMoneyWhole } from "../lib/money";
 import { monthLabel } from "../lib/months";
-import { useReviewCount } from "../review/ReviewCountContext";
 import { useSpendingCell } from "../hooks/useSpendingCell";
 import { SpendingRows } from "./SpendingRows";
 import { DialogTitle } from "./ui/Dialog";
@@ -49,7 +48,6 @@ function SheetBody({ selection, categories, onChanged }) {
  * - selection: { category, direct, income, month } or null when closed.
  */
 export function SpendingSheet({ selection, categories, wide, onClose, onChanged }) {
-  const { refresh: refreshReviewCount } = useReviewCount();
   return (
     <Sheet open={selection != null} onClose={onClose} wide={wide}>
       {selection && (
@@ -57,10 +55,7 @@ export function SpendingSheet({ selection, categories, wide, onClose, onChanged 
           key={`${selection.month}/${selection.category}/${selection.direct}/${selection.income}`}
           selection={selection}
           categories={categories}
-          onChanged={() => {
-            onChanged();
-            refreshReviewCount();
-          }}
+          onChanged={onChanged}
         />
       )}
     </Sheet>

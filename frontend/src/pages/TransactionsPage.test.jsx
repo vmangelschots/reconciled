@@ -1,4 +1,5 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { notifyDataChanged } from "../lib/dataChanged";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
@@ -320,7 +321,11 @@ describe("TransactionsPage", () => {
 
     it("confirming a guess refreshes the nav's Review count", async () => {
       transactionsApi.listTransactions.mockResolvedValue(GUESSED);
-      transactionsApi.updateTransaction.mockResolvedValue({});
+      // Like the real API client, the save announces a change.
+      transactionsApi.updateTransaction.mockImplementation(async () => {
+        notifyDataChanged();
+        return {};
+      });
       transactionsApi.getReviewCount.mockResolvedValue({ count: 1 });
       render(
         <MemoryRouter initialEntries={["/transactions/1"]}>

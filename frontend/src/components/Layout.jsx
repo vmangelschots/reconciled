@@ -301,8 +301,9 @@ export function Layout() {
 
 function Shell() {
   const isWide = useMediaQuery('(min-width: 1024px)')
-  // The Review count and the accounts are refetched on every route change,
-  // and when a bank sync ends.
+  // The Review count and the accounts are refetched on every route change
+  // and when a bank sync ends; their providers also reload after any save
+  // and when the tab is shown again (see specs/ui-shell).
   const { pathname } = useLocation()
   const { version } = useBankSync()
   const refreshKey = `${pathname}#${version}`

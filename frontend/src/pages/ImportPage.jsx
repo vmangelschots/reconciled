@@ -16,7 +16,6 @@ import { aiFailed, aiOutcomeLines, sourceSplit } from "../lib/categorizeOutcome"
 import { formatShortDate } from "../lib/dates";
 import { Amount } from "../components/ui/Amount";
 import { PageHeader } from "../components/ui/PageHeader";
-import { useReviewCount } from "../review/ReviewCountContext";
 
 const CSV_FIELDS = ["date", "amount", "description", "payee"];
 const UNMAPPED = "none";
@@ -72,7 +71,6 @@ function importSummary({
 }
 
 export function ImportPage() {
-  const { refresh: refreshReviewCount } = useReviewCount();
   const [accounts, setAccounts] = useState([]);
   const [accountId, setAccountId] = useState(null);
   const [searchParams] = useSearchParams();
@@ -186,8 +184,6 @@ export function ImportPage() {
       const summary = importSummary(data).join(" ");
       if (aiFailed(data.ai)) toast.error(summary);
       else toast.success(summary);
-      // The commit may have added guesses, so the nav's Review count is stale.
-      refreshReviewCount();
     } catch (e) {
       toast.error(e.data?.detail ?? e.message);
     } finally {
