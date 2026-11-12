@@ -19,7 +19,7 @@
 
 ## 4. Backup
 
-- [ ] 4.1 Add `budgets.Bill` to `BACKED_UP_MODELS` and the restore order; verify with `backup/tests.py`: the model-coverage test passes, a Bills category with a bill round-trips with the same `from_month`, and a backup without Bill rows restores
+- [x] 4.1 Add `budgets.Bill` to `BACKED_UP_MODELS` and the restore order; verify with `backup/tests.py`: the model-coverage test passes, a Bills category with a bill round-trips with the same `from_month`, and a backup without Bill rows restores
 
 ## 5. Frontend data and wording
 
