@@ -1,3 +1,5 @@
+import { notifyDataChanged } from "../lib/dataChanged";
+
 // An empty VITE_API_BASE_URL means same-origin (the published images are
 // built that way and served behind one Ingress); unset keeps the local
 // development default.
@@ -65,7 +67,11 @@ export async function apiFetch(path, { method = "GET", body } = {}) {
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
 
-  if (response.status === 204) return null;
+  const changes = !SAFE_METHODS.has(method);
+  if (response.status === 204) {
+    if (changes) notifyDataChanged();
+    return null;
+  }
   reloadIfHouseholdChanged(response);
 
   const data = await response.json().catch(() => null);
@@ -75,6 +81,8 @@ export async function apiFetch(path, { method = "GET", body } = {}) {
     error.data = data;
     throw error;
   }
+  // Anything but a read may have changed balances or the Review count.
+  if (changes) notifyDataChanged();
   return data;
 }
 
@@ -107,5 +115,6 @@ export async function apiUpload(path, formData) {
     error.data = data;
     throw error;
   }
+  notifyDataChanged();
   return data;
 }
