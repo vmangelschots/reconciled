@@ -3,18 +3,31 @@ from django.http import JsonResponse
 from django.utils.decorators import method_decorator
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from households.membership import SESSION_KEY, last_used
 from households.views import NO_HOUSEHOLD, describe_user
 
+from .version import version_info
+
 
 @require_GET
 def health(request):
-    """Unauthenticated liveness check for container healthchecks."""
-    return JsonResponse({"status": "ok"})
+    """Unauthenticated liveness check for container healthchecks. Also says
+    which build is running, for checks from inside the cluster."""
+    return JsonResponse({"status": "ok", "version": version_info()["version"]})
+
+
+class VersionView(APIView):
+    """The running backend build, for Settings → About. Any signed-in user,
+    with or without a household."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        return Response(version_info())
 
 
 class CsrfView(APIView):

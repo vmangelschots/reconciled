@@ -1,3 +1,6 @@
+import os
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory, SimpleTestCase
 from households.testing import TestCase
@@ -5,13 +8,57 @@ from django.urls import reverse
 from rest_framework.test import APIClient
 
 from core.origin import public_origin
+from core.version import version_info, version_line
 
 
 class HealthCheckTests(TestCase):
     def test_health_returns_200_without_auth(self):
         response = self.client.get("/health")
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"status": "ok"})
+        self.assertEqual(response.json(), {"status": "ok", "version": "dev"})
+
+    @patch.dict(os.environ, {"APP_VERSION": "a1b2c3d"})
+    def test_health_reports_the_version(self):
+        self.assertEqual(self.client.get("/health").json()["version"], "a1b2c3d")
+
+
+@patch.dict(os.environ, {"APP_VERSION": "", "APP_COMMIT": "", "APP_BUILT": ""})
+class VersionInfoTests(SimpleTestCase):
+    def test_unset_is_dev(self):
+        self.assertEqual(version_info(), {"version": "dev", "commit": None, "built": None})
+
+    @patch.dict(
+        os.environ,
+        {"APP_VERSION": "1.4.0", "APP_COMMIT": "a1b2c3d", "APP_BUILT": "2026-11-12T14:03:00Z"},
+    )
+    def test_reads_the_build_values(self):
+        self.assertEqual(
+            version_info(),
+            {"version": "1.4.0", "commit": "a1b2c3d", "built": "2026-11-12T14:03:00Z"},
+        )
+        self.assertEqual(
+            version_line("backend"),
+            "reconciled-backend version 1.4.0 (commit a1b2c3d, built 2026-11-12T14:03:00Z)",
+        )
+
+
+class VersionViewTests(TestCase):
+    def test_requires_sign_in(self):
+        self.assertEqual(APIClient().get("/api/version/").status_code, 401)
+
+    @patch.dict(
+        os.environ,
+        {"APP_VERSION": "a1b2c3d", "APP_COMMIT": "a1b2c3d", "APP_BUILT": "2026-11-12T14:03:00Z"},
+    )
+    def test_signed_in_user_without_household_gets_the_version(self):
+        client = APIClient()
+        client.force_authenticate(get_user_model().objects.create_user(username="v", password="x"))
+        response = client.get("/api/version/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            {"version": "a1b2c3d", "commit": "a1b2c3d", "built": "2026-11-12T14:03:00Z"},
+        )
 
 
 class CsrfViewTests(TestCase):

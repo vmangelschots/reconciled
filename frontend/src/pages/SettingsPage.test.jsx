@@ -31,6 +31,10 @@ vi.mock("../api/household", () => ({
   }),
 }));
 
+vi.mock("../api/version", () => ({
+  fetchServerVersion: vi.fn().mockResolvedValue({ version: "dev", commit: null, built: null }),
+}));
+
 vi.mock("../auth/AuthContext", () => ({
   useAuth: () => ({ user: { household: { id: 1, name: "The Peeters household" } } }),
 }));

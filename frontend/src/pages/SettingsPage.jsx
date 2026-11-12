@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { downloadBackup, readBackupSummary, restoreBackup } from "../api/backup";
 import { useAuth } from "../auth/AuthContext";
+import { AboutSection } from "../components/AboutSection";
 import { AiSection } from "../components/AiSection";
 import { BankConnections } from "../components/BankConnections";
 import { HouseholdSection } from "../components/HouseholdSection";
@@ -115,6 +116,8 @@ export function SettingsPage() {
           </SettingRow>
         </div>
       </Panel>
+
+      <AboutSection />
 
       <Dialog open={picked !== null} onOpenChange={(open) => !open && !restoring && setPicked(null)}>
         <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-md">
