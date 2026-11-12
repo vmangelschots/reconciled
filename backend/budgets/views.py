@@ -6,9 +6,11 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from reports.spending import month_spending
+from transactions.loans import sync_loans
 
 from . import utils
 from .attention import attention_bills, attention_categories, attention_yearly
+from .loan_categories import active_loans, loan_categories
 from .models import Bill, BudgetSettings, Category, CategoryLimit, YearlyBudget
 from .serializers import CategorySerializer
 from .summary import budget_rows, budget_totals, uncategorized_spent, yearly_spent_cents
@@ -16,6 +18,18 @@ from .yearly import yearly_rows
 from .utils import parse_due, parse_month
 
 YEARLY_KINDS = {Category.BudgetKind.YEARLY, Category.BudgetKind.TARGET}
+
+# A loan's payment category takes its budget from the loans - see
+# openspec/specs/bill-budgets.
+LOAN_SET = "Its loans set this budget. Change it on the loan."
+
+
+def loans_by_category():
+    """{category id: [{account_id, name}]} for loans on active accounts."""
+    result = {}
+    for loan in active_loans().exclude(payment_category=None).select_related("account").order_by("account__name"):
+        result.setdefault(loan.payment_category_id, []).append({"account_id": loan.account_id, "name": loan.account.name})
+    return result
 
 
 class CategoryViewSet(viewsets.ModelViewSet):
@@ -27,6 +41,9 @@ class CategoryViewSet(viewsets.ModelViewSet):
             .prefetch_related("yearly_budgets", "limits", "bills")
             .annotate(transaction_count=Count("transactions"))
         )
+
+    def get_serializer_context(self):
+        return {**super().get_serializer_context(), "loans": loans_by_category()}
 
     def destroy(self, request, *args, **kwargs):
         category = self.get_object()
@@ -63,6 +80,8 @@ class CategoryViewSet(viewsets.ModelViewSet):
         category = self.get_object()
         if category.is_tab_group or category.is_tab:
             return Response({"detail": "Tabs aren't budgeted, so they take no limit."}, status=400)
+        if category.id in loan_categories():
+            return Response({"detail": LOAN_SET}, status=400)
         if category.budget_kind == Category.BudgetKind.BILLS:
             return Response({"detail": "This category has bills, so it takes no monthly limit."}, status=400)
         if category.budget_kind != Category.BudgetKind.MONTHLY:
@@ -96,6 +115,8 @@ class CategoryViewSet(viewsets.ModelViewSet):
         category = self.get_object()
         if category.is_tab_group or category.is_tab:
             return Response({"detail": "Tabs aren't budgeted, so they take no budget."}, status=400)
+        if category.id in loan_categories():
+            return Response({"detail": LOAN_SET}, status=400)
         kind = request.data.get("kind")
         if kind not in Category.BudgetKind.values:
             return Response({"kind": "Must be monthly, yearly, target or bills."}, status=400)
@@ -138,7 +159,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
             category.budget_kind = kind
             category.save(update_fields=["budget_kind", "updated_at"])
 
-        return Response(CategorySerializer(self.get_queryset().get(pk=category.pk)).data)
+        return Response(CategorySerializer(self.get_queryset().get(pk=category.pk), context=self.get_serializer_context()).data)
 
     @action(detail=True, methods=["put"], url_path="bills")
     def set_bills(self, request, pk=None):
@@ -147,6 +168,8 @@ class CategoryViewSet(viewsets.ModelViewSet):
         month it counts from; a new line counts from the current month;
         bills left out are deleted - see openspec/specs/bill-budgets."""
         category = self.get_object()
+        if category.id in loan_categories():
+            return Response({"detail": LOAN_SET}, status=400)
         if category.budget_kind != Category.BudgetKind.BILLS:
             return Response({"detail": "Only a Bills category takes bills."}, status=400)
         lines = request.data.get("bills")
@@ -166,7 +189,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
                     Bill.objects.create(category=category, from_month=this_month, **values)
                 else:
                     Bill.objects.filter(id=line["id"]).update(**values)
-        return Response(CategorySerializer(self.get_queryset().get(pk=category.pk)).data)
+        return Response(CategorySerializer(self.get_queryset().get(pk=category.pk), context=self.get_serializer_context()).data)
 
     @staticmethod
     def _clean_bills(category, lines):
@@ -202,6 +225,9 @@ class BudgetSummaryView(APIView):
         except ValueError:
             return Response({"detail": "month must be in YYYY-MM format."}, status=400)
         today = utils.today()
+        # Loan bills are paid when their installment is matched, so bring
+        # the matches up to date first - see openspec/specs/loan-schedules.
+        sync_loans(today)
         current = period_start == today.replace(day=1)
         days_in_month = (utils.month_range(period_start) - period_start).days
         pace = today.day / days_in_month if current else None

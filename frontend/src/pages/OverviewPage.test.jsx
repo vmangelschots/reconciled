@@ -503,6 +503,7 @@ describe("Needs attention", () => {
     expect(links[1]).toHaveTextContent(`Streaming · due ${formatDayMonth("2026-10-16")} · ${formatMoneyWhole(1099)}`);
     expect(links[2]).toHaveAttribute("href", "/transactions/4/schedule?installment=23");
     expect(links[2]).toHaveTextContent(`Installment 23 of 300 · ${formatMoney(94422)} from Crelan`);
+    expect(within(links[2]).getByText(`Mortgage: payment of ${formatDayMonth("2026-10-02")} not seen`)).toHaveClass("text-critical");
     vi.useRealTimers();
   });
 

@@ -59,7 +59,8 @@ def attention_bills(rows):
         for row in rows
         if row["kind"] == Category.BudgetKind.BILLS
         for bill in row["bills"]
-        if bill["state"] == "missed"
+        # A missed loan bill is the loan's own missed payment line.
+        if bill["state"] == "missed" and bill["source"] != "loan"
     ]
     items.sort(key=lambda i: (i["due_date"], i["name"]))
     return items

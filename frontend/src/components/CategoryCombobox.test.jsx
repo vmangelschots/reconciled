@@ -619,4 +619,14 @@ describe("CategoryCombobox tree", () => {
     // Its parent isn't in the list, so there is nothing to nest under.
     expect(screen.getByRole("option", { name: "Lunch" })).not.toHaveClass("border-l");
   });
+
+  it("marks a loan category and names its loans", async () => {
+    const loans = [{ account_id: 4, name: "House A" }, { account_id: 5, name: "House B" }];
+    render(<CategoryCombobox categories={[...CATEGORIES, { id: 9, name: "Mortgage", parent_id: null, loans }]} value={null} onSelect={vi.fn()} />);
+    await open();
+    const marks = screen.getAllByTestId("loan-category");
+    expect(marks).toHaveLength(1);
+    expect(screen.getByRole("option", { name: /Mortgage/ })).toContainElement(marks[0]);
+    expect(marks[0]).toHaveAttribute("title", "Budget set by loans: House A, House B");
+  });
 });

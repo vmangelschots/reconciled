@@ -9,7 +9,7 @@ import * as accountsApi from "../api/accounts";
 import * as categoriesApi from "../api/categories";
 import * as loansApi from "../api/loans";
 import { formatShortDate } from "../lib/dates";
-import { formatMoney } from "../lib/money";
+import { formatMoney, formatMoneyWhole } from "../lib/money";
 
 // The loan schedule page - see the loan-schedules spec.
 
@@ -152,6 +152,20 @@ describe("Setting up a loan", () => {
     renderPage();
     expect(await screen.findByText("No repayment schedule yet")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Set up schedule" })).toBeInTheDocument();
+  });
+
+  it("warns when the payment category's budget will be replaced", async () => {
+    const user = userEvent.setup();
+    categoriesApi.listCategories.mockResolvedValue([
+      { ...HOUSING, budget_kind: "monthly", monthly_limits: { default_cents: 140000, override_count: 0 }, loans: [] },
+    ]);
+    renderPage();
+    await user.click(await screen.findByRole("button", { name: "Payment category" }));
+    await user.click(screen.getByRole("option", { name: "Mortgage" }));
+    const warning = await screen.findByText(
+      `Mortgage's ${formatMoneyWhole(140000)} monthly budget will be replaced by this loan's payment.`,
+    );
+    expect(warning).toHaveClass("text-warning");
   });
 
   it("checks terms that match the bank before saving, then saves them", async () => {
@@ -316,7 +330,7 @@ describe("The schedule table", () => {
     renderPage();
     await screen.findByText("Repayment schedule");
     const missed = within(row(23)).getByText("Missed");
-    expect(missed.closest(".text-warning")).not.toBeNull();
+    expect(missed.closest(".text-critical")).not.toBeNull();
 
     await user.click(within(row(23)).getByRole("button", { name: "Link payment" }));
     await user.click(await within(row(23)).findByRole("button", { name: /BNP HYPOTHEEK/ }));
