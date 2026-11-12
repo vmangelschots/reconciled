@@ -162,7 +162,7 @@ function pressingBill(bills) {
   return next ? `${next.name} due ${formatDayMonth(next.due_date)}` : null;
 }
 
-function billsRow(row) {
+function billsRow(row, through) {
   const bills = row.bills;
   const over = row.over_limit;
   return {
@@ -175,6 +175,7 @@ function billsRow(row) {
     budgetCents: row.limit_cents,
     bills: bills.map((b) => ({ id: b.id, name: b.name, amountCents: b.amount_cents, state: b.state })),
     billLines: bills,
+    through,
     figure: over ? `${whole(row.spent_cents - row.limit_cents)} over` : row.unpaid_cents > 0 ? `${whole(row.unpaid_cents)} to pay` : "Paid",
     critical: over,
     caption: joined(`${row.paid_count} of ${bills.length} paid`, pressingBill(bills), coverage(row, row.limit_cents)),
@@ -238,7 +239,7 @@ export function budgetList(summary, categories) {
   const yearly = summary.yearly;
   const all = [
     ...summary.categories.map((row) =>
-      row.kind === "bills" && row.limit_cents != null ? billsRow(row) : monthlyRow(row, summary, byId),
+      row.kind === "bills" && row.limit_cents != null ? billsRow(row, yearly.through) : monthlyRow(row, summary, byId),
     ),
     ...yearly.categories.map((row) =>
       row.kind === "target" ? targetRow(row, yearly.through) : yearlyRow(row, yearly.year),

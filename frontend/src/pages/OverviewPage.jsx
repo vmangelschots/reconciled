@@ -38,7 +38,7 @@ import { useReport } from "../hooks/useReport";
 import { cn } from "../lib/cn";
 import { formatShortDate } from "../lib/dates";
 import { freshness, plural, staleImports } from "../lib/importFreshness";
-import { budgetExtras, categoryWarning, perDayCents, yearlyWarning } from "../lib/budgetOverview";
+import { billWarning, budgetExtras, categoryWarning, perDayCents, yearlyWarning } from "../lib/budgetOverview";
 import { formatMoney, formatMoneyWhole } from "../lib/money";
 import { currentMonth, monthLabel, monthName } from "../lib/months";
 import { formatDayMonth } from "../lib/yearlyBudgets";
@@ -132,7 +132,8 @@ function BudgetTile({ budget }) {
   }
 
   const left = budget.limit_cents - budget.spent_cents;
-  const perDay = perDayCents(left, budget.days_left);
+  // Bills not paid yet are spoken for, so they don't count as left per day.
+  const perDay = perDayCents(left - (budget.bills_unpaid_cents ?? 0), budget.days_left);
   return (
     <Stat
       label="Budget"
@@ -149,7 +150,7 @@ function BudgetTile({ budget }) {
         label="Budget spent"
         value={budget.spent_cents}
         max={budget.limit_cents}
-        marker={budget.pace}
+        marker={budget.marker}
       />
       <span className={cn("text-sm", left < 0 ? "text-critical" : "text-ink-secondary")}>
         {left < 0 ? `${whole(-left)} over` : `${whole(left)} left`}
@@ -247,6 +248,7 @@ function attentionItems(data, month, isCurrent) {
     });
   }
   for (const y of attention.yearly ?? []) items.push(yearlyItem(y, month));
+  for (const b of attention.bills ?? []) items.push(billItem(b, month));
   for (const loan of attention.missed_loans ?? []) items.push(missedLoanItem(loan));
   if (attention.bank_sync_stopped) items.push(syncStoppedItem());
   for (const bank of attention.reconnect ?? []) items.push(reconnectItem(bank));
@@ -299,6 +301,18 @@ function missedLoanItem(loan) {
 
 // A yearly budget or target that needs attention - see specs/overview,
 // "Yearly warnings".
+function billItem(b, month) {
+  const { primary, secondary } = billWarning(b);
+  return {
+    key: `bill-${b.bill_id}`,
+    to: `/budgets?month=${month}`,
+    icon: <AlertTriangle className="h-4 w-4 text-critical" />,
+    primary,
+    secondary,
+    tone: "text-critical",
+  };
+}
+
 function yearlyItem(y, month) {
   const { primary, secondary, critical, upcoming } = yearlyWarning(y, month.slice(0, 4));
   return {

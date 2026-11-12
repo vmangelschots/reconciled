@@ -28,10 +28,10 @@
 
 ## 6. Frontend UI
 
-- [ ] 6.1 Add `components/BillBar.jsx` (segments sized by amount, fills from `BILL_TONE`, same track as `ProgressBar`) and render it in `BudgetRow` and the `BudgetSheet` header when `row.bills` is set; verify with a component test: segment widths follow amounts, missed segment uses the critical fill, no pace marker
-- [ ] 6.2 Add Bills to `BudgetEditor`'s kinds with the inline bill list (day, name, amount, remove, "+ Add bill", total, day hint), `droppedSentence` for both directions, and saving through `setCategoryBudget` + `setCategoryBills`; verify with tests: switching monthly→Bills shows the limit-removal dialog, adding Spotify saves the three bills with 40.97 total, Bills→monthly says "its 3 bills"
-- [ ] 6.3 List the month's bills with state chips in the Bills sheet (paid with date, "€2.00 over", in N days, not seen, missed, no chip when upcoming); verify with a `BudgetSheet.test.jsx` case for "The Streaming sheet" scenario
-- [ ] 6.4 Use `totals.marker` and `bills_unpaid_cents` for the Overview tile and the Budgets headline (marker and per-day), and show `attention.bills` in the Overview's Needs attention (after yearly, before missed loans) and in Needs a look; verify with `OverviewPage`/`BudgetsPage` tests for the order and the "€14 a day" per-day figure; then run `npm test`, `npm run lint`, `npm run build`
+- [x] 6.1 Add `components/BillBar.jsx` (segments sized by amount, fills from `BILL_TONE`, same track as `ProgressBar`) and render it in `BudgetRow` and the `BudgetSheet` header when `row.bills` is set; verify with a component test: segment widths follow amounts, missed segment uses the critical fill, no pace marker
+- [x] 6.2 Add Bills to `BudgetEditor`'s kinds with the inline bill list (day, name, amount, remove, "+ Add bill", total, day hint), `droppedSentence` for both directions, and saving through `setCategoryBudget` + `setCategoryBills`; verify with tests: switching monthly→Bills shows the limit-removal dialog, adding Spotify saves the three bills with 40.97 total, Bills→monthly says "its 3 bills"
+- [x] 6.3 List the month's bills with state chips in the Bills sheet (paid with date, "€2.00 over", in N days, not seen, missed, no chip when upcoming); verify with a `BudgetSheet.test.jsx` case for "The Streaming sheet" scenario
+- [x] 6.4 Use `totals.marker` and `bills_unpaid_cents` for the Overview tile and the Budgets headline (marker and per-day), and show `attention.bills` in the Overview's Needs attention (after yearly, before missed loans) and in Needs a look; verify with `OverviewPage`/`BudgetsPage` tests for the order and the "€14 a day" per-day figure; then run `npm test`, `npm run lint`, `npm run build`
 
 ## 7. Integration check
 

@@ -20,7 +20,7 @@ vi.mock("../api/budgets", async () => {
 
 vi.mock("../api/categories", async () => {
   const actual = await vi.importActual("../api/categories");
-  return { ...actual, listCategories: vi.fn(), setCategoryLimit: vi.fn(), setCategoryBudget: vi.fn() };
+  return { ...actual, listCategories: vi.fn(), setCategoryLimit: vi.fn(), setCategoryBudget: vi.fn(), setCategoryBills: vi.fn() };
 });
 
 const YEARLY_CATEGORIES = [
@@ -135,6 +135,7 @@ beforeEach(() => {
   budgetsApi.setBudgetStartMonth.mockResolvedValue({});
   categoriesApi.setCategoryBudget.mockResolvedValue({});
   categoriesApi.setCategoryLimit.mockResolvedValue({});
+  categoriesApi.setCategoryBills.mockResolvedValue({});
   reportsApi.getSpendingCell.mockResolvedValue(CELL);
 });
 afterEach(() => vi.useRealTimers());
@@ -322,4 +323,108 @@ describe("BudgetSheet", () => {
     );
   });
 
+});
+
+
+const STREAMING = {
+  id: 7, name: "Streaming", parent: null, budget_kind: "bills",
+  monthly_limits: { default_cents: null, override_count: 0 }, yearly: null, yearly_history: [],
+  bills: [
+    { id: 71, name: "Netflix", day: 5, amount_cents: 1799, from_month: "2026-09" },
+    { id: 72, name: "Disney+", day: 8, amount_cents: 1199, from_month: "2026-09" },
+  ],
+};
+
+function bill(id, name, day, cents, state, extra = {}) {
+  return {
+    id, name, day, due_date: `2026-10-${String(day).padStart(2, "0")}`, amount_cents: cents, state,
+    paid_on: null, paid_cents: null, over_cents: null, ...extra,
+  };
+}
+
+const STREAMING_ROW = {
+  ...GROCERIES_ROW, category_id: 7, category_name: "Streaming", kind: "bills", limit_cents: 4097, spent_cents: 2998,
+  remaining_cents: 1099, paid_count: 2, due_to_date_cents: 2998, unpaid_cents: 1099,
+  bills: [
+    bill(71, "Netflix", 5, 1799, "paid", { paid_on: "2026-10-05", paid_cents: 1799 }),
+    bill(72, "Disney+", 8, 1199, "paid", { paid_on: "2026-10-09", paid_cents: 1199 }),
+    bill(73, "Spotify", 26, 1099, "due_soon"),
+  ],
+};
+
+describe("Bills in the sheet", () => {
+  beforeEach(() => {
+    categoriesApi.listCategories.mockResolvedValue([...YEARLY_CATEGORIES, { ...STREAMING, bills: [...STREAMING.bills, { id: 73, name: "Spotify", day: 26, amount_cents: 1099, from_month: "2026-09" }] }]);
+    budgetsApi.getBudgetSummary.mockResolvedValue(summary({}, { categories: [GROCERIES_ROW, TRANSPORT_ROW, STREAMING_ROW] }));
+  });
+
+  it("lists each bill with its state", async () => {
+    renderPage();
+    await openRow("Streaming");
+    const list = await screen.findByRole("list", { name: "This month's bills" });
+    const lines = within(list).getAllByRole("listitem").map((li) => li.textContent);
+    expect(lines[0]).toContain("Netflix");
+    expect(lines[0]).toContain(formatMoney(1799));
+    expect(lines[0]).toMatch(/Paid/);
+    expect(lines[1]).toMatch(/Disney\+.*Paid/);
+    expect(lines[2]).toMatch(/Spotify.*In 2 days/);
+  });
+
+  it("adds a bill and saves the list", async () => {
+    renderPage();
+    const form = await openEditor("Streaming");
+    await userEvent.click(within(form).getByRole("button", { name: "Add bill" }));
+    const days = within(form).getAllByLabelText("Day");
+    const names = within(form).getAllByLabelText("Name");
+    const amounts = within(form).getAllByLabelText("Amount");
+    expect(days).toHaveLength(4);
+    await userEvent.type(days[3], "21");
+    await userEvent.type(names[3], "Apple TV");
+    await userEvent.type(amounts[3], "9.99");
+    expect(form).toHaveTextContent(`${formatMoney(5096)} a month`);
+    await userEvent.click(within(form).getByRole("button", { name: "Save" }));
+    expect(categoriesApi.setCategoryBudget).not.toHaveBeenCalled();
+    expect(categoriesApi.setCategoryBills).toHaveBeenCalledWith(7, [
+      { id: 71, name: "Netflix", day: 5, amount_cents: 1799 },
+      { id: 72, name: "Disney+", day: 8, amount_cents: 1199 },
+      { id: 73, name: "Spotify", day: 26, amount_cents: 1099 },
+      { name: "Apple TV", day: 21, amount_cents: 999 },
+    ]);
+  });
+
+  it("asks before switching a monthly category to bills, then saves its bills", async () => {
+    renderPage();
+    const form = await openEditor("Groceries");
+    await userEvent.click(within(form).getByRole("button", { name: "Bills" }));
+    await userEvent.type(within(form).getByLabelText("Day"), "1");
+    await userEvent.type(within(form).getByLabelText("Name"), "Weekly box");
+    await userEvent.type(within(form).getByLabelText("Amount"), "60");
+    await userEvent.click(within(form).getByRole("button", { name: "Save" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent(
+      `Switching Groceries to bills removes the ${formatMoney(10000)} monthly limit and 1 month override.`,
+    );
+    await userEvent.click(within(dialog).getByRole("button", { name: "Switch to bills" }));
+    expect(categoriesApi.setCategoryBudget).toHaveBeenCalledWith(1, { kind: "bills" });
+    expect(categoriesApi.setCategoryBills).toHaveBeenCalledWith(1, [{ name: "Weekly box", day: 1, amount_cents: 6000 }]);
+  });
+
+  it("says how many bills switching away removes", async () => {
+    renderPage();
+    const form = await openEditor("Streaming");
+    await userEvent.click(within(form).getByRole("button", { name: "Monthly" }));
+    await setAmount(form, "45");
+    await userEvent.click(within(form).getByRole("button", { name: "Save" }));
+    expect(await screen.findByRole("dialog")).toHaveTextContent("Switching Streaming to monthly removes its 3 bills.");
+  });
+
+  it("refuses a bill without a name", async () => {
+    renderPage();
+    const form = await openEditor("Streaming");
+    await userEvent.clear(within(form).getAllByLabelText("Name")[0]);
+    await userEvent.click(within(form).getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Give each bill a name.")).toBeInTheDocument();
+    expect(categoriesApi.setCategoryBills).not.toHaveBeenCalled();
+  });
 });

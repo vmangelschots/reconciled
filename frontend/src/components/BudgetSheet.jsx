@@ -1,12 +1,49 @@
+import { AlertTriangle, CalendarClock, Check } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useSpendingCell } from "../hooks/useSpendingCell";
+import { BILL_TONE, billLabel } from "../lib/budgetOverview";
 import { cn } from "../lib/cn";
+import { formatMoney } from "../lib/money";
 import { monthLabel } from "../lib/months";
 import { BudgetEditor } from "./BudgetEditor";
 import { SpendingRows } from "./SpendingRows";
 import { DialogTitle } from "./ui/Dialog";
+import { BillBar } from "./BillBar";
 import { ProgressBar } from "./ui/ProgressBar";
 import { Sheet } from "./ui/Sheet";
+import { StatusBadge } from "./ui/StatusBadge";
+
+const CHIP_ICON = {
+  paid: <Check className="h-3 w-3" aria-hidden="true" />,
+  due_soon: <CalendarClock className="h-3 w-3" aria-hidden="true" />,
+  missed: <AlertTriangle className="h-3 w-3" aria-hidden="true" />,
+};
+
+// The month's bills, each with its state - see specs/bill-budgets.
+function BillList({ bills, through }) {
+  return (
+    <ul className="flex flex-col border-b border-border py-2" aria-label="This month's bills">
+      {bills.map((bill) => {
+        const label = billLabel(bill, through);
+        const tone = BILL_TONE[bill.state];
+        return (
+          <li key={bill.id} className="flex items-center gap-3 px-5 py-1.5">
+            <span className="num w-6 shrink-0 text-right text-sm text-ink-muted">{bill.day}</span>
+            <span className="min-w-0 flex-1 truncate text-sm font-medium text-ink-primary">{bill.name}</span>
+            <span className="num text-sm text-ink-primary">{formatMoney(bill.amount_cents)}</span>
+            <span className="flex min-w-20 shrink-0 justify-end">
+              {label && (
+                <StatusBadge tone={tone === "reminder" ? "neutral" : tone} icon={CHIP_ICON[bill.state]}>
+                  {label}
+                </StatusBadge>
+              )}
+            </span>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
 
 function SheetBody({ row, category, month, startMonth, categories, onSaved, onClose, onChanged }) {
   const spending = useSpendingCell({ category: row.id, month }, onChanged);
@@ -18,7 +55,9 @@ function SheetBody({ row, category, month, startMonth, categories, onSaved, onCl
         <p className={cn("num text-sm font-medium", row.critical ? "text-critical" : "text-ink-primary")}>{row.figure}</p>
         {row.caption && <p className="text-xs text-ink-muted">{row.caption}</p>}
         {row.bar && <ProgressBar label={`${row.name} spent`} {...row.bar} />}
+        {row.bills && <BillBar label={`${row.name} bills`} bills={row.bills} />}
       </div>
+      {row.billLines?.length > 0 && <BillList bills={row.billLines} through={row.through} />}
       <div className="border-b border-border px-5 py-4">
         <BudgetEditor
           key={row.id}

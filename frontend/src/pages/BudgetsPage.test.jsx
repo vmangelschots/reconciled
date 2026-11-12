@@ -81,7 +81,7 @@ function summary(yearly = {}, extra = {}) {
     },
     totals: {
       has_limits: true, limit_cents: 10000, spent_cents: 5000, outside_cents: 3500,
-      yearly_spent_cents: 13000, uncategorized_cents: 4200,
+      yearly_spent_cents: 13000, uncategorized_cents: 4200, marker: 0.77, bills_unpaid_cents: 0,
     },
     pace: 0.77,
     days_left: 8,
@@ -153,6 +153,20 @@ describe("BudgetsPage headline", () => {
     ).toBeInTheDocument();
   });
 
+  it("lists a missed bill in Needs a look and counts it", async () => {
+    budgetsApi.getBudgetSummary.mockResolvedValue(
+      summary({}, {
+        attention: {
+          categories: [], yearly: [],
+          bills: [{ category_id: 1, category_name: "Groceries", parent_name: null, bill_id: 9, name: "Weekly box", due_date: "2026-10-03", amount_cents: 6000 }],
+        },
+      }),
+    );
+    renderPage();
+    expect(await screen.findByText("1 needs a look")).toBeInTheDocument();
+    expect(screen.getByText("Weekly box missed")).toHaveClass("text-critical");
+  });
+
   it("says when the month is on track, and leaves Needs a look out", async () => {
     renderPage();
     expect(await screen.findByText("On track")).toBeInTheDocument();
@@ -160,11 +174,14 @@ describe("BudgetsPage headline", () => {
   });
 
   it("has no per-day figure or marker in a past month", async () => {
-    budgetsApi.getBudgetSummary.mockResolvedValue(summary({ through: "2026-09-30" }, { pace: null, days_left: null }));
+    const past = summary({ through: "2026-09-30" }, { pace: null, days_left: null });
+    past.totals = { ...past.totals, marker: null, bills_unpaid_cents: null };
+    budgetsApi.getBudgetSummary.mockResolvedValue(past);
     renderPage("/budgets?month=2026-09");
 
     expect(await screen.findByText(`Finished ${whole(5000)} under`)).toBeInTheDocument();
     expect(screen.queryByText(/a day/)).toBeNull();
+    expect(within(screen.getByRole("progressbar", { name: "Budget spent" })).queryByTestId("progress-marker")).toBeNull();
   });
 
   it("asks to set a budget when there are no limits", async () => {
