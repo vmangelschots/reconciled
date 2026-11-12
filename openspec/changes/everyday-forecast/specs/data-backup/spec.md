@@ -76,6 +76,7 @@ SHALL get new ids.
 
 #### Scenario: A backup with recurring transactions
 - **WHEN** a backup made before expected items holds a monthly recurring
-  "Salary" of +4,500.00 starting 25 March, and a weekly one
+  "Salary" of +4,500.00 starting 25 March in category "Salary", a weekly
+  one, and a monthly one without a category
 - **THEN** it restores with "Salary" as an expected item in, 4,500.00 on
-  the 25th, and without the weekly one
+  the 25th, recognised by "Salary", and without the other two

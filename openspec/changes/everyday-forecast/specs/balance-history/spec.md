@@ -34,8 +34,8 @@ month SHALL show neither and SHALL be captioned "To 30 Sep".
 ### Requirement: Lowest projected point
 The chart SHALL label the projection's lowest point ("Low €312 · 27 Nov")
 only when it falls after today and below today's balance. When income is
-expected, a projection that goes below zero SHALL show that part and the
-label in the critical colour.
+expected (see the `forecasting` capability), a projection that goes below
+zero SHALL show that part and the label in the critical colour.
 
 #### Scenario: A low ahead
 - **WHEN** the balance is 1,840.00 and falls to 312.00 on 27 November
@@ -52,29 +52,31 @@ label in the critical colour.
 ## ADDED Requirements
 
 ### Requirement: Projection with nothing expected
-When nothing is expected in the 30 days after today, the line SHALL stop
-at today and the chart SHALL link to Forecast with "Add expected income".
+When nothing is forecast in the 30 days after today, the line SHALL stop
+at today and the chart SHALL offer "Add expected income", opening Forecast
+over 30 days.
 
 #### Scenario: Nothing expected
-- **WHEN** there are no bills, no loan installments from an Everyday
-  account and no expected items in the next 30 days
-- **THEN** there is no dashed line, and an "Add expected income" link opens
-  Forecast
+- **WHEN** there are no bills, budgets, loan installments from an Everyday
+  account or expected items in the next 30 days
+- **THEN** there is no dashed line, and an "Add expected income" link
+  opens /forecast?days=30
 
 ### Requirement: Projection without expected income
-When the projection is shown and no expected item goes in, the chart SHALL
-say "No income expected" as a link to Forecast. The part below zero and
-the low label SHALL NOT use the critical colour.
+When the projection is shown and no income is expected, the chart SHALL
+say "No income expected" as a muted link to Forecast over 30 days, not in
+the warning colour. The part below zero and the low label SHALL NOT use
+the critical colour.
 
 #### Scenario: Bills but no salary
 - **WHEN** bills are due in the next 30 days, no income is expected, and
   the projection falls below zero
-- **THEN** the chart says "No income expected", linking to Forecast, and
-  shows the low point without the critical colour
+- **THEN** the chart says "No income expected", linking to
+  /forecast?days=30, and shows the low point without the critical colour
 
 ## REMOVED Requirements
 
 ### Requirement: Projection without recurring transactions
-**Reason**: Recurring transactions are replaced by expected items. Bills
-and installments now come in by themselves.
+**Reason**: Recurring transactions are replaced by expected items. Bills,
+budgets and installments now come in by themselves.
 **Migration**: See "Projection with nothing expected".
