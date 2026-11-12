@@ -21,7 +21,7 @@
 
 ## 4. Integration check
 
-- [ ] 4.1 Build both images locally with the same `APP_VERSION`, run them with docker compose or by hand, and confirm: both logs show the version, Settings → About shows matching versions, and rebuilding only the frontend with a different version shows the mismatch warning
+- [x] 4.1 Build both images locally with the same `APP_VERSION`, run them with docker compose or by hand, and confirm: both logs show the version, Settings → About shows matching versions, and rebuilding only the frontend with a different version shows the mismatch warning
 
 ## Workflow follow-up
 
