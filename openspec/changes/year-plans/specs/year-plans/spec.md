@@ -40,16 +40,24 @@ real budget changes only through the month view or by applying a draft.
 - **THEN** the sheet shows its year figures without an editor, and offers
   "Change in a new draft" and "Open in month view"
 
-### Requirement: Change in a new draft
-"Change in a new draft" SHALL create a draft of that year copied from
-Current, with the default name and from month, and open the same category
-in it, ready to edit.
+### Requirement: Change in a draft
+When the year has drafts, the sheet SHALL offer "Change in <draft>" for
+the most recently changed draft first, opening the same category there,
+and "Change in a new draft" second. "Change in a new draft" SHALL create a
+draft copied from Current, with the default name and from month, and open
+the same category in it, ready to edit.
+
+#### Scenario: Lean exists
+- **WHEN** 2027 has draft "Lean" and the user opens "Groceries" in Current
+  2027
+- **THEN** the sheet offers "Change in Lean" first, which opens "Groceries"
+  in "Lean", and "Change in a new draft" second
 
 #### Scenario: From Current to a draft
 - **WHEN** the user chooses "Change in a new draft" on "Groceries" in
   Current 2027
-- **THEN** draft "2027 plan" is created from January and its "Groceries"
-  sheet opens with the editor
+- **THEN**, with no drafts yet, draft "2027 plan" is created from January
+  and its "Groceries" sheet opens with the editor
 
 ### Requirement: Drafts
 The user SHALL be able to create any number of drafts of the current or
@@ -320,27 +328,43 @@ the year doesn't look better than it is.
 - **THEN** a "Not in the plan" row shows 3,100.00 actual
 
 ### Requirement: Where the current year is heading
-For the current year, the headline SHALL also show where the year is
-heading: income and spending so far plus the plan for the remaining months,
-and left to save at that pace. An income line without a category SHALL
-count its plan. Rows SHALL show the months so far and still to come,
-labelled "So far" and "Still to come".
+For the current year, the headline SHALL show where spending is heading:
+spending so far plus the plan for the remaining months, and with income,
+left to save at that pace. An income line without a category SHALL count
+its plan. Each row's caption SHALL say what was spent so far and what is
+still to come.
 
 #### Scenario: Heading for in June
 - **WHEN** on 14 June the plan leaves 3,700.00 to save but spending ran
   1,200.00 over the plan so far
 - **THEN** the headline shows "Heading for €2,500 left to save"
 
+#### Scenario: Heading for without income
+- **WHEN** the current year's plan has no income lines
+- **THEN** the headline still shows "Heading for €X spent"
+
+#### Scenario: A row's split
+- **WHEN** on 14 June "Groceries" spent 3,200.00 and plans 3,600.00 for the
+  rest of the year
+- **THEN** its caption says "€3,200 so far · €3,600 still to come"
+
 ### Requirement: Changes against Current
-In a draft, each row that differs from Current SHALL be marked and show
-Current's value struck through above the draft's, and a Change column
-with the difference, blank when there is none. The headline SHALL show
-left to save's difference with Current.
+In a draft, each row that differs from Current SHALL be marked, show
+Current's year figure struck through beside the draft's when the two
+differ, and a Change column with the difference, blank when there is none.
+A row whose kind differs SHALL say so in its caption in the warning
+colour. The headline SHALL show left to save's difference with Current.
 
 #### Scenario: Groceries lowered
 - **WHEN** draft "Lean" plans "Groceries" at 7,200.00 and Current 7,800.00
-- **THEN** the row shows 7,800 struck through above 7,200, and -600 under
+- **THEN** the row shows 7,800 struck through beside 7,200, and -600 under
   Change
+
+#### Scenario: Same total, other kind
+- **WHEN** draft "Lean" plans "Holidays" monthly 250.00 and Current has it
+  yearly 3,000.00
+- **THEN** the row shows 3,000 without a struck figure, a blank Change, and
+  "yearly → monthly" in its caption
 
 #### Scenario: An unchanged row
 - **WHEN** "Utilities" is the same in the draft and Current
@@ -363,7 +387,9 @@ offer to use the budget's new value instead.
 
 ### Requirement: Apply preview
 Apply SHALL open a dialog with the from month and every change to the real
-budget from that month on. Kind switches SHALL come first, in the warning
+budget from that month on, saying earlier months keep their budget except
+where a kind switch changes them. Picking a from month there SHALL save it
+to the draft. Kind switches SHALL come first, in the warning
 colour, saying what they remove, before amounts, bills added or ended,
 month exceptions set or replaced, budgets given or removed, income lines,
 and rows changed since the copy. Nothing changes until confirmed.
@@ -378,6 +404,10 @@ and rows changed since the copy. Nothing changes until confirmed.
 #### Scenario: Cancel
 - **WHEN** the user cancels the dialog
 - **THEN** nothing changes
+
+#### Scenario: Changing the month in the dialog
+- **WHEN** in the dialog the user picks March for draft "Rest of 2027"
+- **THEN** the draft's from month is March, and the draft bar says so
 
 #### Scenario: Nothing to apply
 - **WHEN** a draft matches the real budget from its from month and its
@@ -446,13 +476,15 @@ is under way, with how much its changed categories have spent so far.
 
 ### Requirement: Applied drafts are kept
 An applied draft SHALL be kept read-only, stamped with when it was applied
-and from which month, and listed under History. It SHALL be duplicated
-into a new draft, not edited.
+and from which month, and listed under History. While open, its bar SHALL
+name it with the stamp, and History SHALL show as selected. It SHALL be
+duplicated into a new draft, not edited.
 
 #### Scenario: The record
 - **WHEN** draft "Rest of 2027" was applied on 12 June 2027 from July
 - **THEN** History lists "Rest of 2027 - applied 12 Jun, from July", which
-  opens greyed and read-only, with Duplicate
+  opens greyed and read-only with the bar "Rest of 2027 · applied 12 Jun,
+  from July" and Duplicate
 
 ### Requirement: Drafts never feed other pages
 The Forecast, Overview, Needs attention, the month view and reports SHALL
@@ -464,9 +496,10 @@ use the real budget only. Drafts and income lines SHALL NOT change them.
 
 ### Requirement: Year plans on a phone
 On a phone, the chips SHALL scroll sideways, the draft bar SHALL sit above
-the tab bar with notifications above it, and each row SHALL show its name,
-its plan and one second figure: Change in a draft, Actual on Current and
-applied drafts.
+the tab bar on two lines, its name and that it's a draft over the from
+month and Apply, with notifications above it and the last row clear of
+it. Each row SHALL show its name, its plan and one second figure: Change
+in a draft, Actual on Current and applied drafts.
 
 #### Scenario: A draft on a phone
 - **WHEN** on a phone the user opens draft "Lean"

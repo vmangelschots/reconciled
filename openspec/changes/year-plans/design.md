@@ -223,7 +223,7 @@ risk for no shared behaviour.
   ```
   :root  --draft:#3b6fb6; --draft-tint:#eceff5; --draft-bar:#e2e8f3;
          --draft-ring:rgba(59,111,182,.28); --draft-ink:#2c5590;
-  .dark  --draft:#6b9be0; --draft-tint:#10131a; --draft-bar:#172131;
+  .dark  --draft:#6b9be0; --draft-tint:#141c2a; --draft-bar:#172131;
          --draft-ring:rgba(107,155,224,.30); --draft-ink:#9dbdeb;
   ```
   The page behind the panels is tinted; the panels stay `bg-surface` with
@@ -244,6 +244,13 @@ risk for no shared behaviour.
   in a `bg-surface-2` block like the sheet's "To review". The button reads
   "Apply from <Month>".
 - **Address:** `view=year&year=Y&plan=<id>`.
+- **After the built review** (task 6.1): the draft bar sits inside the
+  tinted area; the dark tint is `#141c2a` with a `ring-draft-ring` ring; a
+  draft's saves replace one toast rather than stacking; the from month has
+  one home, the draft, and the Apply dialog writes to it; the month grid
+  folds the months before the from month into one "real budget" line, with
+  any kept draft values marked "won't apply"; Current's struck figure sits
+  on the plan figure's line.
 
 ## Risks / Trade-offs
 

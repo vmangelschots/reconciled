@@ -38,8 +38,20 @@
 
 ## 6. Review and integration
 
-- [ ] 6.1 Have a UI Designer and a UX Architect review the Year view in the running app (`/run-reconciled`, desktop and phone, light and dark), tune the draft tokens if needed, and fold the agreed follow-ups into this task list with `/opsx:update` before doing them
-- [ ] 6.2 With `/run-reconciled`, in the demo household: plan 2027 from Current, make a draft that lowers Groceries, switches Holidays to yearly and adds a bill, check vs current and Actual, apply it, and check the month view of December 2026 is unchanged and January 2027 has the new budget; then make a mid-year draft from July for the current year and check that earlier months keep their limits, at desktop and phone width
+- [x] 6.1 Have a UI Designer and a UX Architect review the Year view in the running app (`/run-reconciled`, desktop and phone, light and dark), tune the draft tokens if needed, and fold the agreed follow-ups into this task list with `/opsx:update` before doing them
+
+
+## 7. Review follow-ups
+
+- [ ] 7.1 Backend: Apply's from month saved to the draft (PATCH before apply, or apply taking it), and "Change in a draft" opening a category in an existing draft (copying Current's budget for it when the draft holds none); verify with API tests for "Changing the month in the dialog" and "Lean exists"; then run `python manage.py test budgets`
+- [ ] 7.2 Rows and columns: Current's struck figure on the plan's line and only when it differs, the kind switch ("yearly → monthly") in the caption in the warning colour, the changed dot in the gutter, one-string captions, each row's "so far · still to come" caption in the current year, uppercase column headers, "Heading for €X spent" without income, no doubled headline wording, the share on its own line on a phone; verify with tests for "Groceries lowered", "Same total, other kind", "Heading for without income" and "A row's split"; then run `npm test`
+- [ ] 7.3 Draft surface: the bar inside the tinted area, the dark tint token, the two-line phone bar with the page padded clear of it, the applied record's bar naming it with History selected and only the panels dimmed, one replaced toast for a draft's saves, "Change in <draft>" / "Change in a new draft" in Current's sheet; verify with tests for "A draft on a phone", "The record", "Lean exists" and a draft's second save replacing the first toast; then run `npm test`, `npm run lint`
+- [ ] 7.4 Draft editor: months before the from month folded into one real-budget line with kept draft values marked "won't apply", the month grid without spinners, "Sep", stronger exception cells, the default shown solid, a Remove budget button, "Different amount in some months" as a draft-ink link; verify with tests for "From July to September" (the "won't apply" note) and "Back to the default"; then run `npm test`
+- [ ] 7.5 Dialogs and income: the Apply subtitle ("except where a kind switch below changes them"), space before the change list, the arrow, the from month written to the draft; the income dialog naming its plan and labelling its name field; no stray column on Current's income; the phone press colour inside the panel; verify with tests for "Changing the month in the dialog" and the income dialog's title; then run `npm test`, `npm run lint`, `npm run build`
+
+## 8. Integration check
+
+- [ ] 8.1 With `/run-reconciled`, in the demo household: plan 2027 from Current, make a draft that lowers Groceries, switches Holidays to yearly and adds a bill, check vs current and Actual, apply it, and check the month view of December 2026 is unchanged and January 2027 has the new budget; then make a mid-year draft from July for the current year and check that earlier months keep their limits, at desktop and phone width
 
 ## Workflow follow-up
 
