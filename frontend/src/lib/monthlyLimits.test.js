@@ -14,8 +14,8 @@ describe("defaultInEffect", () => {
     expect(defaultInEffect(category, "2028-01")).toBe(55000);
   });
 
-  it("uses the first default before it starts", () => {
-    expect(defaultInEffect(groceries([{ from_month: "2027-07", limit_cents: 55000 }]), "2027-03")).toBe(55000);
+  it("has none before the first default from a month", () => {
+    expect(defaultInEffect(groceries([{ from_month: "2027-07", limit_cents: 55000 }]), "2027-03")).toBeNull();
   });
 
   it("has none without defaults", () => {

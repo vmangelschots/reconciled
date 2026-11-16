@@ -49,7 +49,8 @@ categories API directly.
 Add a nullable `from_month` to `CategoryLimit`. Default rows (`month` null)
 may have a `from_month`; null means "from the start". A month uses its
 override, else the default with the largest `from_month <= month`, else the
-null-`from_month` default, else the earliest one. Constraints: one
+null-`from_month` default, else none: a default applied from a month
+doesn't reach back before it. Constraints: one
 `(category)` default with null `from_month`, and one `(category,
 from_month)` default otherwise (two partial unique constraints, the same
 NULL-distinct pattern the model already uses).

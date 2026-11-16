@@ -6,8 +6,9 @@
 A monthly category's default limit SHALL be able to change from a given
 month on, keeping the earlier default for the months before it. A month
 SHALL use its override, else the latest default from that month or
-before, else the earliest default. A default set without a month SHALL
-apply to every month until the next change.
+before. A default set without a month SHALL apply from the start, to every
+month until the next change; months before a category's first default
+from a month SHALL have no default.
 
 #### Scenario: A new default from July
 - **WHEN** "Groceries" has a default of 650.00 and gets 550.00 from July
@@ -15,8 +16,8 @@ apply to every month until the next change.
 - **THEN** June 2027 uses 650.00 and July 2027 and later use 550.00
 
 #### Scenario: Before the first default
-- **WHEN** "Groceries"'s only default starts in July 2027
-- **THEN** March 2027 uses it too
+- **WHEN** "Car fund"'s only default starts in July 2027
+- **THEN** March 2027 has no limit for "Car fund"
 
 #### Scenario: Overrides still win
 - **WHEN** "Groceries" has 550.00 from July and 800.00 for December only

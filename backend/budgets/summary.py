@@ -34,19 +34,16 @@ def spent_by_category(categories, start, end):
 def default_in_effect(defaults, month):
     """The default limit row that applies in `month`: the one with the latest
     from_month on or before it, else the one from the start (null
-    from_month), else the earliest - so a category's first default covers
-    every month before it. None without defaults. See openspec/specs/budgets,
-    "A default limit applies from a month on"."""
+    from_month), else None - a default applied from a month doesn't reach
+    back before it. See openspec/specs/budgets, "A default limit applies
+    from a month on"."""
     defaults = [d for d in defaults if d.month is None]
     if not defaults:
         return None
     started = [d for d in defaults if d.from_month is not None and d.from_month <= month]
     if started:
         return max(started, key=lambda d: d.from_month)
-    from_start = [d for d in defaults if d.from_month is None]
-    if from_start:
-        return from_start[0]
-    return min(defaults, key=lambda d: d.from_month)
+    return next((d for d in defaults if d.from_month is None), None)
 
 
 def monthly_limits(period_start, loan_lines=None):
@@ -65,9 +62,11 @@ def monthly_limits(period_start, loan_lines=None):
             by_category.setdefault(limit.category_id, []).append(limit)
         else:
             overrides[limit.category_id] = limit.limit_cents
-    defaults = {
-        category_id: default_in_effect(rows, period_start).limit_cents for category_id, rows in by_category.items()
-    }
+    defaults = {}
+    for category_id, rows in by_category.items():
+        row = default_in_effect(rows, period_start)
+        if row is not None:
+            defaults[category_id] = row.limit_cents
     bills = (
         Bill.objects.filter(
             category__in=budgeted_categories(), category__budget_kind=Category.BudgetKind.BILLS, from_month__lte=period_start

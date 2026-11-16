@@ -32,15 +32,11 @@ class DefaultInEffectTests(TestCase):
         self.assertEqual(limit(self.groceries, date(2028, 3, 1)), 55000)
 
     def test_before_the_first_default(self):
-        CategoryLimit.objects.create(category=self.groceries, from_month=date(2027, 7, 1), limit_cents=55000)
+        car_fund = Category.objects.create(name="Car fund")
+        CategoryLimit.objects.create(category=car_fund, from_month=date(2027, 7, 1), limit_cents=20000)
 
-        self.assertEqual(limit(self.groceries, date(2027, 3, 1)), 55000)
-
-    def test_the_earliest_default_covers_earlier_months(self):
-        CategoryLimit.objects.create(category=self.groceries, from_month=date(2027, 7, 1), limit_cents=55000)
-        CategoryLimit.objects.create(category=self.groceries, from_month=date(2027, 1, 1), limit_cents=60000)
-
-        self.assertEqual(limit(self.groceries, date(2026, 11, 1)), 60000)
+        self.assertIsNone(limit(car_fund, date(2027, 3, 1)))
+        self.assertEqual(limit(car_fund, date(2027, 7, 1)), 20000)
 
     def test_overrides_still_win(self):
         CategoryLimit.objects.create(category=self.groceries, limit_cents=65000)
