@@ -215,6 +215,7 @@ function BillsBody({ row, category, month, startMonth, spending, categories, onS
               category={category}
               month={month}
               limitCents={row.limitCents}
+              overridden={row.overridden}
               startMonth={startMonth}
               bills={manual}
               onSaved={onSaved}
@@ -281,6 +282,7 @@ function SheetBody({ row, category, month, startMonth, categories, onSaved, onCl
           category={category}
           month={month}
           limitCents={row.limitCents}
+          overridden={row.overridden}
           startMonth={startMonth}
           onSaved={onSaved}
           onCancel={onClose}

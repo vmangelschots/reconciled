@@ -1,10 +1,16 @@
-import { Landmark, Plus, X } from "lucide-react";
+import { Landmark, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import { Fragment, useState } from "react";
 import { Link } from "react-router-dom";
-import { setCategoryBills, setCategoryBudget, setCategoryLimit } from "../api/categories";
+import {
+  removeCategoryBudget,
+  removeCategoryLimit,
+  setCategoryBills,
+  setCategoryBudget,
+  setCategoryLimit,
+} from "../api/categories";
 import { cn } from "../lib/cn";
-import { formatMoney } from "../lib/money";
-import { currentMonth, monthLabel } from "../lib/months";
+import { formatMoney, formatMoneyWhole } from "../lib/money";
+import { currentMonth, monthLabel, monthName } from "../lib/months";
 import { formatShortMonth, historyValuesFor } from "../lib/yearlyBudgets";
 import { Button } from "./ui/Button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/Dialog";
@@ -40,29 +46,51 @@ function plural(n, one, many) {
   return `${n} ${n === 1 ? one : many}`;
 }
 
+// What a category's saved budget holds, as phrases ("the €400.00 monthly
+// limit", "1 month override"), for saying what switching kind or removing
+// the budget deletes.
+function budgetParts(category) {
+  const kind = category.budget_kind ?? "monthly";
+  if (kind === "monthly") {
+    const { default_cents: defaultCents, override_count: overrides = 0 } = category.monthly_limits ?? {};
+    return [
+      defaultCents != null && `the ${formatMoney(defaultCents)} monthly limit`,
+      overrides > 0 && plural(overrides, "month override", "month overrides"),
+    ].filter(Boolean);
+  }
+  if (kind === "bills") {
+    const count = category.bills?.length ?? 0;
+    return count > 0 ? [`its ${plural(count, "bill", "bills")}`] : [];
+  }
+  return category.yearly_history?.length ? ["its yearly amount and history"] : [];
+}
+
+// Whether there is a budget to remove: any kind but monthly, or a monthly
+// limit or override - see specs/budgets, "Removing a budget asks first".
+function hasBudget(category) {
+  return (category.budget_kind ?? "monthly") !== "monthly" || budgetParts(category).length > 0;
+}
+
 // What switching kind would remove, as a sentence, or null when nothing
 // would be removed - see specs/budgets, "Switching to or from monthly
 // drops the old amounts".
 function droppedSentence(category, kind) {
   const from = category.budget_kind ?? "monthly";
   if (from === kind) return null;
-  if (from === "monthly") {
-    const { default_cents: defaultCents, override_count: overrides = 0 } = category.monthly_limits ?? {};
-    const parts = [
-      defaultCents != null && `the ${formatMoney(defaultCents)} monthly limit`,
-      overrides > 0 && plural(overrides, "month override", "month overrides"),
-    ].filter(Boolean);
-    if (parts.length === 0) return null;
-    return `Switching ${category.name} to ${KIND_NAME[kind]} removes ${parts.join(" and ")}.`;
-  }
-  if (from === "bills") {
-    const count = category.bills?.length ?? 0;
-    return count > 0 ? `Switching ${category.name} to ${KIND_NAME[kind]} removes its ${plural(count, "bill", "bills")}.` : null;
-  }
-  if (!YEARLY_KINDS.has(kind) && category.yearly_history?.length) {
-    return `Switching ${category.name} to ${KIND_NAME[kind]} removes its yearly amount and history.`;
-  }
-  return null;
+  // Switching between the yearly kinds keeps the amount and history.
+  if (YEARLY_KINDS.has(from) && YEARLY_KINDS.has(kind)) return null;
+  const parts = budgetParts(category);
+  if (parts.length === 0) return null;
+  return `Switching ${category.name} to ${KIND_NAME[kind]} removes ${parts.join(" and ")}.`;
+}
+
+// What removing the budget deletes, from the saved category (not the form).
+function removalSentence(category) {
+  const parts = budgetParts(category);
+  const after = `${category.name} will have no budget, in this month and every other.`;
+  if (parts.length === 0) return after;
+  const what = parts.join(" and ");
+  return `${what[0].toUpperCase()}${what.slice(1)} will be removed. ${after}`;
 }
 
 let nextKey = 0;
@@ -182,7 +210,7 @@ export function BudgetEditor(props) {
 
 // `bills` are the viewed month's bills (from the summary), so a Bills
 // category is edited as that month sees it; changes apply from it on.
-function KindEditor({ category, month, limitCents, startMonth, bills, onSaved, onCancel }) {
+function KindEditor({ category, month, limitCents, overridden, startMonth, bills, onSaved, onCancel }) {
   const initialKind = category.budget_kind ?? "monthly";
   const [kind, setKind] = useState(initialKind);
   const [amount, setAmount] = useState(
@@ -193,6 +221,7 @@ function KindEditor({ category, month, limitCents, startMonth, bills, onSaved, o
   const [dueMonth, setDueMonth] = useState(category.yearly?.due?.slice(0, 2) ?? "");
   const [lines, setLines] = useState(() => (bills ?? category.bills ?? []).map(billLine));
   const [confirming, setConfirming] = useState(null);
+  const [removing, setRemoving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const toast = useToast();
 
@@ -253,6 +282,36 @@ function KindEditor({ category, month, limitCents, startMonth, bills, onSaved, o
     }
   }
 
+  async function remove(request, message, kindChanged) {
+    setSubmitting(true);
+    try {
+      await request();
+      onSaved(category.id, kindChanged, message);
+    } catch (e) {
+      toast.error(e.data?.detail ?? e.message);
+    } finally {
+      setSubmitting(false);
+      setRemoving(false);
+    }
+  }
+
+  function removeBudget() {
+    remove(() => removeCategoryBudget(category.id), `${category.name} has no budget now.`, initialKind !== "monthly");
+  }
+
+  // The viewed month's own limit goes; it falls back to the default.
+  const defaultCents = category.monthly_limits?.default_cents ?? null;
+  const showUseDefault = overridden && initialKind === "monthly" && kind === "monthly";
+  function useDefault() {
+    remove(
+      () => removeCategoryLimit(category.id, month),
+      defaultCents == null
+        ? `${category.name} has no limit in ${monthName(month)}.`
+        : `${category.name} is back to ${formatMoneyWhole(defaultCents)} for ${monthName(month)}.`,
+      false,
+    );
+  }
+
   function handleSubmit(event) {
     event.preventDefault();
     if (yearly && amount === "") {
@@ -301,6 +360,22 @@ function KindEditor({ category, month, limitCents, startMonth, bills, onSaved, o
             {kind === "monthly" ? "a month" : kind === "yearly" ? "a year" : null}
           </label>
         )}
+        {showUseDefault && (
+          <p className="-mt-2 flex items-center gap-1 text-xs text-ink-muted">
+            {monthName(month)} only ·
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="h-7 px-2 text-accent"
+              disabled={submitting}
+              onClick={useDefault}
+            >
+              <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+              {defaultCents == null ? `Remove ${monthName(month)}'s limit` : `Use default (${formatMoneyWhole(defaultCents)})`}
+            </Button>
+          </p>
+        )}
         {kind === "monthly" && (
           <label className="flex items-center gap-1.5 whitespace-nowrap text-sm text-ink-secondary">
             <input type="checkbox" checked={thisMonthOnly} onChange={(e) => setThisMonthOnly(e.target.checked)} />
@@ -342,17 +417,50 @@ function KindEditor({ category, month, limitCents, startMonth, bills, onSaved, o
           {pastValues && ` ${viewedYear} stays ${formatMoney(pastValues.amount_cents)}.`}
         </p>
       )}
-      <span className="flex justify-end gap-2">
-        <Button type="button" size="sm" variant="ghost" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button type="submit" size="sm" disabled={submitting}>
-          Save
-        </Button>
+      <span className="flex flex-wrap items-center justify-between gap-2">
+        {hasBudget(category) ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="text-ink-secondary hover:text-critical"
+            onClick={() => setRemoving(true)}
+          >
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
+            Remove budget
+          </Button>
+        ) : (
+          <span />
+        )}
+        <span className="flex gap-2">
+          <Button type="button" size="sm" variant="ghost" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button type="submit" size="sm" disabled={submitting}>
+            Save
+          </Button>
+        </span>
       </span>
 
+      <Dialog open={removing} onOpenChange={(open) => !open && setRemoving(false)}>
+        <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Remove {category.name}&apos;s budget?</DialogTitle>
+            <DialogDescription>{removalSentence(category)}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setRemoving(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" disabled={submitting} onClick={removeBudget}>
+              Remove budget
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={confirming != null} onOpenChange={(open) => !open && setConfirming(null)}>
-        <DialogContent>
+        <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Switch to {KIND_NAME[kind]}?</DialogTitle>
             <DialogDescription>{confirming}</DialogDescription>

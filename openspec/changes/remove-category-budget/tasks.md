@@ -7,8 +7,8 @@
 
 ## 2. Frontend
 
-- [ ] 2.1 Add `removeCategoryBudget(id)` and `removeCategoryLimit(id, month)` to `frontend/src/api/categories.js`; verify with cases in `categories.test.js` for the method and URL of each; then run `npm test`
-- [ ] 2.2 In `BudgetEditor`, add the Remove budget action (shown only when the category has a budget, per design) with a confirmation dialog whose text shares `droppedSentence`'s parts, and a "Use default (€X)" / "Use no limit" action for a monthly category whose viewed month is overridden; both call `onSaved` with a toast message; pass `overridden` from `BudgetSheet` (normal and Bills sheets) and use the message in `BudgetsPage.handleBudgetSaved`; verify with component tests for "Confirm the removal", "Nothing to remove", "Remove a budget from the sheet", "Remove a Bills budget from the sheet" and "Use the default for a month"; then run `npm test`, `npm run lint`, `npm run build`
+- [x] 2.1 Add `removeCategoryBudget(id)` and `removeCategoryLimit(id, month)` to `frontend/src/api/categories.js`; verify with cases in `categories.test.js` for the method and URL of each; then run `npm test`
+- [x] 2.2 In `BudgetEditor`, add the Remove budget action (shown only when the category has a budget, per design) with a confirmation dialog whose text shares `droppedSentence`'s parts, and a "Use default (€X)" / "Use no limit" action for a monthly category whose viewed month is overridden; both call `onSaved` with a toast message; pass `overridden` from `BudgetSheet` (normal and Bills sheets) and use the message in `BudgetsPage.handleBudgetSaved`; verify with component tests for "Confirm the removal", "Nothing to remove", "Remove a budget from the sheet", "Remove a Bills budget from the sheet" and "Use the default for a month"; then run `npm test`, `npm run lint`, `npm run build`
 
 ## 3. Integration check
 

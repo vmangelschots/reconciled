@@ -65,8 +65,9 @@ export function BudgetsPage() {
     await reloadSummary();
   }
 
-  async function handleBudgetSaved(id) {
-    toast.success("Budget updated.");
+  // `message` says what changed when it wasn't a plain save (a removal).
+  async function handleBudgetSaved(id, _kindChanged, message) {
+    toast.success(message ?? "Budget updated.");
     setSelectedId(null);
     setHighlightId(id);
     await listCategories().then(setCategories);
@@ -292,6 +293,13 @@ function BudgetRow({ row, highlight, onOpen }) {
 
 function NoBudget({ group, highlightId, onOpen }) {
   const [open, setOpen] = useState(false);
+  // A budget just removed lands here: open the group so its row shows.
+  const holdsHighlight = group.rows.some((row) => row.id === highlightId);
+  const [held, setHeld] = useState(holdsHighlight);
+  if (holdsHighlight !== held) {
+    setHeld(holdsHighlight);
+    if (holdsHighlight) setOpen(true);
+  }
   const Chevron = open ? ChevronDown : ChevronRight;
   return (
     <>
