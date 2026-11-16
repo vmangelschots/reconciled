@@ -12,7 +12,7 @@
 
 ## 3. Integration check
 
-- [ ] 3.1 With `/run-reconciled`, in the demo household: remove a monthly budget (row moves to No budget), remove a yearly and a Bills budget, remove a parent's budget (subcategories stand alone), and drop a month override back to the default; check the sheet at phone width too
+- [x] 3.1 With `/run-reconciled`, in the demo household: remove a monthly budget (row moves to No budget), remove a yearly and a Bills budget, remove a parent's budget (subcategories stand alone), and drop a month override back to the default; check the sheet at phone width too
 
 ## Workflow follow-up
 
