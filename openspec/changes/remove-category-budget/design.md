@@ -49,16 +49,49 @@ one `transaction.atomic()`.
 Use default shows for a monthly category when the summary row says
 `overridden`; the sheet passes `row.overridden` and the default (from
 `category.monthly_limits.default_cents`) into the editor. The dialog text
-comes from a sibling of `droppedSentence` ("Removing Groceries's budget
-removes the €400 monthly limit and 1 month override."), sharing its
-part-building so the two can't drift.
+comes from a sibling of `droppedSentence` ("The €400.00 monthly limit and
+1 month override will be removed. Groceries will have no budget, in this
+month and every other."), sharing its part-building so the two can't
+drift.
 
 **Closing and toast.** The editor calls `onSaved(id, kindChanged, message)`;
 `handleBudgetSaved` uses the message when given, else "Budget updated.", so
 removal reads "Groceries has no budget now." and Use default reads
-"December uses the default for Groceries again.". In a Bills sheet the
-action lives in the editor shown by Edit bills, so no new control is
-needed in the bill list.
+"Groceries is back to €400 for December." (or "Groceries has no limit in
+December." without a default, where the action reads "Remove December's
+limit"). After a removal the "No budget" group opens when the highlighted
+row is in it.
+
+**The dialog is built from the saved category.** `budgetParts(category)`
+lists what the saved budget holds; both the switch dialog and the removal
+dialog use it, so a half-edited form never changes what the dialog says.
+With nothing to list, the removal dialog still says the category will have
+no budget. Subcategories with a budget of their own (from the `categories`
+list the sheet already has, using the same "has a budget" test) are named
+as keeping it.
+
+**Remove budget in a Bills sheet sits in the Bills header.** Next to Edit
+bills, as a quiet text button that opens the same dialog. The editor's
+footer keeps it too, so it is in the same place for every kind once
+editing.
+
+**Undo is a toast action.** `toast.success(message, { action: { label,
+onClick } })` renders a small text button in the toast (Radix's
+`ToastPrimitive.Action`); other callers are unchanged. Undo after Use
+default re-PUTs the month's old amount with `setCategoryLimit` and reloads.
+Remove budget gets no Undo: its dialog is the safeguard, and restoring
+yearly history and bills would need a restore payload.
+
+**"This month only" follows the month.** The checkbox starts at
+`overridden`, so a month with its own limit is edited as that month. With
+it ticked the "<Month> only · Use default" line explains the state.
+
+**Zero hint.** A monthly amount of exactly 0 shows a muted line under the
+amount; it does not block saving, since a zero limit is valid.
+
+**Forecast refusal.** `forecasting/expected.py`'s message becomes "This
+category's budget is already in the forecast. Remove its budget to expect
+it instead."
 
 ## Risks / Trade-offs
 

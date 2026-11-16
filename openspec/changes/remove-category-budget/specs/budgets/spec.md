@@ -39,19 +39,42 @@ removing the budget of a tab or a loan's payment category.
 
 ### Requirement: Removing a budget asks first
 The Budgets page SHALL ask for confirmation in a dialog before removing a
-budget, saying what will be removed, as when switching kinds. A category
-without a budget SHALL offer no Remove budget action.
+budget, saying what the saved budget holds that will be removed, and that
+the category has no budget in any month afterwards, even when there is
+nothing to list. A category without a budget SHALL offer no Remove budget
+action.
 
 #### Scenario: Confirm the removal
 - **WHEN** the user chooses Remove budget on "Groceries", which has a 400.00
   monthly limit and 1 month override
 - **THEN** a dialog says the 400.00 monthly limit and 1 month override will
-  be removed, and nothing changes until the user confirms
+  be removed and that "Groceries" has no budget in any month after, and
+  nothing changes until the user confirms
+
+#### Scenario: Unsaved edits don't change the dialog
+- **WHEN** the user picks Yearly on "Groceries" without saving and then
+  chooses Remove budget
+- **THEN** the dialog still describes its 400.00 monthly limit
+
+#### Scenario: Nothing to list
+- **WHEN** the user removes the budget of "Streaming", a Bills category
+  without bills
+- **THEN** the dialog says "Streaming" will have no budget
 
 #### Scenario: Nothing to remove
 - **WHEN** the user opens "Gifts", which is monthly without a limit or
   overrides
 - **THEN** its editor shows no Remove budget action
+
+### Requirement: Removing a parent's budget names its subcategories
+When the category whose budget is removed has subcategories with budgets of
+their own, the dialog SHALL name them and say they keep their budgets.
+
+#### Scenario: Food's subcategories
+- **WHEN** the user removes the budget of "Food", whose subcategories
+  "Restaurant" has a 100.00 cap and "Groceries" none
+- **THEN** the dialog says "Restaurant" keeps its own budget, and doesn't
+  name "Groceries"
 
 ### Requirement: Remove a month's override
 The system SHALL let the user remove the override of a monthly category's
