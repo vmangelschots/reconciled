@@ -12,6 +12,7 @@ import { formatDayMonth } from "../lib/yearlyBudgets";
 
 vi.mock("../api/reports", () => ({ getSpendingCell: vi.fn() }));
 vi.mock("../api/transactions", () => ({ updateTransaction: vi.fn(), getReviewCount: vi.fn() }));
+vi.mock("../api/plans", () => ({ listPlans: vi.fn().mockResolvedValue({ drafts: [], history: [] }), createPlan: vi.fn() }));
 
 vi.mock("../api/budgets", async () => {
   const actual = await vi.importActual("../api/budgets");

@@ -33,8 +33,9 @@ SHALL be able to download one.
 ### Requirement: What a backup holds
 A backup SHALL hold every account; every transaction, with its splits,
 transfer links, value adjustments, notes and category guesses; categories
-and tabs; monthly limits; yearly budgets; bills with the months they
-count in; the budget settings; expected items; loan setups and their
+and tabs; monthly limits with the months their defaults apply from; yearly budgets;
+bills with the months they count in; the budget settings; year plans with
+their drafts, budgets, bills, income lines and applied records; expected items; loan setups and their
 balance corrections, with the links
 between scheduled adjustments and their installments, corrections and
 payments; the remembered import mappings; when each account was last
@@ -110,6 +111,23 @@ SHALL get new ids.
   one, and a monthly one without a category
 - **THEN** it restores with "Salary" as an expected item in, 4,500.00 on
   the 25th, recognised by "Salary", and without the other two
+
+#### Scenario: Year plans survive
+- **WHEN** 2027 has draft "Lean" with "Groceries" at 600.00 and a "Salary"
+  income line, and "Fix" was applied on 12 June from July, and a backup of
+  it is restored
+- **THEN** "Lean" is still a draft with the same budgets and income, and
+  "Fix" is still listed as applied on 12 June from July
+
+#### Scenario: Default history survives
+- **WHEN** "Groceries" is 650.00 until June and 550.00 from July, and a
+  backup of it is restored
+- **THEN** June still uses 650.00 and July 550.00
+
+#### Scenario: A backup from before year plans
+- **WHEN** a backup made before year plans existed is restored
+- **THEN** it restores, with no drafts, and each monthly default applies to
+  every month as before
 
 ### Requirement: What a backup leaves out
 A backup SHALL NOT hold login users or their passwords. It SHALL NOT hold

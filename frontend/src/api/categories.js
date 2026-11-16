@@ -20,11 +20,13 @@ export function deleteCategory(id) {
 }
 
 // month: null for the category's default limit, or "YYYY-MM" to override
-// that one month.
-export function setCategoryLimit(id, { month, limit_cents }) {
+// that one month. With month null, in_effect ("YYYY-MM", the viewed month)
+// says which default to change, since a default applies from a month on -
+// see specs/budgets.
+export function setCategoryLimit(id, { month, limit_cents, in_effect }) {
   return apiFetch(`/api/categories/${id}/limit/`, {
     method: "PUT",
-    body: { month, limit_cents },
+    body: { month, limit_cents, ...(in_effect && { in_effect }) },
   });
 }
 

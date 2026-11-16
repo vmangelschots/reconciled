@@ -49,6 +49,14 @@
   --chart-cat-6: #b5577f;
   --chart-other: var(--chart-series-2);
   --chart-area: color-mix(in srgb, var(--chart-series-1) 8%, transparent);
+  /* A year plan's draft: a blue kept apart from the teal accent and amber
+     warning, so a draft never reads as the real budget - see
+     specs/year-plans, "A draft is unmistakable". */
+  --draft: #3b6fb6;
+  --draft-tint: #eceff5;
+  --draft-bar: #e2e8f3;
+  --draft-ring: rgba(59, 111, 182, 0.28);
+  --draft-ink: #2c5590;
 }
 
 .dark {
@@ -79,6 +87,11 @@
   --chart-cat-6: #d47aa0;
   --chart-other: var(--chart-series-2);
   --chart-area: color-mix(in srgb, var(--chart-series-1) 12%, transparent);
+  --draft: #6b9be0;
+  --draft-tint: #141c2a;
+  --draft-bar: #172131;
+  --draft-ring: rgba(107, 155, 224, 0.3);
+  --draft-ink: #9dbdeb;
 }
 
 @theme {
@@ -97,6 +110,11 @@
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-critical: var(--critical);
+  --color-draft: var(--draft);
+  --color-draft-tint: var(--draft-tint);
+  --color-draft-bar: var(--draft-bar);
+  --color-draft-ring: var(--draft-ring);
+  --color-draft-ink: var(--draft-ink);
 }
 
 @layer base {

@@ -1,4 +1,5 @@
 import { act, render, screen, waitFor } from '@testing-library/react'
+import { useRef } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Button } from './Button'
 import { ToastProvider, useToast } from './Toast'
@@ -95,5 +96,35 @@ describe('ToastProvider / useToast', () => {
     })
     expect(undo).toHaveBeenCalledTimes(1)
     await waitFor(() => expect(screen.queryByText('Limit removed')).not.toBeInTheDocument())
+  })
+})
+
+function Replacing() {
+  const toast = useToast()
+  const n = useRef(0)
+  return (
+    <Button
+      onClick={() => {
+        n.current += 1
+        toast.success(`Saved ${n.current}`, { replace: 'draft-save' })
+      }}
+    >
+      Save
+    </Button>
+  )
+}
+
+describe('a toast that replaces', () => {
+  it("takes the place of the last one with its key", async () => {
+    render(
+      <ToastProvider>
+        <Replacing />
+      </ToastProvider>,
+    )
+    await act(async () => screen.getByRole('button', { name: 'Save' }).click())
+    await act(async () => screen.getByRole('button', { name: 'Save' }).click())
+
+    expect(await screen.findByText('Saved 2')).toBeInTheDocument()
+    expect(screen.queryByText('Saved 1')).toBeNull()
   })
 })

@@ -26,7 +26,7 @@ from rest_framework.test import APIClient
 from accounts.models import Account, Loan, LoanCorrection
 from backup.format import DATA_APPS
 from banksync.models import BankAccountLink, BankConnection, BankCredentials, SeenBankLine
-from budgets.models import BudgetSettings, Category, CategoryLimit, YearlyBudget
+from budgets.models import BudgetSettings, Category, CategoryLimit, IncomeLine, PlanBill, PlanBudget, YearlyBudget, YearPlan
 from forecasting.models import ExpectedItem
 from imports.models import AccountImportSettings, ImportSession
 from transactions.models import Transaction
@@ -150,6 +150,10 @@ class Case(TestCase):
         CategoryLimit.objects.create(category=category, limit_cents=1)
         YearlyBudget.objects.create(category=category, from_year=2026, amount_cents=1)
         BudgetSettings.load()
+        plan = YearPlan.objects.create(year=2027, name=label)
+        plan_budget = PlanBudget.objects.create(plan=plan, category=category, kind="bills")
+        PlanBill.objects.create(plan_budget=plan_budget, name=label, day=1, amount_cents=1)
+        income = IncomeLine.objects.create(plan=plan, name=label, amount_cents=1, category=parent)
         AccountImportSettings.objects.create(account=account)
         SeenBankLine.objects.create(account_hash="h", reference=label, transaction=txn)
         BankCredentials.objects.create(app_id=label, private_key="key")
@@ -164,6 +168,8 @@ class Case(TestCase):
             "link": link,
             "expected": expected,
             "session": session,
+            "plan": plan,
+            "income": income,
         }
 
     def snapshot(self):
@@ -212,6 +218,15 @@ class StaticTests(TestCase):
         self.assertEqual(open_routes, PUBLIC)
 
 
+class PlanScopingTests(Case):
+    def test_a_household_sees_only_its_own_plans(self):
+        with household_context(self.a):
+            self.assertEqual([p.name for p in YearPlan.objects.all()], ["Mine"])
+            self.assertEqual([b.category.name for b in PlanBudget.objects.all()], ["Mine sub"])
+            self.assertEqual([b.name for b in PlanBill.objects.all()], ["Mine"])
+            self.assertEqual([i.name for i in IncomeLine.objects.all()], ["Mine"])
+
+
 class ListingTests(Case):
     def test_no_route_shows_the_other_households_marker(self):
         ids = self.theirs
@@ -239,6 +254,9 @@ class ForeignIdTests(Case):
             "correction_id": self.theirs["correction"].pk if source != MISSING else MISSING,
             "row_id": self.theirs["txn"].pk if source != MISSING else MISSING,
             "number": 1,
+            "year": 2027,
+            "category_id": self.theirs["category"].pk if source != MISSING else MISSING,
+            "line_id": self.theirs["income"].pk if source != MISSING else MISSING,
         }
 
     def pk_for(self, route):
@@ -255,6 +273,10 @@ class ForeignIdTests(Case):
             ("api/^expected-items/", theirs["expected"]),
             ("api/bank-sync/connections/", theirs["connection"]),
             ("api/bank-sync/links/", theirs["link"]),
+            # Current takes a year, not an id: its income lines are household
+            # A's own, so B's line id answers like a missing one.
+            ("api/budgets/plans/current/", theirs["income"]),
+            ("api/budgets/plans/", theirs["plan"]),
         ]
         for prefix, row in table:
             if route.startswith(prefix):
@@ -289,7 +311,21 @@ class ForeignBodyTests(Case):
         my_txn = mine["txn"].pk
         txn = {"date": "2026-01-01", "amount_cents": -1, "payee": "x"}
         expected = {"name": "x", "direction": "out", "amount_cents": 1, "day": 1}
+        my_plan = mine["plan"].pk
         return [
+            ("post", "api/budgets/plans/", "/api/budgets/plans/", {"year": 2027, "copy_of": theirs["plan"].pk}),
+            (
+                "post",
+                None,
+                "/api/budgets/plans/current/2027/income/",
+                {"name": "x", "amount_cents": 1, "category": theirs["category"].pk},
+            ),
+            (
+                "post",
+                None,
+                f"/api/budgets/plans/{my_plan}/income/",
+                {"name": "x", "amount_cents": 1, "category": theirs["category"].pk},
+            ),
             ("post", "api/^transactions/$", "/api/transactions/", {**txn, "account": theirs["account"].pk}),
             (
                 "post",

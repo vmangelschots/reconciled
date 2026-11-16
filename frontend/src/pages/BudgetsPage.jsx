@@ -1,8 +1,9 @@
-import { AlertTriangle, CalendarClock, ChevronDown, ChevronRight, Tags } from "lucide-react";
+import { AlertTriangle, CalendarClock, CalendarRange, ChevronDown, ChevronRight, Tags } from "lucide-react";
 import { Fragment, useEffect, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { getBudgetSummary, setBudgetStartMonth } from "../api/budgets";
 import { listCategories } from "../api/categories";
+import { createPlan, listPlans } from "../api/plans";
 import { BillBar } from "../components/BillBar";
 import { BudgetSheet } from "../components/BudgetSheet";
 import { Button, buttonVariants } from "../components/ui/Button";
@@ -10,6 +11,9 @@ import { EmptyState } from "../components/ui/EmptyState";
 import { MonthSwitcher } from "../components/ui/MonthSwitcher";
 import { PageHeader } from "../components/ui/PageHeader";
 import { Panel } from "../components/ui/Panel";
+import { PillSwitch } from "../components/ui/PillSwitch";
+import { YearSwitcher } from "../components/ui/YearSwitcher";
+import { YearPlanView } from "../components/YearPlanView";
 import { ProgressBar } from "../components/ui/ProgressBar";
 import { Stat } from "../components/ui/Stat";
 import { useToast } from "../components/ui/Toast";
@@ -29,11 +33,93 @@ import { formatMoneyWhole as whole } from "../lib/money";
 import { currentMonth, isMonth, monthLabel } from "../lib/months";
 import { formatDayMonth } from "../lib/yearlyBudgets";
 
+const VIEWS = [
+  { value: "month", label: "Month" },
+  { value: "year", label: "Year" },
+];
+
+// The Budgets page: the month view, or the year plans (?view=year&year=Y&plan=ID)
+// - see specs/budget-overview, "Month and Year views".
 export function BudgetsPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [categories, setCategories] = useState(null);
+  const view = searchParams.get("view") === "year" ? "year" : "month";
+
+  useEffect(() => {
+    listCategories().then(setCategories);
+  }, []);
+
+  if (view === "year") {
+    return <YearPage searchParams={searchParams} setSearchParams={setSearchParams} categories={categories} setCategories={setCategories} />;
+  }
+  return <MonthPage searchParams={searchParams} setSearchParams={setSearchParams} categories={categories} setCategories={setCategories} />;
+}
+
+function ViewSwitch({ value, onChange }) {
+  return <PillSwitch label="View" options={VIEWS} value={value} onChange={onChange} />;
+}
+
+function CategoriesButton() {
+  return (
+    <Link to="/categories" className={buttonVariants({ variant: "outline" })}>
+      <Tags className="h-4 w-4" aria-hidden="true" />
+      Categories
+    </Link>
+  );
+}
+
+function YearPage({ searchParams, setSearchParams, categories, setCategories }) {
+  const thisYear = Number(currentMonth().slice(0, 4));
+  const yearParam = Number(searchParams.get("year"));
+  const year = Number.isInteger(yearParam) && yearParam >= 2000 && yearParam <= thisYear + 1 ? yearParam : thisYear;
+  const planId = Number(searchParams.get("plan")) || null;
+  const openCategory = Number(searchParams.get("category")) || null;
+  const [bounds, setBounds] = useState({ first: null, last: thisYear + 1 });
+
+  useEffect(() => {
+    listPlans(year)
+      .then((data) => setBounds({ first: data.first_year, last: data.last_year }))
+      .catch(() => {});
+  }, [year]);
+
+  function go(params) {
+    setSearchParams({ view: "year", ...params }, { replace: true });
+  }
+
+  // `month` leaves for the month view (after applying, or with nothing to plan).
+  function changePlan(id, categoryId = null, month = null) {
+    if (month) {
+      setSearchParams({ month }, { replace: false });
+      return;
+    }
+    go({ year: String(year), ...(id && { plan: String(id) }), ...(categoryId && { category: String(categoryId) }) });
+  }
+
+  return (
+    <section className="flex flex-col gap-6">
+      <PageHeader title="Budgets" actions={<CategoriesButton />}>
+        <ViewSwitch
+          value="year"
+          onChange={(v) => v === "month" && setSearchParams({ month: year < thisYear ? `${year}-12` : currentMonth() })}
+        />
+        <YearSwitcher year={year} first={bounds.first} last={bounds.last} onChange={(y) => go({ year: String(y) })} />
+      </PageHeader>
+      <YearPlanView
+        key={year}
+        year={year}
+        planId={planId}
+        categories={categories ?? []}
+        openCategory={openCategory}
+        onPlanChange={changePlan}
+        onCategoriesChanged={() => listCategories().then(setCategories)}
+      />
+    </section>
+  );
+}
+
+function MonthPage({ searchParams, setSearchParams, categories, setCategories }) {
   // The month lives in the address (?month=YYYY-MM) so the overview can
   // link to a given month - see specs/budgets.
-  const [searchParams, setSearchParams] = useSearchParams();
   const month = isMonth(searchParams.get("month")) ? searchParams.get("month") : currentMonth();
   const setMonth = (m) => setSearchParams({ month: m }, { replace: true });
   // A category in the address opens its sheet, so the Forecast page can link
@@ -48,10 +134,6 @@ export function BudgetsPage() {
   function reloadSummary() {
     return getBudgetSummary(month).then(setSummary).catch((e) => toast.error(e.message));
   }
-
-  useEffect(() => {
-    listCategories().then(setCategories);
-  }, []);
 
   useEffect(() => {
     setSelectedId(linkedCategory);
@@ -101,15 +183,8 @@ export function BudgetsPage() {
   }
 
   const header = (
-    <PageHeader
-      title="Budgets"
-      actions={
-        <Link to="/categories" className={buttonVariants({ variant: "outline" })}>
-          <Tags className="h-4 w-4" aria-hidden="true" />
-          Categories
-        </Link>
-      }
-    >
+    <PageHeader title="Budgets" actions={<CategoriesButton />}>
+      <ViewSwitch value="month" onChange={(v) => v === "year" && setSearchParams({ view: "year", year: month.slice(0, 4) })} />
       <MonthSwitcher month={month} onChange={setMonth} />
     </PageHeader>
   );
@@ -148,6 +223,7 @@ export function BudgetsPage() {
       {loaded ? (
         <Fragment key={month}>
           <Headline summary={summary} month={month} onOpen={setSelectedId} />
+          {month === currentMonth() && <PlanLinks month={month} />}
           <Panel flush className="overflow-hidden">
             <ul className="divide-y divide-border">
               {list.rows.map((row) => (
@@ -399,6 +475,54 @@ function StartMonthStrip({ start, onSave, onCancel }) {
       <Button size="sm" variant="ghost" onClick={onCancel}>
         Cancel
       </Button>
+    </div>
+  );
+}
+
+// "Plan the rest of the year" and, from 1 November, "Plan <next year>" or
+// "Continue planning <next year> · <draft>" - see specs/budget-overview.
+function PlanLinks({ month }) {
+  const navigate = useNavigate();
+  const toast = useToast();
+  const year = Number(month.slice(0, 4));
+  const monthNumber = Number(month.slice(5, 7));
+  const nudge = monthNumber >= 11;
+  const [next, setNext] = useState(null);
+
+  useEffect(() => {
+    if (!nudge) return;
+    listPlans(year + 1)
+      .then(setNext)
+      .catch(() => {});
+  }, [nudge, year]);
+
+  async function restOfYear() {
+    try {
+      const plan = await createPlan({ year });
+      navigate(`/budgets?view=year&year=${year}&plan=${plan.id}`);
+    } catch (e) {
+      toast.error(e.data?.detail ?? e.message);
+    }
+  }
+
+  const latest = next?.drafts?.[0];
+  const planned = next?.history?.length > 0;
+  return (
+    <div className="-mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-sm">
+      {monthNumber < 12 && (
+        <Button variant="ghost" size="sm" className="h-7 px-0 text-sm text-accent hover:bg-transparent hover:underline" onClick={restOfYear}>
+          <CalendarRange className="h-4 w-4" aria-hidden="true" />
+          Plan the rest of the year
+        </Button>
+      )}
+      {nudge && next && !planned && (
+        <Link
+          to={latest ? `/budgets?view=year&year=${year + 1}&plan=${latest.id}` : `/budgets?view=year&year=${year + 1}`}
+          className="text-sm font-medium text-accent hover:underline"
+        >
+          {latest ? `Continue planning ${year + 1} · ${latest.name}` : `Plan ${year + 1}`} →
+        </Link>
+      )}
     </div>
   );
 }

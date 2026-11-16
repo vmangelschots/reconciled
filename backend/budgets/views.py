@@ -12,6 +12,7 @@ from transactions.models import Transaction
 from . import utils
 from .attention import attention_bills, attention_categories, attention_yearly
 from .bill_changes import apply_bills
+from .defaults import set_default
 from .loan_categories import active_loans, loan_categories
 from .models import Bill, BudgetSettings, Category, CategoryLimit, YearlyBudget
 from .serializers import CategorySerializer
@@ -77,8 +78,10 @@ class CategoryViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["put"], url_path="limit")
     def set_limit(self, request, pk=None):
-        """Set the default limit (month omitted/null) or a specific
-        month's override (month="YYYY-MM") for this category."""
+        """Set a specific month's override (month="YYYY-MM"), or with month
+        omitted/null the default in effect in `in_effect` ("YYYY-MM",
+        default: this month), from the month it started in until the next
+        change - see openspec/specs/budgets."""
         category = self.get_object()
         if category.is_tab_group or category.is_tab:
             return Response({"detail": "Tabs aren't budgeted, so they take no limit."}, status=400)
@@ -95,10 +98,17 @@ class CategoryViewSet(viewsets.ModelViewSet):
             month = parse_month(request.data.get("month"))
         except ValueError as exc:
             return Response({"month": str(exc)}, status=400)
+        try:
+            in_effect = parse_month(request.data.get("in_effect")) or utils.today().replace(day=1)
+        except ValueError as exc:
+            return Response({"in_effect": str(exc)}, status=400)
 
-        limit, _created = CategoryLimit.objects.update_or_create(
-            category=category, month=month, defaults={"limit_cents": limit_cents}
-        )
+        if month is None:
+            limit = set_default(category, limit_cents, in_effect)
+        else:
+            limit, _created = CategoryLimit.objects.update_or_create(
+                category=category, month=month, defaults={"limit_cents": limit_cents}
+            )
         return Response(
             {
                 "month": month.isoformat()[:7] if month else None,
@@ -168,9 +178,7 @@ class CategoryViewSet(viewsets.ModelViewSet):
             elif kind == Category.BudgetKind.MONTHLY:
                 category.yearly_budgets.all().delete()
                 if amount_cents is not None:
-                    CategoryLimit.objects.update_or_create(
-                        category=category, month=None, defaults={"limit_cents": amount_cents}
-                    )
+                    set_default(category, amount_cents, utils.today().replace(day=1))
             else:
                 if category.budget_kind == Category.BudgetKind.MONTHLY:
                     category.limits.all().delete()
