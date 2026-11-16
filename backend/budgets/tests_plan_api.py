@@ -236,6 +236,8 @@ class DraftEditTests(PlanApiCase):
         response = self.client.post(reverse("plan-add-category", args=[self.plan.id]), {"name": "Car fund"}, format="json")
         self.assertEqual(response.status_code, 201)
         car_fund = Category.objects.get(name="Car fund")
+        self.assertEqual(self.rows(self.plan)["Car fund"]["kind"], "none")
+        self.assertIsNone(self.rows(self.plan)["Car fund"]["changed_since_copy"])
 
         self.set_budget(self.plan, car_fund, kind="yearly", amount_cents=240000)
 

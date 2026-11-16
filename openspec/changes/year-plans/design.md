@@ -174,14 +174,22 @@ category with a net inflow over the last 12 complete months, unless an
 expected item is recognised by that category or one of its subcategories,
 so Add all can't count the same money twice.
 
-### 7. Frontend: one editor, a pluggable target
+### 7. Frontend: a draft editor beside the month editor
 
-`BudgetEditor` / `BudgetSheet` take a `target`: `realTarget` (today's
-calls), `draftTarget(plan)` (plan endpoints), or `readOnly` (Current and
-applied plans in the Year view, which show figures plus "Change in a new
-draft" / "Open in month view"). A draft sheet shows "Editing draft <name>"
-in `text-draft-ink` above the title, and Save to draft. The month view
-keeps the real target unchanged.
+The month view's `BudgetEditor` is built around one viewed month ("This
+month only", Use default with Undo, bills from the viewed month on), so a
+draft gets its own `PlanBudgetEditor` instead of a mode on it. It uses the
+same controls (the kind `SegmentedControl`, amount and due fields), adds
+the twelve-month grid and bills with from/until months, and writes to the
+plan endpoints. `PlanSheet` holds it for a draft. For Current and applied
+plans it is read-only, with the year's months, "Change in a new draft" and
+"Open in month view". A draft sheet shows "Editing draft <name>" in
+`text-draft-ink` above the title, and Save to draft. The month view's
+editor and sheet are unchanged.
+
+*Alternative:* a `target` prop on `BudgetEditor`. Rejected once built: every
+month-view branch would need a draft counterpart, putting the month view at
+risk for no shared behaviour.
 
 - **Switches:** Month | Year is a `PillSwitch` in the `PageHeader`, as on
   Forecast (`SegmentedControl` is for form choices). `MonthSwitcher` is

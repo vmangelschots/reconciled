@@ -16,7 +16,7 @@ from transactions.loans import sync_loans
 from . import utils
 from .apply import apply_plan
 from .loan_categories import loan_categories
-from .models import Category, IncomeLine, YearPlan
+from .models import Category, IncomeLine, PlanBudget, YearPlan
 from .plan_edits import (
     PlanError,
     check_editable,
@@ -339,6 +339,8 @@ class PlanAddCategoryView(PlanBase):
                                         context={"request": request, "loans": {}})
         serializer.is_valid(raise_exception=True)
         category = serializer.save()
+        # Listed in the draft straight away, without a budget yet.
+        PlanBudget.objects.create(plan=plan, category=category, kind=PlanBudget.NONE)
         return Response(CategorySerializer(category, context={"request": request, "loans": {}}).data, status=201)
 
 
