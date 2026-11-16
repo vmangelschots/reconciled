@@ -209,3 +209,131 @@ class BudgetSettings(HouseholdScoped):
 
     def __str__(self):
         return f"Budgeting from {self.start_month}" if self.start_month else "Budgeting from the start"
+
+
+class YearPlan(HouseholdOwned):
+    """A plan for one calendar year - see openspec/specs/year-plans.
+
+    A "current" row only holds Current's income lines for the year: Current's
+    budgets are always read from the real budget. A draft holds its own
+    PlanBudgets and income lines from `from_month` (1-12) on; applying it
+    makes it "applied", read-only, kept as a record.
+    """
+
+    class Kind(models.TextChoices):
+        CURRENT = "current"
+        DRAFT = "draft"
+        APPLIED = "applied"
+
+    year = models.PositiveSmallIntegerField()
+    kind = models.CharField(max_length=10, choices=Kind.choices, default=Kind.DRAFT)
+    name = models.CharField(max_length=255, blank=True)
+    from_month = models.PositiveSmallIntegerField(default=1, validators=[MinValueValidator(1), MaxValueValidator(12)])
+    # When the draft was copied, so rows whose real budget changed since can
+    # be flagged (see PlanBudget.base).
+    copied_at = models.DateTimeField(null=True, blank=True)
+    applied_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["household", "year"],
+                condition=models.Q(kind="current"),
+                name="unique_current_plan_per_year",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.year} {self.kind}: {self.name}"
+
+
+class PlanBudget(HouseholdScoped):
+    """A draft's budget for one category, in the shape of the budget editor:
+    a kind ("none" for no budget), a monthly default with exceptions per
+    month ("1".."12" -> cents), or a yearly amount and due date. `base` is
+    Current's budget for the category when it was copied (see plans.py)."""
+
+    household_path = "plan__household"
+
+    NONE = "none"
+    KIND_CHOICES = [*Category.BudgetKind.choices, (NONE, "No budget")]
+
+    plan = models.ForeignKey(YearPlan, on_delete=models.CASCADE, related_name="budgets")
+    category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name="plan_budgets")
+    kind = models.CharField(max_length=10, choices=KIND_CHOICES)
+    default_cents = models.BigIntegerField(null=True, blank=True)
+    month_cents = models.JSONField(default=dict, blank=True)
+    amount_cents = models.BigIntegerField(null=True, blank=True)
+    due_month = models.PositiveSmallIntegerField(null=True, blank=True)
+    due_day = models.PositiveSmallIntegerField(null=True, blank=True)
+    base = models.JSONField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["plan", "category"], name="unique_plan_budget_per_category"),
+        ]
+
+    def __str__(self):
+        return f"{self.plan}: {self.category.name} ({self.kind})"
+
+
+class PlanBill(HouseholdScoped):
+    """A bill in a draft's Bills budget, counting from `from_month` (1-12) of
+    the plan's year through `until_month`, or keeping going when that is
+    null."""
+
+    household_path = "plan_budget__plan__household"
+
+    plan_budget = models.ForeignKey(PlanBudget, on_delete=models.CASCADE, related_name="bills")
+    name = models.CharField(max_length=255)
+    day = models.PositiveSmallIntegerField(validators=[MinValueValidator(1), MaxValueValidator(31)])
+    amount_cents = models.BigIntegerField(validators=[MinValueValidator(1)])
+    from_month = models.PositiveSmallIntegerField(default=1, validators=[MinValueValidator(1), MaxValueValidator(12)])
+    until_month = models.PositiveSmallIntegerField(
+        null=True, blank=True, validators=[MinValueValidator(1), MaxValueValidator(12)]
+    )
+
+    class Meta:
+        ordering = ["day", "id"]
+
+    def counts_in(self, month):
+        return self.from_month <= month and (self.until_month is None or month <= self.until_month)
+
+    def __str__(self):
+        return f"{self.plan_budget}: {self.name} on the {self.day}"
+
+
+class IncomeLine(HouseholdScoped):
+    """Planned income, in plans only: `amount_cents` a month or a year, plus
+    one-off amounts in given months (`extra`: "1".."12" -> cents). Its
+    category, when set, gives its actual figure."""
+
+    household_path = "plan__household"
+
+    class Per(models.TextChoices):
+        MONTH = "month"
+        YEAR = "year"
+
+    plan = models.ForeignKey(YearPlan, on_delete=models.CASCADE, related_name="income_lines")
+    name = models.CharField(max_length=255)
+    amount_cents = models.BigIntegerField(validators=[MinValueValidator(0)])
+    per = models.CharField(max_length=5, choices=Per.choices, default=Per.MONTH)
+    extra = models.JSONField(default=dict, blank=True)
+    category = models.ForeignKey(
+        Category, null=True, blank=True, on_delete=models.SET_NULL, related_name="income_lines"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at", "id"]
+
+    def year_cents(self):
+        base = self.amount_cents * 12 if self.per == self.Per.MONTH else self.amount_cents
+        return base + sum(int(v) for v in self.extra.values())
+
+    def __str__(self):
+        return f"{self.plan}: {self.name}"

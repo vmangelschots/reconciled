@@ -9,10 +9,10 @@
 
 ## 2. Plan models and the year calculation
 
-- [ ] 2.1 Add `YearPlan`, `PlanBudget`, `PlanBill` and `IncomeLine` (design 2), household-scoped, with a migration and admin registration; verify with a model test that one household can't see another's plans
-- [ ] 2.2 Write `budgets/plans.py`: build the per-category year shape from the real budget (Current) and from a draft over Current (months before the from month, and a kind switch holding for the whole year), with year totals per kind, start-month pro-rating, targets, loans locked, and the cap rule; verify with unit tests for "Monthly with a December exception", "A bill ending in March", "Earlier months stay real", "Caps aren't counted twice", "Left to save", and a parity test that Current's monthly and Bills totals equal the sum of `monthly_limits` over the year
-- [ ] 2.3 Add income line totals (per month or per year, plus extras) and actuals: the range by year (last 12 complete months, so far, whole year), category spending and income net inflow, "Not in the plan" and uncategorized, and "heading for"; verify with tests for "Salary with holiday pay and a 13th month", "Planning 2027 in November", "An income line without a category", "No budget last year" and "Heading for in June"
-- [ ] 2.4 Add the diff against Current (`vs current`, struck values) and "changed since copied" from `base`; verify with tests for "Groceries lowered" and "Transport changed meanwhile"
+- [x] 2.1 Add `YearPlan`, `PlanBudget`, `PlanBill` and `IncomeLine` (design 2), household-scoped, with a migration (the app registers no models in the admin, so neither do these); verify with a model test that one household can't see another's plans
+- [x] 2.2 Write `budgets/plans.py`: build the per-category year shape from the real budget (Current) and from a draft over Current (months before the from month, and a kind switch holding for the whole year), with year totals per kind, start-month pro-rating, targets, loans locked, and the cap rule; verify with unit tests for "Monthly with a December exception", "A bill ending in March", "Earlier months stay real", "Caps aren't counted twice", "Left to save", and a parity test that Current's monthly and Bills totals equal the sum of `monthly_limits` over the year
+- [x] 2.3 Add income line totals (per month or per year, plus extras) and actuals: the range by year (last 12 complete months, so far, whole year), category spending and income net inflow, "Not in the plan" and uncategorized, and "heading for"; verify with tests for "Salary with holiday pay and a 13th month", "Planning 2027 in November", "An income line without a category", "No budget last year" and "Heading for in June"
+- [x] 2.4 Add the diff against Current (`vs current`, struck values) and "changed since copied" from `base`; verify with tests for "Groceries lowered" and "Transport changed meanwhile"
 
 ## 3. Plans API
 

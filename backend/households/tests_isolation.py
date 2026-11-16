@@ -26,7 +26,7 @@ from rest_framework.test import APIClient
 from accounts.models import Account, Loan, LoanCorrection
 from backup.format import DATA_APPS
 from banksync.models import BankAccountLink, BankConnection, BankCredentials, SeenBankLine
-from budgets.models import BudgetSettings, Category, CategoryLimit, YearlyBudget
+from budgets.models import BudgetSettings, Category, CategoryLimit, IncomeLine, PlanBill, PlanBudget, YearlyBudget, YearPlan
 from forecasting.models import ExpectedItem
 from imports.models import AccountImportSettings, ImportSession
 from transactions.models import Transaction
@@ -150,6 +150,10 @@ class Case(TestCase):
         CategoryLimit.objects.create(category=category, limit_cents=1)
         YearlyBudget.objects.create(category=category, from_year=2026, amount_cents=1)
         BudgetSettings.load()
+        plan = YearPlan.objects.create(year=2027, name=label)
+        plan_budget = PlanBudget.objects.create(plan=plan, category=category, kind="bills")
+        PlanBill.objects.create(plan_budget=plan_budget, name=label, day=1, amount_cents=1)
+        income = IncomeLine.objects.create(plan=plan, name=label, amount_cents=1, category=parent)
         AccountImportSettings.objects.create(account=account)
         SeenBankLine.objects.create(account_hash="h", reference=label, transaction=txn)
         BankCredentials.objects.create(app_id=label, private_key="key")
@@ -164,6 +168,8 @@ class Case(TestCase):
             "link": link,
             "expected": expected,
             "session": session,
+            "plan": plan,
+            "income": income,
         }
 
     def snapshot(self):
@@ -210,6 +216,15 @@ class StaticTests(TestCase):
             if any(permission is AllowAny for permission in view.permission_classes)
         }
         self.assertEqual(open_routes, PUBLIC)
+
+
+class PlanScopingTests(Case):
+    def test_a_household_sees_only_its_own_plans(self):
+        with household_context(self.a):
+            self.assertEqual([p.name for p in YearPlan.objects.all()], ["Mine"])
+            self.assertEqual([b.category.name for b in PlanBudget.objects.all()], ["Mine sub"])
+            self.assertEqual([b.name for b in PlanBill.objects.all()], ["Mine"])
+            self.assertEqual([i.name for i in IncomeLine.objects.all()], ["Mine"])
 
 
 class ListingTests(Case):
