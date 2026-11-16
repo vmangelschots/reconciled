@@ -51,7 +51,7 @@
 
 ## 8. Integration check
 
-- [ ] 8.1 With `/run-reconciled`, in the demo household: plan 2027 from Current, make a draft that lowers Groceries, switches Holidays to yearly and adds a bill, check vs current and Actual, apply it, and check the month view of December 2026 is unchanged and January 2027 has the new budget; then make a mid-year draft from July for the current year and check that earlier months keep their limits, at desktop and phone width
+- [x] 8.1 With `/run-reconciled`, in the demo household: plan 2027 from Current, make a draft that lowers Groceries, switches Holidays to yearly and adds a bill, check vs current and Actual, apply it, and check the month view of December 2026 is unchanged and January 2027 has the new budget; then make a mid-year draft from July for the current year and check that earlier months keep their limits, at desktop and phone width
 
 ## Workflow follow-up
 
