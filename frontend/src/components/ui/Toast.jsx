@@ -10,6 +10,8 @@ const ToastContext = createContext(null)
 // Radix replaces/stacks rather than forcing a choice, which satisfies
 // that without extra logic here).
 const SUCCESS_DURATION_MS = 4000
+// A toast with an action (Undo) stays a little longer, to give time to use it.
+const ACTION_DURATION_MS = 8000
 const ERROR_DURATION_MS = Infinity
 
 let nextId = 0
@@ -21,13 +23,15 @@ export function ToastProvider({ children }) {
     setToasts((current) => current.filter((t) => t.id !== id))
   }, [])
 
-  const show = useCallback((variant, message) => {
+  // action: optional { label, onClick }, a small button in the toast that
+  // also closes it - e.g. Undo.
+  const show = useCallback((variant, message, action = null) => {
     const id = ++nextId
-    setToasts((current) => [...current, { id, variant, message }])
+    setToasts((current) => [...current, { id, variant, message, action }])
   }, [])
 
   const toast = {
-    success: (message) => show('success', message),
+    success: (message, { action } = {}) => show('success', message, action),
     error: (message) => show('error', message),
   }
 
@@ -40,7 +44,9 @@ export function ToastProvider({ children }) {
           return (
             <ToastPrimitive.Root
               key={t.id}
-              duration={t.variant === 'success' ? SUCCESS_DURATION_MS : ERROR_DURATION_MS}
+              duration={
+                t.variant !== 'success' ? ERROR_DURATION_MS : t.action ? ACTION_DURATION_MS : SUCCESS_DURATION_MS
+              }
               onOpenChange={(open) => {
                 if (!open) dismiss(t.id)
               }}
@@ -57,6 +63,15 @@ export function ToastProvider({ children }) {
               <ToastPrimitive.Description className="flex-1 text-ink-primary">
                 {t.message}
               </ToastPrimitive.Description>
+              {t.action && (
+                <ToastPrimitive.Action
+                  altText={t.action.label}
+                  onClick={t.action.onClick}
+                  className="-my-0.5 shrink-0 rounded-sm px-1 font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                >
+                  {t.action.label}
+                </ToastPrimitive.Action>
+              )}
               <ToastPrimitive.Close
                 aria-label="Dismiss"
                 className="text-ink-muted hover:text-ink-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"

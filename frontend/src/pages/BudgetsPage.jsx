@@ -65,9 +65,23 @@ export function BudgetsPage() {
     await reloadSummary();
   }
 
-  // `message` says what changed when it wasn't a plain save (a removal).
-  async function handleBudgetSaved(id, _kindChanged, message) {
-    toast.success(message ?? "Budget updated.");
+  // `message` says what changed when it wasn't a plain save (a removal);
+  // `undo` ({ run, message }) puts it back from the toast.
+  async function handleBudgetSaved(id, _kindChanged, message, undo) {
+    const action = undo && {
+      label: "Undo",
+      onClick: async () => {
+        try {
+          await undo.run();
+          toast.success(undo.message);
+          setHighlightId(id);
+          await reloadAll();
+        } catch (e) {
+          toast.error(e.data?.detail ?? e.message);
+        }
+      },
+    };
+    toast.success(message ?? "Budget updated.", { action });
     setSelectedId(null);
     setHighlightId(id);
     await listCategories().then(setCategories);

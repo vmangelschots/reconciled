@@ -334,6 +334,19 @@ class ExpectedItemApiTests(ForecastCase):
                 self.assertEqual(self.post(**fields).status_code, 400)
         self.assertFalse(ExpectedItem.objects.exists())
 
+    def test_a_budgeted_category_points_to_removing_its_budget(self):
+        streaming = self.streaming(("Netflix", 5, 1799))
+        self.assertEqual(
+            self.post(category=streaming.id).json()["category"],
+            ["This category's budget is already in the forecast. Remove its budget to expect it instead."],
+        )
+        groceries = Category.objects.create(name="Groceries")
+        CategoryLimit.objects.create(category=groceries, limit_cents=60000)
+        snacks = Category.objects.create(name="Snacks", parent=groceries)
+        self.assertEqual(
+            self.post(category=snacks.id).json()["category"], ["This category's budget is already in the forecast."]
+        )
+
     def test_options_leave_out_what_is_already_forecast(self):
         streaming = self.streaming(("Netflix", 5, 1799))
         savings = Account.objects.create(name="Spaarrekening", account_type="savings", starting_balance_cents=0)

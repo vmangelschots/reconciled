@@ -27,6 +27,16 @@ RECOGNITION_SHARE = 25
 BUDGET_KINDS = {Category.BudgetKind.YEARLY, Category.BudgetKind.TARGET, Category.BudgetKind.BILLS}
 
 
+def _has_own_budget(category):
+    """Whether the category's own budget is what blocks it, so removing that
+    budget would free it - not a loan's, a tab's or a parent's."""
+    if category.is_tab_group or category.parent_id and category.parent.is_tab_group:
+        return False
+    if category.id in loan_categories():
+        return False
+    return category.budget_kind in BUDGET_KINDS or category.limits.exists()
+
+
 def blocked_category_ids():
     """Ids of the categories an expected item may not use: one with a budget
     of any kind (a monthly limit, a yearly kind, bills), one under such a
@@ -141,7 +151,10 @@ def validation_errors(category, account):
         return {"category": "Choose a category or an account to recognise it by."}
     if category is not None:
         if category.id in blocked_category_ids():
-            return {"category": "This category's budget is already in the forecast."}
+            message = "This category's budget is already in the forecast."
+            if _has_own_budget(category):
+                message += " Remove its budget to expect it instead."
+            return {"category": message}
         return {}
     if account.archived or account.is_off_bank:
         return {"account": "Choose an active account."}

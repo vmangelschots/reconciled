@@ -75,4 +75,25 @@ describe('ToastProvider / useToast', () => {
       expect(screen.queryByText('Could not save account')).not.toBeInTheDocument()
     })
   })
+
+  it('runs a success toast action and closes the toast', async () => {
+    const undo = vi.fn()
+    function WithAction() {
+      const toast = useToast()
+      return <Button onClick={() => toast.success('Limit removed', { action: { label: 'Undo', onClick: undo } })}>Go</Button>
+    }
+    render(
+      <ToastProvider>
+        <WithAction />
+      </ToastProvider>,
+    )
+    await act(async () => {
+      screen.getByRole('button', { name: 'Go' }).click()
+    })
+    await act(async () => {
+      ;(await screen.findByRole('button', { name: 'Undo' })).click()
+    })
+    expect(undo).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(screen.queryByText('Limit removed')).not.toBeInTheDocument())
+  })
 })

@@ -8,7 +8,7 @@ import { formatDayMonth } from "../lib/yearlyBudgets";
 import { cn } from "../lib/cn";
 import { formatMoney } from "../lib/money";
 import { monthLabel } from "../lib/months";
-import { BudgetEditor } from "./BudgetEditor";
+import { BudgetEditor, RemoveBudget } from "./BudgetEditor";
 import { SpendingRows } from "./SpendingRows";
 import { DialogTitle } from "./ui/Dialog";
 import { BillBar } from "./BillBar";
@@ -203,9 +203,12 @@ function BillsBody({ row, category, month, startMonth, spending, categories, onS
         <div className="flex items-center justify-between px-5 pt-3 pb-1">
           <h3 className="text-xs font-medium tracking-wide text-ink-muted uppercase">Bills</h3>
           {!isLoan && !editing && (
-            <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-accent" onClick={() => setEditing(true)}>
-              Edit bills
-            </Button>
+            <span className="flex items-center gap-1">
+              <RemoveBudget category={category} categories={categories} onSaved={onSaved} className="h-7 px-2" />
+              <Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-accent" onClick={() => setEditing(true)}>
+                Edit bills
+              </Button>
+            </span>
           )}
         </div>
         {editing ? (
@@ -217,6 +220,7 @@ function BillsBody({ row, category, month, startMonth, spending, categories, onS
               limitCents={row.limitCents}
               overridden={row.overridden}
               startMonth={startMonth}
+              categories={categories}
               bills={manual}
               onSaved={onSaved}
               onCancel={() => setEditing(false)}
@@ -284,6 +288,7 @@ function SheetBody({ row, category, month, startMonth, categories, onSaved, onCl
           limitCents={row.limitCents}
           overridden={row.overridden}
           startMonth={startMonth}
+          categories={categories}
           onSaved={onSaved}
           onCancel={onClose}
         />
