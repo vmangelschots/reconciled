@@ -2,10 +2,10 @@
 
 ## 1. Default limit history
 
-- [ ] 1.1 Add nullable `CategoryLimit.from_month` with the two partial unique constraints for defaults (design 1), plus a migration; verify `python manage.py makemigrations --check` is clean after it and existing `budgets` tests pass
-- [ ] 1.2 Make `summary.monthly_limits` pick the override, else the default in effect for the month (latest `from_month <= month`, else the null one, else the earliest); verify with tests for "A new default from July", "Before the first default" and "Overrides still win", and that `python manage.py test budgets forecasting` stays green
-- [ ] 1.3 Let `set_limit` without `month` take `in_effect` (default: today's month) and update the default in effect there; send the viewed month from `BudgetEditor`; verify with tests for "Editing in March" and "Editing in September", the existing "Change the default from an ordinary month" sheet test, and a test that removing the budget or switching kind deletes every default ("Remove after a plan was applied")
-- [ ] 1.4 Add the default's `from_month` to the backup format; verify with backup tests for "Default history survives" and an old backup without the field restoring as "every month"
+- [x] 1.1 Add nullable `CategoryLimit.from_month` with the two partial unique constraints for defaults (design 1), plus a migration; verify `python manage.py makemigrations --check` is clean after it and existing `budgets` tests pass
+- [x] 1.2 Make `summary.monthly_limits` pick the override, else the default in effect for the month (latest `from_month <= month`, else the null one, else the earliest); verify with tests for "A new default from July", "Before the first default" and "Overrides still win", and that `python manage.py test budgets forecasting` stays green
+- [x] 1.3 Let `set_limit` without `month` take `in_effect` (default: today's month) and update the default in effect there; send the viewed month from `BudgetEditor`; verify with tests for "Editing in March" and "Editing in September", the existing "Change the default from an ordinary month" sheet test, and a test that removing the budget or switching kind deletes every default ("Remove after a plan was applied")
+- [x] 1.4 Add the default's `from_month` to the backup format; verify with backup tests for "Default history survives" and an old backup without the field restoring as "every month"
 
 ## 2. Plan models and the year calculation
 

@@ -80,8 +80,9 @@ class CategoryLimit(HouseholdScoped):
     """A monthly spending limit for a category.
 
     `month` holds the first-of-month date of a specific override, or
-    NULL for the category's default limit (used by any month with no
-    override of its own). The two partial unique constraints below
+    NULL for a default limit (used by any month with no override of its
+    own). A category can have several defaults, each from its `from_month`
+    on. The two partial unique constraints below
     enforce "at most one default per category" and "at most one override
     per category per month" - a plain unique_together on (category,
     month) wouldn't do this, since SQL treats every NULL as distinct from
@@ -92,6 +93,11 @@ class CategoryLimit(HouseholdScoped):
 
     category = models.ForeignKey(Category, on_delete=models.CASCADE, related_name="limits")
     month = models.DateField(null=True, blank=True)
+    # A default's first month, or null for "from the start": a month uses the
+    # latest default from it or before - see summary.default_in_effect and
+    # openspec/specs/budgets, "A default limit applies from a month on".
+    # Always null on an override.
+    from_month = models.DateField(null=True, blank=True)
     limit_cents = models.BigIntegerField()
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -100,8 +106,13 @@ class CategoryLimit(HouseholdScoped):
         constraints = [
             models.UniqueConstraint(
                 fields=["category"],
-                condition=models.Q(month__isnull=True),
+                condition=models.Q(month__isnull=True, from_month__isnull=True),
                 name="unique_default_limit_per_category",
+            ),
+            models.UniqueConstraint(
+                fields=["category", "from_month"],
+                condition=models.Q(month__isnull=True, from_month__isnull=False),
+                name="unique_default_limit_per_category_from_month",
             ),
             models.UniqueConstraint(
                 fields=["category", "month"],
@@ -111,7 +122,10 @@ class CategoryLimit(HouseholdScoped):
         ]
 
     def __str__(self):
-        scope = "default" if self.month is None else self.month.isoformat()
+        if self.month is not None:
+            scope = self.month.isoformat()
+        else:
+            scope = "default" if self.from_month is None else f"default from {self.from_month.isoformat()}"
         return f"{self.category.name} ({scope}): {self.limit_cents}"
 
 

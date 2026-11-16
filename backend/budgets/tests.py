@@ -655,7 +655,7 @@ class BudgetKindTests(TestCase):
     def test_monthly_to_yearly_drops_monthly_limits(self):
         CategoryLimit.objects.create(category=self.clothing, month=None, limit_cents=10000)
         CategoryLimit.objects.create(category=self.clothing, month=date(2026, 12, 1), limit_cents=25000)
-        self.assertEqual(self._category(self.clothing)["monthly_limits"], {"default_cents": 10000, "override_count": 1})
+        self.assertEqual(self._category(self.clothing)["monthly_limits"], {"default_cents": 10000, "defaults": [{"from_month": None, "limit_cents": 10000}], "override_count": 1})
         self._set_budget(self.clothing, kind="yearly", amount_cents=120000)
         self.assertFalse(CategoryLimit.objects.exists())
 
@@ -670,7 +670,7 @@ class BudgetKindTests(TestCase):
         self.assertEqual(CategoryLimit.objects.get().limit_cents, 10000)
 
     def test_nothing_to_drop(self):
-        self.assertEqual(self._category(self.clothing)["monthly_limits"], {"default_cents": None, "override_count": 0})
+        self.assertEqual(self._category(self.clothing)["monthly_limits"], {"default_cents": None, "defaults": [], "override_count": 0})
         self.assertEqual(self._set_budget(self.clothing, kind="yearly", amount_cents=50000).status_code, 200)
 
     def test_yearly_to_on_a_date_keeps_the_budget(self):
@@ -755,7 +755,7 @@ class RemoveBudgetTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["budget_kind"], "monthly")
-        self.assertEqual(response.json()["monthly_limits"], {"default_cents": None, "override_count": 0})
+        self.assertEqual(response.json()["monthly_limits"], {"default_cents": None, "defaults": [], "override_count": 0})
         self.assertIsNone(self._rows(date(2026, 12, 1))["Groceries"]["limit_cents"])
 
     def test_remove_a_yearly_budget(self):

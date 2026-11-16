@@ -18,6 +18,7 @@ from decimal import Decimal
 
 from accounts.models import Account, Loan, LoanCorrection
 from banksync.models import BankCredentials
+from budgets.summary import monthly_limits
 from budgets.models import Bill, BudgetSettings, Category, CategoryLimit, YearlyBudget
 from forecasting.models import ExpectedItem
 from households.context import household_context
@@ -327,6 +328,24 @@ class RestoreBackupTests(BackupTestCase):
         restore_backup(read_backup(json.dumps(envelope)))
         self.assertFalse(Bill.objects.exists())
         self.assertTrue(Category.objects.filter(name="Groceries").exists())
+
+    def test_default_history_survives(self):
+        CategoryLimit.objects.create(category=self.groceries, from_month=date(2027, 7, 1), limit_cents=55000)
+        content = self.file_content()
+        self.mess_up()
+        restore_backup(read_backup(content))
+        groceries = Category.objects.get(name="Groceries")
+        self.assertEqual(monthly_limits(date(2027, 6, 1), loan_lines={})[0][groceries.id], 40000)
+        self.assertEqual(monthly_limits(date(2027, 7, 1), loan_lines={})[0][groceries.id], 55000)
+
+    def test_a_backup_from_before_default_history_restores(self):
+        envelope = json.loads(self.file_content())
+        for row in envelope["data"]:
+            if row["model"] == "budgets.categorylimit":
+                del row["fields"]["from_month"]
+        restore_backup(read_backup(json.dumps(envelope)))
+        groceries = Category.objects.get(name="Groceries")
+        self.assertEqual(monthly_limits(date(2030, 1, 1), loan_lines={})[0][groceries.id], 40000)
 
     def test_expected_items_survive(self):
         content = self.file_content()

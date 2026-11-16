@@ -11,6 +11,7 @@ import {
 import { cn } from "../lib/cn";
 import { formatMoney, formatMoneyWhole } from "../lib/money";
 import { currentMonth, monthLabel, monthName } from "../lib/months";
+import { defaultInEffect } from "../lib/monthlyLimits";
 import { formatShortMonth, historyValuesFor } from "../lib/yearlyBudgets";
 import { Button } from "./ui/Button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/Dialog";
@@ -329,7 +330,10 @@ function KindEditor({ category, categories, month, limitCents, overridden, start
           month,
         );
       } else if (kind === "monthly" && initialKind === "monthly") {
-        await setCategoryLimit(category.id, { month: thisMonthOnly ? month : null, limit_cents: cents });
+        await setCategoryLimit(
+          category.id,
+          thisMonthOnly ? { month, limit_cents: cents } : { month: null, limit_cents: cents, in_effect: month },
+        );
       } else if (kind === "monthly") {
         await setCategoryBudget(category.id, { kind, amount_cents: thisMonthOnly ? undefined : cents });
         if (thisMonthOnly) await setCategoryLimit(category.id, { month, limit_cents: cents });
@@ -348,7 +352,7 @@ function KindEditor({ category, categories, month, limitCents, overridden, start
 
   // The viewed month's own limit goes; it falls back to the default. The
   // toast's Undo puts the month's limit back.
-  const defaultCents = category.monthly_limits?.default_cents ?? null;
+  const defaultCents = defaultInEffect(category, month);
   const showUseDefault = overridden && initialKind === "monthly" && kind === "monthly";
   async function useDefault() {
     setSubmitting(true);

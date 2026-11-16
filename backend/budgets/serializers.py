@@ -4,6 +4,7 @@ from transactions.models import Transaction
 
 from . import utils
 from .models import Category
+from .summary import default_in_effect
 from .yearly import values_for_year
 
 
@@ -68,9 +69,20 @@ class CategorySerializer(serializers.ModelSerializer):
         ]
 
     def get_monthly_limits(self, category):
+        """`default_cents` is the default in effect this month; `defaults`
+        lists every default with the month it applies from (null: from the
+        start), oldest first, so the editor can show a viewed month's one."""
         limits = list(category.limits.all())
-        default = next((limit.limit_cents for limit in limits if limit.month is None), None)
-        return {"default_cents": default, "override_count": sum(1 for limit in limits if limit.month is not None)}
+        defaults = [limit for limit in limits if limit.month is None]
+        current = default_in_effect(defaults, utils.today().replace(day=1))
+        return {
+            "default_cents": current.limit_cents if current else None,
+            "defaults": [
+                {"from_month": d.from_month.isoformat()[:7] if d.from_month else None, "limit_cents": d.limit_cents}
+                for d in sorted(defaults, key=lambda d: (d.from_month is not None, d.from_month))
+            ],
+            "override_count": sum(1 for limit in limits if limit.month is not None),
+        }
 
     def get_bills(self, category):
         return [

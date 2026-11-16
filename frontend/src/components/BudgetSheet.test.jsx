@@ -247,7 +247,7 @@ describe("BudgetSheet", () => {
     await setAmount(form, "450");
     await userEvent.click(within(form).getByRole("button", { name: "Save" }));
 
-    expect(categoriesApi.setCategoryLimit).toHaveBeenCalledWith(1, { month: null, limit_cents: 45000 });
+    expect(categoriesApi.setCategoryLimit).toHaveBeenCalledWith(1, { month: null, limit_cents: 45000, in_effect: "2026-10" });
   });
 
   it("asks before switching a monthly category to yearly, and saves nothing on cancel", async () => {
@@ -767,7 +767,7 @@ describe("Editing a month with its own limit", () => {
     expect(within(form).getByLabelText("This month only")).not.toBeChecked();
     await setAmount(form, "450");
     await userEvent.click(within(form).getByRole("button", { name: "Save" }));
-    expect(categoriesApi.setCategoryLimit).toHaveBeenCalledWith(1, { month: null, limit_cents: 45000 });
+    expect(categoriesApi.setCategoryLimit).toHaveBeenCalledWith(1, { month: null, limit_cents: 45000, in_effect: "2026-10" });
   });
 });
 

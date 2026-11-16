@@ -31,6 +31,24 @@ def spent_by_category(categories, start, end):
     }
 
 
+def default_in_effect(defaults, month):
+    """The default limit row that applies in `month`: the one with the latest
+    from_month on or before it, else the one from the start (null
+    from_month), else the earliest - so a category's first default covers
+    every month before it. None without defaults. See openspec/specs/budgets,
+    "A default limit applies from a month on"."""
+    defaults = [d for d in defaults if d.month is None]
+    if not defaults:
+        return None
+    started = [d for d in defaults if d.from_month is not None and d.from_month <= month]
+    if started:
+        return max(started, key=lambda d: d.from_month)
+    from_start = [d for d in defaults if d.from_month is None]
+    if from_start:
+        return from_start[0]
+    return min(defaults, key=lambda d: d.from_month)
+
+
 def monthly_limits(period_start, loan_lines=None):
     """({category_id: limit}, ids with an override) for the month: its
     override, else the default. A category without either isn't in it. A
@@ -38,15 +56,18 @@ def monthly_limits(period_start, loan_lines=None):
     month, so it is a budget like any limit - see openspec/specs/bill-budgets.
     A loan category's bills come from its loans (`loan_lines`, worked out
     here when not given)."""
-    defaults, overrides = {}, {}
+    overrides, by_category = {}, {}
     limits = CategoryLimit.objects.filter(category__in=budgeted_categories(), category__budget_kind=Category.BudgetKind.MONTHLY).filter(
         Q(month__isnull=True) | Q(month=period_start)
     )
     for limit in limits:
         if limit.month is None:
-            defaults[limit.category_id] = limit.limit_cents
+            by_category.setdefault(limit.category_id, []).append(limit)
         else:
             overrides[limit.category_id] = limit.limit_cents
+    defaults = {
+        category_id: default_in_effect(rows, period_start).limit_cents for category_id, rows in by_category.items()
+    }
     bills = (
         Bill.objects.filter(
             category__in=budgeted_categories(), category__budget_kind=Category.BudgetKind.BILLS, from_month__lte=period_start
