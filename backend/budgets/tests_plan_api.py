@@ -107,6 +107,7 @@ class DraftTests(PlanApiCase):
 
         row = self.rows(plan)["Groceries"]
         self.assertEqual(row["months"][7], 65000)
+        self.assertEqual(row["kept"], {"8": 90000})
         self.assertEqual(PlanBudget.objects.get(plan=plan, category=self.groceries).month_cents, {"8": 90000})
 
         self.client.patch(reverse("plan-detail", args=[plan.id]), {"from_month": 7}, format="json")
@@ -487,3 +488,27 @@ class ApplyTests(PlanApiCase):
         row = YearlyBudget.objects.get(category=insurance, from_year=2027)
         self.assertEqual((row.amount_cents, row.due_month, row.due_day), (80000, 4, 1))
         self.assertIsNone(limit(self.transport, date(2026, 11, 1)))
+
+
+class ReviewFollowUpTests(PlanApiCase):
+    def test_changing_the_month_in_the_dialog(self):
+        self.today = date(2027, 2, 10)
+        plan = self.create()
+
+        response = self.client.patch(reverse("plan-detail", args=[plan.id]), {"from_month": 3}, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.view(plan)["plan"]["from_month"], 3)
+        self.assertEqual(self.preview(plan).json()["from_month"], 3)
+
+    def test_lean_exists(self):
+        lean = self.create(name="Lean")
+        hobbies = Category.objects.create(name="Hobbies")
+        CategoryLimit.objects.create(category=hobbies, limit_cents=5000)
+
+        response = self.set_budget(lean, hobbies, kind="monthly", default_cents=4000)
+
+        self.assertEqual(response.status_code, 200)
+        row = self.rows(lean)["Hobbies"]
+        self.assertEqual((row["plan_cents"], row["change_cents"]), (48000, -12000))
+        self.assertIsNone(row["changed_since_copy"])

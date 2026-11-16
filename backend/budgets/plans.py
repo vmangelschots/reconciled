@@ -44,6 +44,9 @@ class YearBudget:
     months: list = field(default_factory=lambda: [None] * 12)
     default_cents: int | None = None
     exceptions: dict = field(default_factory=dict)
+    # A draft's own month amounts before its from month, kept but not
+    # applied - see "Moving the from month".
+    kept: dict = field(default_factory=dict)
     amount_cents: int | None = None
     due: str | None = None
     bills: list = field(default_factory=list)
@@ -193,6 +196,7 @@ def draft_budget(plan_budget, current, year, from_month, start):
         budget.exceptions = {
             key: cents for key, cents in plan_budget.month_cents.items() if int(key) >= from_month
         }
+        budget.kept = {key: cents for key, cents in plan_budget.month_cents.items() if int(key) < from_month}
     if kind == Category.BudgetKind.BILLS:
         budget.bills = [
             {"id": bill.id, "name": bill.name, "day": bill.day, "amount_cents": bill.amount_cents,
@@ -418,6 +422,7 @@ def year_view(year, today, plan=None):
         "actual_expenses_cents": sum(r["actual_cents"] for r in rows if r["counted"]) + outside,
         "change_left_cents": None,
         "heading_left_cents": None,
+        "heading_expenses_cents": None,
     }
     if plan is not None:
         current_lines = current_plan_row(year)
@@ -427,7 +432,8 @@ def year_view(year, today, plan=None):
     if in_progress:
         heading_income = sum(r["heading_cents"] or 0 for r in income_rows)
         heading_expenses = sum(r["heading_cents"] or 0 for r in rows if r["counted"]) + outside
-        totals["heading_left_cents"] = heading_income - heading_expenses
+        totals["heading_expenses_cents"] = heading_expenses
+        totals["heading_left_cents"] = heading_income - heading_expenses if income_rows else None
 
     return {
         "year": year,

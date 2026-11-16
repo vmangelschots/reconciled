@@ -35,7 +35,7 @@ function extraLine(month = "", amount = "") {
  * see specs/year-plans, "Income lines". `target` is a draft's id or
  * { year } for Current; `line` is null for a new one.
  */
-export function IncomeLineDialog({ open, target, line, categories, onClose, onSaved }) {
+export function IncomeLineDialog({ open, target, planName, line, categories, onClose, onSaved }) {
   const toast = useToast();
   const [name, setName] = useState(line?.name ?? "");
   const [amount, setAmount] = useState(centsText(line?.amount_cents));
@@ -90,9 +90,12 @@ export function IncomeLineDialog({ open, target, line, categories, onClose, onSa
       <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-md">
         <form onSubmit={save} className="flex flex-col gap-4" aria-label="Income line">
           <DialogHeader>
-            <DialogTitle>{line ? `Edit ${line.name}` : "Add income"}</DialogTitle>
+            <DialogTitle>{line ? `Edit ${line.name}` : `Add income to ${planName}`}</DialogTitle>
           </DialogHeader>
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Salary" aria-label="Name" autoFocus />
+          <label className="flex flex-col gap-1 text-xs text-ink-muted">
+            Name
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Salary" autoFocus />
+          </label>
           <span className="flex items-center gap-2">
             <Input
               type="number"

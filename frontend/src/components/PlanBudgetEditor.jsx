@@ -1,4 +1,4 @@
-import { AlertTriangle, Plus, RotateCcw, X } from "lucide-react";
+import { AlertTriangle, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import { useState } from "react";
 import { removePlanBudget, setPlanBills, setPlanBudget } from "../api/plans";
 import { cn } from "../lib/cn";
@@ -141,23 +141,42 @@ function PlanBillLines({ lines, fromMonth, onChange }) {
   );
 }
 
-// Twelve months, four to a row: months before the from month show the real
-// budget, read-only; later ones take their own amount, the default's
-// placeholder otherwise - see specs/year-plans, "Month exceptions in a draft".
-function MonthGrid({ months, realMonths, fromMonth, defaultText, onChange }) {
+const NO_SPINNER = "[appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none";
+
+// The months before the from month, as one line: "Jan–Jun: real budget, €650".
+function realBudgetLine(realMonths, fromMonth) {
+  const values = realMonths.slice(0, fromMonth - 1);
+  const span = fromMonth === 2 ? shortMonth(1) : `${shortMonth(1)}–${shortMonth(fromMonth - 1)}`;
+  const same = values.every((v) => v === values[0]);
+  if (!same) return `${span}: real budget`;
+  return `${span}: real budget, ${values[0] == null ? "none" : whole(values[0])}`;
+}
+
+// The months the draft covers, four to a row: a month's own amount, or the
+// default shown in grey. The months before the from month are the real
+// budget's, on one line; any amounts the draft kept for them are marked as
+// not applying - see specs/year-plans, "Month exceptions in a draft" and
+// "Moving the from month".
+function MonthGrid({ months, realMonths, kept, fromMonth, defaultText, onChange }) {
+  const keptMonths = Object.entries(kept ?? {}).map(([m, cents]) => [Number(m), cents]).sort((x, y) => x[0] - y[0]);
   return (
     <div className="flex flex-col gap-1.5">
+      {fromMonth > 1 && <p className="text-xs text-ink-muted">{realBudgetLine(realMonths, fromMonth)}</p>}
+      {keptMonths.length > 0 && (
+        <p className="text-xs text-ink-muted">
+          {keptMonths.map(([m, cents]) => `${shortMonth(m)} ${whole(cents)}`).join(", ")} won&apos;t apply: before {longMonth(fromMonth)}.
+        </p>
+      )}
       <div className="grid grid-cols-4 gap-1.5" role="group" aria-label="Amount per month">
-        {MONTH_NUMBERS.map((m) => {
-          const before = m < fromMonth;
+        {MONTH_NUMBERS.filter((m) => m >= fromMonth).map((m) => {
           const own = months[m] ?? "";
-          const exception = !before && own !== "" && own !== defaultText;
+          const exception = own !== "" && own !== defaultText;
           return (
             <label
               key={m}
               className={cn(
-                "flex flex-col gap-0.5 rounded-lg px-2 py-1.5 text-xs",
-                before ? "bg-surface-2 text-ink-muted" : exception ? "bg-draft-tint ring-1 ring-draft-ring" : "bg-surface ring-1 ring-border",
+                "flex flex-col gap-0.5 rounded-lg px-2 py-1.5 text-xs text-ink-muted",
+                exception ? "bg-draft-tint ring-2 ring-draft" : "bg-surface ring-1 ring-border",
               )}
             >
               <span className="flex items-center justify-between">
@@ -176,25 +195,24 @@ function MonthGrid({ months, realMonths, fromMonth, defaultText, onChange }) {
                   </button>
                 )}
               </span>
-              {before ? (
-                <span className="num h-6 leading-6">{realMonths[m - 1] == null ? "—" : whole(realMonths[m - 1])}</span>
-              ) : (
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={own}
-                  placeholder={defaultText}
-                  aria-label={longMonth(m)}
-                  onChange={(e) => onChange({ ...months, [m]: e.target.value })}
-                  className="num h-6 w-full min-w-0 bg-transparent text-sm text-ink-primary outline-none placeholder:text-ink-muted"
-                />
-              )}
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={own}
+                placeholder={defaultText}
+                aria-label={longMonth(m)}
+                onChange={(e) => onChange({ ...months, [m]: e.target.value })}
+                className={cn(
+                  "num h-6 w-full min-w-0 bg-transparent text-sm outline-none placeholder:text-ink-secondary",
+                  NO_SPINNER,
+                  exception ? "font-medium text-draft-ink" : "text-ink-primary",
+                )}
+              />
             </label>
           );
         })}
       </div>
-      {fromMonth > 1 && <p className="text-xs text-ink-muted">Before {longMonth(fromMonth)}: the real budget.</p>}
     </div>
   );
 }
@@ -356,19 +374,21 @@ export function PlanBudgetEditor({ plan, row, onSaved, onCancel }) {
           <MonthGrid
             months={months}
             realMonths={row.months}
+            kept={row.kept}
             fromMonth={fromMonth}
             defaultText={amount}
             onChange={setMonths}
           />
         ) : (
-          <Button type="button" size="sm" variant="ghost" className="self-start px-0 text-accent" onClick={() => setShowMonths(true)}>
+          <button type="button" className="self-start text-sm text-draft-ink hover:underline" onClick={() => setShowMonths(true)}>
             Different amount in some months
-          </Button>
+          </button>
         ))}
       <span className="flex flex-wrap items-center justify-between gap-2 pt-1">
         {row.kind !== "none" ? (
-          <Button type="button" size="sm" variant="ghost" className="text-ink-secondary hover:text-critical" onClick={removeBudget}>
-            No budget in this draft
+          <Button type="button" size="sm" variant="outline" className="text-ink-secondary hover:text-critical" onClick={removeBudget}>
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
+            Remove budget
           </Button>
         ) : (
           <span />

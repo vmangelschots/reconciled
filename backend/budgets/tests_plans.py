@@ -229,7 +229,17 @@ class YearViewTests(TestCase):
         self.assertEqual(row["heading_cents"], 480000 + 6 * 60000)
         self.assertEqual(view["totals"]["left_cents"], 500000 - 720000)
         self.assertEqual(view["totals"]["heading_left_cents"], 500000 - 840000)
+        self.assertEqual(view["totals"]["heading_expenses_cents"], 840000)
         self.assertEqual(view["split_month"], 6)
+
+    def test_heading_for_without_income(self):
+        june = date(2027, 6, 14)
+        self.txn(date(2027, 3, 1), -320000, self.groceries)
+
+        totals = year_view(2027, june)["totals"]
+
+        self.assertIsNone(totals["heading_left_cents"])
+        self.assertEqual(totals["heading_expenses_cents"], 320000 + 6 * 60000 + 60000)
 
 
 class ChangesAgainstCurrentTests(TestCase):

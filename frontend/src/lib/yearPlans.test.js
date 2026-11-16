@@ -35,7 +35,7 @@ describe("year plan wording", () => {
       warning: true,
     });
     expect(changeLine({ category_name: "Groceries", from_cents: 65000, to_cents: 60000, per: "month", exceptions: null }))
-      .toEqual({ title: "Groceries", detail: "€650 → €600 a month", warning: false });
+      .toEqual({ title: "Groceries", detail: "€650\u2009→\u2009€600 a month", warning: false });
     expect(changeLine({ category_name: "Streaming", bills: { added: 1, ended: 0 }, from_cents: 1799, to_cents: 2798 }).title)
       .toBe("Streaming +1 bill");
   });

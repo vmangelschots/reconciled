@@ -17,7 +17,7 @@ import { cn } from "../lib/cn";
 import { formatMoneyWhole as whole } from "../lib/money";
 import { currentMonth } from "../lib/months";
 import { formatDayMonth } from "../lib/yearlyBudgets";
-import { actualHeader, currentFigure, incomeCaption, longMonth, planCaption } from "../lib/yearPlans";
+import { actualHeader, actualPeriod, currentFigure, incomeCaption, KIND_NAME, longMonth, planCaption } from "../lib/yearPlans";
 import { ApplyPlanDialog } from "./ApplyPlanDialog";
 import { IncomeLineDialog } from "./IncomeLineDialog";
 import { PlanSheet } from "./PlanSheet";
@@ -78,26 +78,45 @@ function ChangeFigure({ cents, income = false }) {
   return <span className={cn("num text-right text-sm", good ? "text-positive" : "text-critical")}>{whole(cents, { signed: true })}</span>;
 }
 
-function SectionLabel({ children, draft, actualLabel }) {
+const LABEL = "text-[11px] font-medium tracking-wide text-ink-muted uppercase";
+
+function SectionLabel({ draft, actualLabel, first = "Budget" }) {
   return (
-    <li className={cn(ROW_GRID, WIDE_COLUMNS, "hidden px-5 pt-3 pb-1 text-[11px] font-medium tracking-wide text-ink-muted uppercase lg:grid")}>
-      <span>{children}</span>
+    <li className={cn(ROW_GRID, WIDE_COLUMNS, LABEL, "hidden px-5 pt-3 pb-1 lg:grid")}>
+      <span>{first}</span>
       <span />
       <span className="text-right">Plan</span>
       <span className="text-right">{draft ? "Change" : ""}</span>
-      <span className="text-right whitespace-nowrap normal-case">{actualLabel}</span>
+      <span className="text-right whitespace-nowrap">{actualLabel}</span>
     </li>
   );
 }
 
 function PhoneLabel({ children }) {
-  return <li className="px-5 pt-3 pb-1 text-[11px] font-medium tracking-wide text-ink-muted uppercase lg:hidden">{children}</li>;
+  return <li className={cn(LABEL, "px-5 pt-3 pb-1 lg:hidden")}>{children}</li>;
 }
 
-function PlanRow({ row, draft, onOpen }) {
+// The caption under a row, as one line: what it plans, how it changed, and
+// in the current year what was spent so far and is still to come.
+function rowCaption(row, draft, split) {
+  const parts = [planCaption(row)];
+  const switched = draft && row.current && row.current.kind !== "none" && row.kind !== "none" && row.current.kind !== row.kind;
+  if (draft && row.changed && !switched && currentFigure(row)) parts.push(`was ${currentFigure(row)}`);
+  if (split && row.heading_cents != null) {
+    parts.push(`${whole(row.actual_cents)} so far`, `${whole(Math.max(row.heading_cents - row.actual_cents, 0))} still to come`);
+  }
+  return { text: parts.filter(Boolean).join(" · "), switched };
+}
+
+function PlanRow({ row, draft, split, onOpen }) {
   const second = draft ? <ChangeFigure cents={row.change_cents} /> : <Num cents={row.actual_cents} muted />;
+  const caption = rowCaption(row, draft, split);
+  const struck = draft && row.changed && row.current && row.current.plan_cents !== row.plan_cents;
   return (
-    <li>
+    <li className="relative">
+      {draft && row.changed && (
+        <span className={cn("absolute top-[1.15rem] h-1.5 w-1.5 rounded-full bg-draft", row.indent ? "left-6" : "left-2")} aria-label="Changed" />
+      )}
       <button
         type="button"
         aria-label={`Open ${row.category_name}`}
@@ -110,7 +129,6 @@ function PlanRow({ row, draft, onOpen }) {
         )}
       >
         <span className="flex min-w-0 items-center gap-1.5">
-          {draft && row.changed && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-draft" aria-label="Changed" />}
           <span className={cn("truncate text-sm", row.indent ? "text-ink-secondary" : "font-medium text-ink-primary")}>
             {row.category_name}
           </span>
@@ -119,10 +137,8 @@ function PlanRow({ row, draft, onOpen }) {
         <span className="order-4 col-span-3 lg:order-none lg:col-span-1">
           {row.kind !== "none" && <YearBar plan={row.plan_cents} actual={row.actual_cents} label={`${row.category_name} actual against plan`} />}
         </span>
-        <span className="flex flex-col items-end">
-          {draft && row.changed && row.current && (
-            <span className="num text-xs text-ink-muted line-through">{whole(row.current.plan_cents)}</span>
-          )}
+        <span className="flex items-baseline justify-end gap-1.5">
+          {struck && <span className="num text-xs text-ink-muted line-through">{whole(row.current.plan_cents)}</span>}
           <span className={cn("num text-right text-sm", row.locked ? "text-ink-secondary" : row.kind === "none" ? "text-ink-muted" : "text-ink-primary")}>
             {row.kind === "none" ? "—" : whole(row.plan_cents)}
           </span>
@@ -133,8 +149,12 @@ function PlanRow({ row, draft, onOpen }) {
           <Num cents={row.actual_cents} muted />
         </span>
         <span className="order-5 col-span-3 flex flex-wrap items-center gap-x-2 text-xs text-ink-muted lg:col-span-5">
-          <span>{planCaption(row)}</span>
-          {draft && row.changed && currentFigure(row) && <span>· was {currentFigure(row)}</span>}
+          <span>{caption.text}</span>
+          {caption.switched && (
+            <span className="text-warning">
+              {KIND_NAME[row.current.kind]} → {KIND_NAME[row.kind]}
+            </span>
+          )}
           {row.changed_since_copy && (
             <span className="inline-flex items-center gap-1 text-warning">
               <AlertTriangle className="h-3 w-3" aria-hidden="true" />
@@ -162,13 +182,12 @@ function Headline({ view, draft }) {
   const short = totals.left_cents < 0;
   const expensesShare = hasIncome ? Math.min(totals.expenses_cents / Math.max(totals.income_cents, 1), 1) : 1;
   const overShare = hasIncome && short ? Math.min(-totals.left_cents / Math.max(totals.income_cents, 1), 1) : 0;
+  const actual = `${whole(totals.actual_expenses_cents)} spent ${actualPeriod(view.actual, view.year)}`;
   return (
     <Panel>
       <div className="flex flex-col gap-2">
         <div className="flex items-start justify-between gap-3">
-          <span className="text-xs font-medium tracking-wide text-ink-muted uppercase">
-            {hasIncome ? (short ? "Short of income" : "Left to save") : "Planned expenses"}
-          </span>
+          <span className="text-xs font-medium tracking-wide text-ink-muted uppercase">{view.year}</span>
           {draft && totals.change_left_cents != null && totals.change_left_cents !== 0 && (
             <StatusBadge tone={totals.change_left_cents > 0 ? "positive" : "critical"}>
               {whole(totals.change_left_cents, { signed: true })} vs Current
@@ -178,11 +197,13 @@ function Headline({ view, draft }) {
         {hasIncome ? (
           <p className="text-3xl font-semibold tracking-tight text-ink-primary">
             <span className={cn("num", short && "text-critical")}>{whole(Math.abs(totals.left_cents))}</span>
-            <span className="text-base font-normal text-ink-muted">
-              {" "}
-              {short ? "short" : "left to save"}
-              {totals.share != null && !short && ` · ${totals.share}% of ${whole(totals.income_cents)} income`}
-            </span>
+            <span className="text-base font-normal text-ink-muted"> {short ? "short" : "left to save"}</span>
+            {totals.share != null && !short && (
+              <span className="block text-sm font-normal text-ink-muted sm:inline sm:text-base">
+                <span className="hidden sm:inline"> · </span>
+                {totals.share}% of {whole(totals.income_cents)} income
+              </span>
+            )}
           </p>
         ) : (
           <p className="text-3xl font-semibold tracking-tight text-ink-primary">
@@ -201,15 +222,18 @@ function Headline({ view, draft }) {
           </span>
         )}
         <span className="text-sm text-ink-secondary">
-          {hasIncome ? `Expenses ${whole(totals.expenses_cents)}` : "Add income to see what's left to save."}
-          {` · ${actualHeader(view.actual, view.year)} ${whole(totals.actual_expenses_cents)}`}
+          {hasIncome ? `Expenses ${whole(totals.expenses_cents)} · ${actual}` : `${actual} · Add income to see what's left to save.`}
         </span>
-        {totals.heading_left_cents != null && hasIncome && (
+        {totals.heading_expenses_cents != null && (
           <span className="text-sm text-ink-secondary">
             Heading for{" "}
-            <span className={cn("num font-medium", totals.heading_left_cents < 0 ? "text-critical" : "text-ink-primary")}>
-              {totals.heading_left_cents < 0 ? `${whole(-totals.heading_left_cents)} short` : `${whole(totals.heading_left_cents)} left to save`}
-            </span>{" "}
+            {hasIncome && totals.heading_left_cents != null ? (
+              <span className={cn("num font-medium", totals.heading_left_cents < 0 ? "text-critical" : "text-ink-primary")}>
+                {totals.heading_left_cents < 0 ? `${whole(-totals.heading_left_cents)} short` : `${whole(totals.heading_left_cents)} left to save`}
+              </span>
+            ) : (
+              <span className="num font-medium text-ink-primary">{whole(totals.heading_expenses_cents)} spent</span>
+            )}{" "}
             at this pace
           </span>
         )}
@@ -249,7 +273,7 @@ function IncomePanel({ view, plan, editable, categories, draftTone, onChanged })
     <Panel
       flush
       title="Income"
-      className={cn(draftTone && "ring-draft-ring")}
+      className={cn("overflow-hidden", draftTone && "ring-draft-ring")}
       actions={
         <>
           {plan.kind === "current" && <StatusBadge>Plan only</StatusBadge>}
@@ -268,7 +292,8 @@ function IncomePanel({ view, plan, editable, categories, draftTone, onChanged })
       }
     >
       {view.has_income ? (
-        <ul className="divide-y divide-border pb-1">
+        <ul className="divide-y divide-border">
+          <SectionLabel first="Line" draft={false} actualLabel={actualHeader(view.actual, view.year)} />
           {view.income.map((line) => (
             <li key={line.id}>
               <button
@@ -339,6 +364,7 @@ function IncomePanel({ view, plan, editable, categories, draftTone, onChanged })
         <IncomeLineDialog
           open
           target={target}
+          planName={plan.kind === "current" ? `Current ${view.year}` : `draft ${plan.name}`}
           line={editing === "new" ? null : editing}
           categories={categories}
           onClose={() => setEditing(null)}
@@ -476,8 +502,8 @@ function DraftBar({ plan, firstMonth, onFromMonth, onApply, phone }) {
   return (
     <div
       className={cn(
-        "z-20 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl bg-draft-bar px-4 py-2.5 ring-1 ring-draft-ring",
-        phone ? "fixed inset-x-4 bottom-[calc(4rem+env(safe-area-inset-bottom))] shadow-lg" : "sticky top-2",
+        "z-20 flex gap-x-3 gap-y-2 rounded-xl bg-draft-bar px-4 py-2.5 ring-1 ring-draft-ring",
+        phone ? "fixed inset-x-4 bottom-[calc(4rem+env(safe-area-inset-bottom))] flex-col shadow-lg" : "sticky top-2 items-center",
       )}
       role="region"
       aria-label="Draft"
@@ -485,23 +511,25 @@ function DraftBar({ plan, firstMonth, onFromMonth, onApply, phone }) {
       <span className="flex min-w-0 flex-1 items-center gap-2 text-sm">
         <span className="h-2 w-2 shrink-0 rounded-full bg-draft" aria-hidden="true" />
         <span className="truncate font-medium text-draft-ink">{plan.name}</span>
-        <span className="hidden truncate text-ink-secondary sm:inline">· draft, not your budget yet</span>
+        <span className="shrink-0 text-ink-secondary">· draft, not your budget yet</span>
       </span>
-      <Select value={String(Math.max(plan.from_month, firstMonth))} onValueChange={(v) => onFromMonth(Number(v))}>
-        <SelectTrigger className="h-8 w-40 bg-surface" aria-label="From month">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {months.map((m) => (
-            <SelectItem key={m} value={String(m)}>
-              From {longMonth(m)}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Button size="sm" onClick={onApply}>
-        Apply…
-      </Button>
+      <span className="flex items-center gap-2">
+        <Select value={String(Math.max(plan.from_month, firstMonth))} onValueChange={(v) => onFromMonth(Number(v))}>
+          <SelectTrigger className={cn("h-8 bg-surface", phone ? "min-w-0 flex-1" : "w-40")} aria-label="From month">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {months.map((m) => (
+              <SelectItem key={m} value={String(m)}>
+                From {longMonth(m)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button size="sm" onClick={onApply}>
+          Apply…
+        </Button>
+      </span>
     </div>
   );
 }
@@ -553,7 +581,7 @@ export function YearPlanView({ year, planId, categories, openCategory, onPlanCha
   // On a phone the draft bar sits above the tab bar; notifications go above it.
   useEffect(() => {
     if (!(draft && phone)) return undefined;
-    document.documentElement.style.setProperty("--toast-lift", "4rem");
+    document.documentElement.style.setProperty("--toast-lift", "6.5rem");
     return () => document.documentElement.style.removeProperty("--toast-lift");
   }, [draft, phone]);
 
@@ -659,7 +687,14 @@ export function YearPlanView({ year, planId, categories, openCategory, onPlanCha
       )}
       {list.history.length > 0 && (
         <span className="relative shrink-0">
-          <Button size="sm" variant="ghost" className="h-8" aria-expanded={historyOpen} onClick={() => setHistoryOpen((v) => !v)}>
+          <Button
+            size="sm"
+            variant="ghost"
+            className={cn("h-8", applied && "bg-ink-primary text-surface hover:bg-ink-primary/90 hover:text-surface")}
+            aria-expanded={historyOpen}
+            aria-pressed={applied}
+            onClick={() => setHistoryOpen((v) => !v)}
+          >
             <Clock className="h-4 w-4" aria-hidden="true" />
             History
             <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
@@ -739,12 +774,10 @@ export function YearPlanView({ year, planId, categories, openCategory, onPlanCha
         }
       >
         <ul className="divide-y divide-border">
-          <SectionLabel draft={draft} actualLabel={actualLabel}>
-            {data.split_month ? `So far | Still to come` : "Budget"}
-          </SectionLabel>
+          <SectionLabel draft={draft} actualLabel={actualLabel} />
           <PhoneLabel>{draft ? "Plan · Change" : `Plan · ${actualLabel}`}</PhoneLabel>
           {rows.map((row) => (
-            <PlanRow key={row.category_id} row={row} draft={draft} onOpen={setSelectedId} />
+            <PlanRow key={row.category_id} row={row} draft={draft} split={data.split_month != null} onOpen={setSelectedId} />
           ))}
           <li className={cn(ROW_GRID, WIDE_COLUMNS, "grid-cols-[minmax(0,1fr)_auto_5rem] py-2.5 pr-5 pl-5 text-sm text-ink-secondary")}>
             <span>Not in the plan</span>
@@ -762,13 +795,13 @@ export function YearPlanView({ year, planId, categories, openCategory, onPlanCha
   );
 
   return (
-    <div className={cn("flex flex-col gap-4", draft && phone && "pb-16")}>
+    <div className={cn("flex flex-col gap-4", draft && phone && "pb-32")}>
       {chips}
-      {draft && <DraftBar plan={plan} firstMonth={firstMonth} onFromMonth={changeFromMonth} onApply={() => setApplying(true)} phone={phone} />}
       {applied && (
-        <div className="flex flex-wrap items-center gap-3 rounded-xl bg-surface-2 px-4 py-2.5 text-sm text-ink-secondary ring-1 ring-border">
+        <div className="flex flex-wrap items-center gap-3 rounded-xl bg-surface-2 px-4 py-2.5 text-sm text-ink-secondary ring-1 ring-border" role="region" aria-label="Applied plan">
+          <span className="font-medium text-ink-primary">{plan.name}</span>
           <StatusBadge>{appliedStamp(plan)}</StatusBadge>
-          <span className="flex-1">A record of what was applied. It can&apos;t be changed.</span>
+          <span className="flex-1">A record. It can&apos;t be changed.</span>
           {list.can_draft && (
             <Button size="sm" variant="outline" onClick={duplicate}>
               <Copy className="h-4 w-4" aria-hidden="true" />
@@ -777,14 +810,9 @@ export function YearPlanView({ year, planId, categories, openCategory, onPlanCha
           )}
         </div>
       )}
-      <div
-        className={cn(
-          "flex flex-col gap-4",
-          draft && "-mx-2 rounded-2xl bg-draft-tint p-2 sm:-mx-3 sm:p-3",
-          applied && "opacity-80",
-        )}
-      >
-        {content}
+      <div className={cn("flex flex-col gap-4", draft && "rounded-2xl bg-draft-tint p-2 ring-1 ring-draft-ring sm:p-3")}>
+        {draft && <DraftBar plan={plan} firstMonth={firstMonth} onFromMonth={changeFromMonth} onApply={() => setApplying(true)} phone={phone} />}
+        <div className={cn("flex flex-col gap-4", applied && "opacity-80")}>{content}</div>
       </div>
       {plan && (
         <PlanSheet
@@ -794,18 +822,27 @@ export function YearPlanView({ year, planId, categories, openCategory, onPlanCha
           wide={isWide}
           onClose={() => setSelectedId(null)}
           onSaved={async (message) => {
-            toast.success(message);
+            toast.success(message, { replace: "plan-save" });
             setSelectedId(null);
             await load();
           }}
-          onChangeInDraft={(categoryId) => {
+          drafts={list.drafts}
+          onChangeInDraft={(categoryId, draftId) => {
             setSelectedId(null);
-            newDraft(categoryId);
+            if (draftId) onPlanChange(draftId, categoryId);
+            else newDraft(categoryId);
           }}
         />
       )}
       {applying && draft && (
-        <ApplyPlanDialog plan={plan} open firstMonth={firstMonth} onClose={() => setApplying(false)} onApplied={applied_} />
+        <ApplyPlanDialog
+          plan={plan}
+          open
+          firstMonth={firstMonth}
+          onClose={() => setApplying(false)}
+          onApplied={applied_}
+          onFromMonth={changeFromMonth}
+        />
       )}
       {renaming && <RenameDialog plan={plan} onClose={() => setRenaming(false)} onRenamed={rename} />}
       {addingCategory && (

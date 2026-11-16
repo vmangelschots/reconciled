@@ -24,14 +24,18 @@ export function ToastProvider({ children }) {
   }, [])
 
   // action: optional { label, onClick }, a small button in the toast that
-  // also closes it - e.g. Undo.
-  const show = useCallback((variant, message, action = null) => {
+  // also closes it - e.g. Undo. replace: optional key; a new toast with the
+  // same key takes the old one's place instead of stacking (a draft's saves).
+  const show = useCallback((variant, message, action = null, replace = null) => {
     const id = ++nextId
-    setToasts((current) => [...current, { id, variant, message, action }])
+    setToasts((current) => [
+      ...current.filter((t) => replace == null || t.replace !== replace),
+      { id, variant, message, action, replace },
+    ])
   }, [])
 
   const toast = {
-    success: (message, { action } = {}) => show('success', message, action),
+    success: (message, { action, replace } = {}) => show('success', message, action, replace),
     error: (message) => show('error', message),
   }
 

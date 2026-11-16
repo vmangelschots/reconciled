@@ -88,7 +88,7 @@
   --chart-other: var(--chart-series-2);
   --chart-area: color-mix(in srgb, var(--chart-series-1) 12%, transparent);
   --draft: #6b9be0;
-  --draft-tint: #10131a;
+  --draft-tint: #141c2a;
   --draft-bar: #172131;
   --draft-ring: rgba(107, 155, 224, 0.3);
   --draft-ink: #9dbdeb;

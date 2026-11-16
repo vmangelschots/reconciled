@@ -15,7 +15,7 @@ import { Skeleton } from "./ui/Skeleton";
  * "Apply preview" and "Applying a draft". `firstMonth` is the earliest month
  * it may apply from (this month for the current year).
  */
-export function ApplyPlanDialog({ plan, open, firstMonth, onClose, onApplied }) {
+export function ApplyPlanDialog({ plan, open, firstMonth, onClose, onApplied, onFromMonth }) {
   const [fromMonth, setFromMonth] = useState(Math.max(plan.from_month, firstMonth));
   const [preview, setPreview] = useState(null);
   const [error, setError] = useState(null);
@@ -56,11 +56,21 @@ export function ApplyPlanDialog({ plan, open, firstMonth, onClose, onApplied }) 
       <DialogContent className="max-w-[calc(100vw-2rem)] sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Apply {plan.name}?</DialogTitle>
-          <DialogDescription>From the month you pick, this draft becomes your budget. Earlier months keep theirs.</DialogDescription>
+          <DialogDescription>
+            From the month you pick, this draft becomes your budget. Earlier months keep theirs, except where a kind switch below
+            changes them.
+          </DialogDescription>
         </DialogHeader>
         <label className="flex items-center gap-2 text-sm text-ink-secondary">
           From
-          <Select value={String(fromMonth)} onValueChange={(v) => setFromMonth(Number(v))}>
+          <Select
+            value={String(fromMonth)}
+            onValueChange={(v) => {
+              setFromMonth(Number(v));
+              // One from month: picking it here saves it to the draft.
+              onFromMonth?.(Number(v));
+            }}
+          >
             <SelectTrigger className="h-8 w-36" aria-label="Apply from">
               <SelectValue />
             </SelectTrigger>
@@ -73,7 +83,7 @@ export function ApplyPlanDialog({ plan, open, firstMonth, onClose, onApplied }) 
             </SelectContent>
           </Select>
         </label>
-        <div className="flex max-h-[50vh] flex-col gap-3 overflow-y-auto">
+        <div className="mt-1 flex max-h-[50vh] flex-col gap-3 overflow-y-auto border-t border-border pt-3">
           {preview == null && !error && (
             <div className="flex flex-col gap-2">
               <Skeleton className="h-4 w-2/3" />

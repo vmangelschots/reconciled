@@ -5,7 +5,8 @@ export const KIND_NAME = { monthly: "monthly", yearly: "yearly", target: "on a d
 
 // "Jan" .. "Dec" for month 1-12.
 export function shortMonth(month) {
-  return new Date(2025, month - 1, 1).toLocaleString(undefined, { month: "short" });
+  // en-GB writes September as "Sept"; three letters keep the grid even.
+  return new Date(2025, month - 1, 1).toLocaleString(undefined, { month: "short" }).replace(/^Sept$/, "Sep");
 }
 
 // "January" .. "December".
@@ -22,6 +23,15 @@ export function actualHeader(actual, year) {
   }
   if (actual.kind === "so_far") return "So far";
   return `Actual ${year}`;
+}
+
+// The period Actual covers, for a sentence: "Nov–Oct", "so far", "in 2025".
+export function actualPeriod(actual, year) {
+  if (actual.kind === "last_12") {
+    return `${shortMonth(Number(actual.from.slice(5, 7)))}–${shortMonth(Number(actual.until.slice(5, 7)))}`;
+  }
+  if (actual.kind === "so_far") return "so far";
+  return `in ${year}`;
 }
 
 // What a row's plan reads as: "600 a month", "3,000 a year", "780 on 1 Mar".
@@ -105,13 +115,13 @@ export function changeLine(change) {
     if (change.bills.ended) parts.push(`${change.bills.ended} ${change.bills.ended === 1 ? "bill ends" : "bills end"}`);
     return {
       title: `${name} ${parts.join(", ")}`,
-      detail: `${whole(change.from_cents)} → ${whole(change.to_cents)} a month`,
+      detail: `${whole(change.from_cents)} → ${whole(change.to_cents)} a month`,
       warning: false,
     };
   }
   const lines = [];
   if (change.from_cents !== change.to_cents) {
-    lines.push(`${change.from_cents == null ? "none" : whole(change.from_cents)} → ${amount(change.to_cents, change.per)}`);
+    lines.push(`${change.from_cents == null ? "none" : whole(change.from_cents)} → ${amount(change.to_cents, change.per)}`);
   }
   if (change.exceptions) {
     const set = change.exceptions.set.map(shortMonth);

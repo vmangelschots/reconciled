@@ -57,15 +57,26 @@ function Loans({ loans }) {
  * on Current and applied plans it is read-only, with "Change in a new
  * draft" and "Open in month view" - see specs/year-plans.
  */
-export function PlanSheet({ row, plan, view, wide, onSaved, onClose, onChangeInDraft }) {
+export function PlanSheet({ row, plan, view, wide, drafts = [], onSaved, onClose, onChangeInDraft }) {
   return (
     <Sheet open={row != null} onClose={onClose} wide={wide}>
-      {row && <PlanSheetBody key={`${plan.id}/${row.category_id}`} row={row} plan={plan} view={view} onSaved={onSaved} onClose={onClose} onChangeInDraft={onChangeInDraft} />}
+      {row && (
+        <PlanSheetBody
+          key={`${plan.id}/${row.category_id}`}
+          row={row}
+          plan={plan}
+          view={view}
+          latestDraft={drafts[0] ?? null}
+          onSaved={onSaved}
+          onClose={onClose}
+          onChangeInDraft={onChangeInDraft}
+        />
+      )}
     </Sheet>
   );
 }
 
-function PlanSheetBody({ row, plan, view, onSaved, onClose, onChangeInDraft }) {
+function PlanSheetBody({ row, plan, view, latestDraft, onSaved, onClose, onChangeInDraft }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const draft = plan.kind === "draft";
@@ -126,8 +137,18 @@ function PlanSheetBody({ row, plan, view, onSaved, onClose, onChangeInDraft }) {
           <>
             {monthly && <MonthStrip months={row.months} splitMonth={plan.kind === "applied" ? plan.from_month : null} />}
             <div className="flex flex-wrap gap-2">
+              {plan.kind === "current" && year >= thisYear && latestDraft && (
+                <Button type="button" size="sm" onClick={() => onChangeInDraft(row.category_id, latestDraft.id)}>
+                  Change in {latestDraft.name}
+                </Button>
+              )}
               {plan.kind === "current" && year >= thisYear && (
-                <Button type="button" size="sm" onClick={() => onChangeInDraft(row.category_id)}>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={latestDraft ? "outline" : "default"}
+                  onClick={() => onChangeInDraft(row.category_id, null)}
+                >
                   Change in a new draft
                 </Button>
               )}

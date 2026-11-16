@@ -186,7 +186,7 @@ describe("Current budget", () => {
     expect(await screen.findByText(whole(2760000))).toBeInTheDocument();
     expect(screen.getByText(/72% of/)).toBeInTheDocument();
     expect(screen.getByText("Plan only")).toBeInTheDocument();
-    expect(screen.getByText("Last 12 mo (Nov–Oct)")).toBeInTheDocument();
+    expect(screen.getAllByText("Last 12 mo (Nov–Oct)").length).toBe(2);
     expect(screen.queryByRole("region", { name: "Draft" })).toBeNull();
   });
 
@@ -204,14 +204,27 @@ describe("Current budget", () => {
     await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("plan=7&category=1"));
   });
 
+  it("changes in the latest draft when one exists", async () => {
+    plansApi.listPlans.mockResolvedValue({ ...LIST, drafts: [LEAN] });
+    renderPage("/budgets?view=year&year=2027");
+    await userEvent.click(await screen.findByRole("button", { name: "Open Groceries" }));
+
+    const sheet = screen.getByRole("dialog");
+    expect(within(sheet).getByRole("button", { name: "Change in a new draft" })).toBeInTheDocument();
+    await userEvent.click(within(sheet).getByRole("button", { name: "Change in Lean" }));
+
+    expect(plansApi.createPlan).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("?view=year&year=2027&plan=7&category=1"));
+  });
+
   it("says when a plan is short of income", async () => {
     plansApi.getCurrentPlan.mockResolvedValue(
       view({ totals: { ...view().totals, income_cents: 4260000, expenses_cents: 4400000, left_cents: -140000, share: -3 } }),
     );
     renderPage("/budgets?view=year&year=2027");
 
-    expect(await screen.findByText("Short of income")).toBeInTheDocument();
-    expect(screen.getByText(whole(140000))).toHaveClass("text-critical");
+    expect(await screen.findByText(whole(140000))).toHaveClass("text-critical");
+    expect(screen.getByText("short")).toBeInTheDocument();
   });
 
   it("asks for income on a first visit", async () => {
@@ -236,6 +249,14 @@ describe("Current budget", () => {
     expect(plansApi.addIncomeLine).toHaveBeenCalledWith({ year: 2027 }, { name: "Salary", amount_cents: 320000, per: "month", category: 3 });
   });
 
+  it("names the plan income goes to", async () => {
+    renderPage("/budgets?view=year&year=2027");
+    await userEvent.click(await screen.findByRole("button", { name: "Add" }));
+
+    expect(screen.getByRole("heading", { name: "Add income to Current 2027" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Name")).toBeInTheDocument();
+  });
+
   it("says when there is nothing to plan yet", async () => {
     plansApi.getCurrentPlan.mockResolvedValue(view({ income: [], rows: [], has_income: false, has_budgets: false }));
     renderPage("/budgets?view=year&year=2027");
@@ -249,6 +270,30 @@ describe("Current budget", () => {
 
     await screen.findByText(whole(2760000));
     expect(screen.queryByRole("button", { name: "New draft" })).toBeNull();
+  });
+});
+
+describe("The current year", () => {
+  const SPLIT = {
+    year: 2026, split_month: 6, actual: { kind: "so_far", from: "2026-01-01", until: "2026-06-14" },
+    rows: [row({ actual_cents: 320000, heading_cents: 680000 })],
+  };
+
+  it("heads for spending without income", async () => {
+    plansApi.getCurrentPlan.mockResolvedValue(
+      view({ ...SPLIT, income: [], has_income: false, totals: { ...view().totals, heading_expenses_cents: 900000, heading_left_cents: null } }),
+    );
+    renderPage("/budgets?view=year&year=2026");
+
+    expect(await screen.findByText(`${whole(900000)} spent`)).toBeInTheDocument();
+  });
+
+  it("splits a row into so far and still to come", async () => {
+    plansApi.getCurrentPlan.mockResolvedValue(view(SPLIT));
+    renderPage("/budgets?view=year&year=2026");
+
+    const groceries = await screen.findByRole("button", { name: "Open Groceries" });
+    expect(groceries).toHaveTextContent(`${whole(320000)} so far · ${whole(360000)} still to come`);
   });
 });
 
@@ -275,6 +320,24 @@ describe("Drafts", () => {
     expect(within(groceries).getAllByText(whole(-60000, { signed: true })).length).toBeGreaterThan(0);
     const holidays = screen.getByRole("button", { name: "Open Holidays" });
     expect(within(holidays).queryByText(/\+|−|-€/)).toBeNull();
+  });
+
+  it("shows a kind switch with the same total", async () => {
+    plansApi.getPlan.mockResolvedValue(
+      draftView({
+        rows: [
+          row({
+            category_id: 2, category_name: "Holidays", months: months(25000), default_cents: 25000, plan_cents: 300000,
+            changed: true, change_cents: 0, current: { kind: "yearly", plan_cents: 300000, display_cents: 300000 },
+          }),
+        ],
+      }),
+    );
+    renderPage("/budgets?view=year&year=2027&plan=7");
+
+    const holidays = await screen.findByRole("button", { name: "Open Holidays" });
+    expect(within(holidays).queryByText(whole(300000), { selector: ".line-through" })).toBeNull();
+    expect(within(holidays).getByText("yearly → monthly")).toHaveClass("text-warning");
   });
 
   it("flags a row whose budget changed since the copy", async () => {
@@ -305,6 +368,18 @@ describe("Drafts", () => {
     await userEvent.click(within(sheet).getByRole("button", { name: "Save to draft" }));
 
     expect(plansApi.setPlanBudget).toHaveBeenCalledWith(7, 1, { kind: "monthly", default_cents: 60000, months: { 12: 80000 } });
+  });
+
+  it("replaces the save toast rather than stacking", async () => {
+    plansApi.setPlanBudget.mockResolvedValue({});
+    renderPage("/budgets?view=year&year=2027&plan=7");
+    for (const name of ["Groceries", "Holidays"]) {
+      await userEvent.click(await screen.findByRole("button", { name: `Open ${name}` }));
+      await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Save to draft" }));
+      await screen.findByText(`${name} saved to Lean.`);
+    }
+
+    expect(screen.queryByText("Groceries saved to Lean.")).toBeNull();
   });
 
   it("resets a month back to the default", async () => {
@@ -341,7 +416,27 @@ describe("Drafts", () => {
     await userEvent.click(within(sheet).getByRole("button", { name: "Different amount in some months" }));
     expect(within(sheet).queryByLabelText("June")).toBeNull();
     expect(within(sheet).getByLabelText("July")).toBeInTheDocument();
-    expect(within(sheet).getByText("Before July: the real budget.")).toBeInTheDocument();
+    expect(within(sheet).getByText(`Jan–Jun: real budget, ${whole(60000)}`)).toBeInTheDocument();
+  });
+
+  it("marks a kept month that won't apply after moving the from month", async () => {
+    plansApi.getPlan.mockResolvedValue(draftView({ plan: { ...LEAN, from_month: 9 }, rows: [row({ kept: { 8: 90000 } })] }));
+    renderPage("/budgets?view=year&year=2027&plan=7");
+    await userEvent.click(await screen.findByRole("button", { name: "Open Groceries" }));
+
+    const sheet = screen.getByRole("dialog");
+    await userEvent.click(within(sheet).getByRole("button", { name: "Different amount in some months" }));
+    expect(within(sheet).getByText(`Aug ${whole(90000)} won't apply: before September.`)).toBeInTheDocument();
+    expect(within(sheet).queryByLabelText("August")).toBeNull();
+  });
+
+  it("removes the budget in the draft", async () => {
+    plansApi.removePlanBudget.mockResolvedValue({});
+    renderPage("/budgets?view=year&year=2027&plan=7");
+    await userEvent.click(await screen.findByRole("button", { name: "Open Groceries" }));
+    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Remove budget" }));
+
+    expect(plansApi.removePlanBudget).toHaveBeenCalledWith(7, 1);
   });
 
   it("sets a bill to end in December", async () => {
@@ -420,6 +515,24 @@ describe("Applying", () => {
     expect(plansApi.previewApply).toHaveBeenCalledWith(7, 1);
   });
 
+  it("saves the month picked in the dialog to the draft", async () => {
+    vi.setSystemTime(new Date(2027, 1, 10));
+    plansApi.listPlans.mockResolvedValue({ ...LIST, last_year: 2028 });
+    plansApi.getPlan.mockResolvedValue(draftView({ plan: { ...LEAN, from_month: 3, name: "Rest of 2027" } }));
+    plansApi.previewApply.mockResolvedValue(PREVIEW);
+    plansApi.updatePlan.mockResolvedValue({});
+    renderPage("/budgets?view=year&year=2027&plan=7");
+    await userEvent.click(await screen.findByRole("button", { name: "Apply…" }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent("except where a kind switch below changes them");
+    await userEvent.click(within(dialog).getByRole("combobox", { name: "Apply from" }));
+    await userEvent.click(screen.getByRole("option", { name: "April 2027" }));
+
+    expect(plansApi.updatePlan).toHaveBeenCalledWith(7, { from_month: 4 });
+    await waitFor(() => expect(plansApi.previewApply).toHaveBeenLastCalledWith(7, 4));
+  });
+
   it("changes nothing on Cancel", async () => {
     plansApi.previewApply.mockResolvedValue(PREVIEW);
     renderPage("/budgets?view=year&year=2027&plan=7");
@@ -482,7 +595,10 @@ describe("Applying", () => {
     await userEvent.click(await screen.findByRole("button", { name: /History/ }));
     await userEvent.click(screen.getByRole("button", { name: /Rest of 2027/ }));
 
-    expect(await screen.findByText(/^Applied (12 Jun|Jun 12), from July$/)).toBeInTheDocument();
+    const record = await screen.findByRole("region", { name: "Applied plan" });
+    expect(within(record).getByText("Rest of 2027")).toBeInTheDocument();
+    expect(within(record).getByText(/^Applied (12 Jun|Jun 12), from July$/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /History/ })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "Duplicate" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Draft" })).toBeNull();
   });
@@ -543,7 +659,9 @@ describe("Year plans on a phone", () => {
     renderPage("/budgets?view=year&year=2027&plan=7");
 
     const bar = await screen.findByRole("region", { name: "Draft" });
-    expect(bar).toHaveClass("fixed");
+    expect(bar).toHaveClass("fixed", "flex-col");
+    expect(within(bar).getByText("Lean")).toBeInTheDocument();
+    expect(within(bar).getByText(/draft, not your budget yet/)).toBeInTheDocument();
     expect(screen.getByText("Plan · Change")).toBeInTheDocument();
   });
 
@@ -551,7 +669,7 @@ describe("Year plans on a phone", () => {
     const { unmount } = renderPage("/budgets?view=year&year=2027&plan=7");
     await screen.findByRole("region", { name: "Draft" });
 
-    expect(document.documentElement.style.getPropertyValue("--toast-lift")).toBe("4rem");
+    expect(document.documentElement.style.getPropertyValue("--toast-lift")).toBe("6.5rem");
     unmount();
     expect(document.documentElement.style.getPropertyValue("--toast-lift")).toBe("");
   });
