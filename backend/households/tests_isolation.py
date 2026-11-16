@@ -254,6 +254,9 @@ class ForeignIdTests(Case):
             "correction_id": self.theirs["correction"].pk if source != MISSING else MISSING,
             "row_id": self.theirs["txn"].pk if source != MISSING else MISSING,
             "number": 1,
+            "year": 2027,
+            "category_id": self.theirs["category"].pk if source != MISSING else MISSING,
+            "line_id": self.theirs["income"].pk if source != MISSING else MISSING,
         }
 
     def pk_for(self, route):
@@ -270,6 +273,10 @@ class ForeignIdTests(Case):
             ("api/^expected-items/", theirs["expected"]),
             ("api/bank-sync/connections/", theirs["connection"]),
             ("api/bank-sync/links/", theirs["link"]),
+            # Current takes a year, not an id: its income lines are household
+            # A's own, so B's line id answers like a missing one.
+            ("api/budgets/plans/current/", theirs["income"]),
+            ("api/budgets/plans/", theirs["plan"]),
         ]
         for prefix, row in table:
             if route.startswith(prefix):
@@ -304,7 +311,21 @@ class ForeignBodyTests(Case):
         my_txn = mine["txn"].pk
         txn = {"date": "2026-01-01", "amount_cents": -1, "payee": "x"}
         expected = {"name": "x", "direction": "out", "amount_cents": 1, "day": 1}
+        my_plan = mine["plan"].pk
         return [
+            ("post", "api/budgets/plans/", "/api/budgets/plans/", {"year": 2027, "copy_of": theirs["plan"].pk}),
+            (
+                "post",
+                None,
+                "/api/budgets/plans/current/2027/income/",
+                {"name": "x", "amount_cents": 1, "category": theirs["category"].pk},
+            ),
+            (
+                "post",
+                None,
+                f"/api/budgets/plans/{my_plan}/income/",
+                {"name": "x", "amount_cents": 1, "category": theirs["category"].pk},
+            ),
             ("post", "api/^transactions/$", "/api/transactions/", {**txn, "account": theirs["account"].pk}),
             (
                 "post",

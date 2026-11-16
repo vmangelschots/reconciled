@@ -19,7 +19,7 @@ from decimal import Decimal
 from accounts.models import Account, Loan, LoanCorrection
 from banksync.models import BankCredentials
 from budgets.summary import monthly_limits
-from budgets.models import Bill, BudgetSettings, Category, CategoryLimit, YearlyBudget
+from budgets.models import Bill, BudgetSettings, Category, CategoryLimit, IncomeLine, PlanBill, PlanBudget, YearlyBudget, YearPlan
 from forecasting.models import ExpectedItem
 from households.context import household_context
 from households.models import Household
@@ -346,6 +346,36 @@ class RestoreBackupTests(BackupTestCase):
         restore_backup(read_backup(json.dumps(envelope)))
         groceries = Category.objects.get(name="Groceries")
         self.assertEqual(monthly_limits(date(2030, 1, 1), loan_lines={})[0][groceries.id], 40000)
+
+    def test_year_plans_survive(self):
+        lean = YearPlan.objects.create(year=2027, name="Lean")
+        budget = PlanBudget.objects.create(plan=lean, category=self.groceries, kind="monthly", default_cents=60000,
+                                           month_cents={"12": 80000}, base={"kind": "monthly"})
+        PlanBill.objects.create(plan_budget=budget, name="Gym", day=1, amount_cents=3000, until_month=12)
+        IncomeLine.objects.create(plan=lean, name="Salary", amount_cents=320000, category=self.salary,
+                                  extra={"12": 320000})
+        fix = YearPlan.objects.create(year=2027, name="Fix", kind="applied", from_month=7,
+                                      applied_at=datetime(2027, 6, 12, 9, tzinfo=dt_timezone.utc))
+        content = self.file_content()
+        self.mess_up()
+        YearPlan.objects.all().delete()
+        restore_backup(read_backup(content))
+        lean = YearPlan.objects.get(name="Lean")
+        budget = lean.budgets.get()
+        self.assertEqual((budget.category.name, budget.default_cents, budget.month_cents), ("Groceries", 60000, {"12": 80000}))
+        self.assertEqual(budget.bills.get().until_month, 12)
+        line = lean.income_lines.get()
+        self.assertEqual((line.name, line.category.name, line.extra), ("Salary", "Salary", {"12": 320000}))
+        fix = YearPlan.objects.get(name="Fix")
+        self.assertEqual((fix.kind, fix.from_month, fix.applied_at.date()), ("applied", 7, date(2027, 6, 12)))
+
+    def test_a_backup_from_before_year_plans_restores(self):
+        envelope = json.loads(self.file_content())
+        plan_models = {"budgets.yearplan", "budgets.planbudget", "budgets.planbill", "budgets.incomeline"}
+        envelope["data"] = [row for row in envelope["data"] if row["model"] not in plan_models]
+        restore_backup(read_backup(json.dumps(envelope)))
+        self.assertFalse(YearPlan.objects.exists())
+        self.assertTrue(Category.objects.filter(name="Groceries").exists())
 
     def test_expected_items_survive(self):
         content = self.file_content()
