@@ -1,48 +1,14 @@
 # Spec Delta
 
-## MODIFIED Requirements
+## ADDED Requirements
 
-### Requirement: Budget sheet
-Clicking a budget, No budget or subcategory row SHALL open a sheet with that
-category's figures, its budget editor and the viewed month's transactions. A
-Bills category's sheet SHALL show its bill list instead of the editor, and
-collapse the transactions to "N transactions in <Month>", which opens them. It
-SHALL open from the side, or from the bottom on a phone. Saving SHALL close it
-and briefly highlight the row. The editor SHALL offer Remove budget for a
-category with a budget, and a Bills sheet SHALL also offer it next to Edit
-bills. When the viewed month has its own limit, the editor SHALL offer Use
-default, or Remove <Month>'s limit without a default. Either action SHALL
-close the sheet with a toast saying what changed; Use default's toast SHALL
-offer Undo. A row that lands under "No budget" SHALL be shown, with the group
-open.
-
-#### Scenario: Set a limit from the sheet
-- **WHEN** the user clicks "Groceries", changes its amount and saves
-- **THEN** the sheet closes, a toast confirms it, and the row shows the new
-  limit and is highlighted
-
-#### Scenario: A parent's transactions
-- **WHEN** the user opens "Food", which covers its subcategories
-- **THEN** the sheet lists the month's transactions in "Food" and its
-  subcategories
-
-#### Scenario: Fix a category from the sheet
-- **WHEN** the user changes a transaction's category in the sheet
-- **THEN** the sheet's rows and the page's figures refresh
-
-#### Scenario: A yearly budget shows the viewed month
-- **WHEN** the user opens "Clothing" (yearly)
-- **THEN** the sheet shows its figures for the year, and transactions for the
-  viewed month only, saying which month
-
-#### Scenario: Rename from the sheet
-- **WHEN** the user wants to rename the category
-- **THEN** the sheet links to the category settings
-
-#### Scenario: A Bills sheet stays short
-- **WHEN** the user opens "Streaming" in November, which has 4 transactions
-- **THEN** the sheet shows its bills and "4 transactions in November",
-  which lists them when chosen
+### Requirement: Removing from the budget sheet
+The editor SHALL offer Remove budget for a category with a budget, and a
+Bills sheet SHALL also offer it next to Edit bills. When the viewed month has
+its own limit, the editor SHALL offer Use default, or Remove <Month>'s limit
+without a default. Either action SHALL close the sheet with a toast saying
+what changed; Use default's toast SHALL offer Undo. A row that lands under
+"No budget" SHALL be shown, with the group open.
 
 #### Scenario: Remove a budget from the sheet
 - **WHEN** the user opens "Groceries", chooses Remove budget and confirms
@@ -68,8 +34,6 @@ open.
 #### Scenario: No default to use
 - **WHEN** "Gifts" has 50.00 for December only and no default
 - **THEN** the editor offers "Remove December's limit" instead
-
-## ADDED Requirements
 
 ### Requirement: Editing a month with its own limit
 When the viewed month has its own limit, the editor SHALL start with "This

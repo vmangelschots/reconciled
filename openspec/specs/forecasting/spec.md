@@ -189,7 +189,8 @@ is forecast twice.
 
 #### Scenario: Streaming is a Bills category
 - **WHEN** the user saves an expected item recognised by "Streaming"
-- **THEN** the system rejects it, saying its budget is already forecast
+- **THEN** the system rejects it, saying its budget is already forecast and
+  that removing the budget lets it be expected instead
 
 #### Scenario: A transfer within the pot
 - **WHEN** the pot is Everyday and the user picks "Revolut" to recognise
