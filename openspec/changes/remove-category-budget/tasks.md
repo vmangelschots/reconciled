@@ -2,8 +2,8 @@
 
 ## 1. Backend
 
-- [ ] 1.1 Add `DELETE /api/categories/{id}/budget/` to `CategoryViewSet` (same tab/loan guards as the PUT; in one transaction delete limits, yearly budgets and bills, set `budget_kind` to monthly; return the category); verify with tests in `backend/budgets/tests.py` for "Remove a monthly budget", "Remove a yearly budget", "Remove a Bills budget", "A parent becomes a group" (summary shows the parent as a group and the cap on its own), "Not for a loan's category" and a tab being rejected; then run `python manage.py test budgets`
-- [ ] 1.2 Add `DELETE /api/categories/{id}/limit/?month=YYYY-MM` (tab/loan/kind guards as the PUT; 400 without a month or on a bad month, 404 when that month has no override; return the category); verify with tests for "Back to the default", "No default to fall back to" and "No override that month"; then run `python manage.py test budgets`
+- [x] 1.1 Add `DELETE /api/categories/{id}/budget/` to `CategoryViewSet` (same tab/loan guards as the PUT; in one transaction delete limits, yearly budgets and bills, set `budget_kind` to monthly; return the category); verify with tests in `backend/budgets/tests.py` for "Remove a monthly budget", "Remove a yearly budget", "Remove a Bills budget", "A parent becomes a group" (summary shows the parent as a group and the cap on its own), "Not for a loan's category" and a tab being rejected; then run `python manage.py test budgets`
+- [x] 1.2 Add `DELETE /api/categories/{id}/limit/?month=YYYY-MM` (tab/loan/kind guards as the PUT; 400 without a month or on a bad month, 404 when that month has no override; return the category); verify with tests for "Back to the default", "No default to fall back to" and "No override that month"; then run `python manage.py test budgets`
 
 ## 2. Frontend
 
