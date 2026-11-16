@@ -126,7 +126,13 @@ function coverage(row, budgetCents) {
 }
 
 function monthlyRow(row, summary, byId) {
-  const base = { id: row.category_id, name: row.category_name, parentId: row.parent_id, limitCents: row.limit_cents };
+  const base = {
+    id: row.category_id,
+    name: row.category_name,
+    parentId: row.parent_id,
+    limitCents: row.limit_cents,
+    overridden: Boolean(row.overridden),
+  };
   const spentCents = row.group_spent_cents ?? row.spent_cents;
   if (row.limit_cents == null) {
     return {

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("./client", () => ({ apiFetch: vi.fn().mockResolvedValue({}) }));
 
 import { apiFetch } from "./client";
-import { addBillFromPayment, setCategoryBills, setCategoryBudget } from "./categories";
+import { addBillFromPayment, removeCategoryBudget, removeCategoryLimit, setCategoryBills, setCategoryBudget } from "./categories";
 
 describe("bills API", () => {
   beforeEach(() => apiFetch.mockClear());
@@ -28,5 +28,19 @@ describe("bills API", () => {
       method: "POST",
       body: { transaction: 91, name: "Apple TV" },
     });
+  });
+});
+
+describe("removing a budget", () => {
+  beforeEach(() => apiFetch.mockClear());
+
+  it("removes the whole budget", async () => {
+    await removeCategoryBudget(4);
+    expect(apiFetch).toHaveBeenCalledWith("/api/categories/4/budget/", { method: "DELETE" });
+  });
+
+  it("removes one month's override", async () => {
+    await removeCategoryLimit(4, "2026-12");
+    expect(apiFetch).toHaveBeenCalledWith("/api/categories/4/limit/?month=2026-12", { method: "DELETE" });
   });
 });

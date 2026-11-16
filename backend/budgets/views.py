@@ -106,6 +106,27 @@ class CategoryViewSet(viewsets.ModelViewSet):
             }
         )
 
+    @set_limit.mapping.delete
+    def remove_limit(self, request, pk=None):
+        """Remove one month's override (?month=YYYY-MM), so that month uses
+        the default limit again, or has none - see openspec/specs/budgets,
+        "Remove a month's override"."""
+        category = self.get_object()
+        if category.is_tab_group or category.is_tab:
+            return Response({"detail": "Tabs aren't budgeted, so they take no limit."}, status=400)
+        if category.id in loan_categories():
+            return Response({"detail": LOAN_SET}, status=400)
+        try:
+            month = parse_month(request.query_params.get("month"))
+        except ValueError as exc:
+            return Response({"month": str(exc)}, status=400)
+        if month is None:
+            return Response({"month": "Give the month whose override to remove."}, status=400)
+        deleted, _ = category.limits.filter(month=month).delete()
+        if not deleted:
+            return Response({"detail": "This category has no override for that month."}, status=404)
+        return self._category_response(category)
+
     @action(detail=True, methods=["put"], url_path="budget")
     def set_budget(self, request, pk=None):
         """Set a category's kind and amount in one go: {kind, amount_cents,
@@ -161,6 +182,28 @@ class CategoryViewSet(viewsets.ModelViewSet):
             category.budget_kind = kind
             category.save(update_fields=["budget_kind", "updated_at"])
 
+        return self._category_response(category)
+
+    @set_budget.mapping.delete
+    def remove_budget(self, request, pk=None):
+        """Remove a category's budget, whatever its kind: its monthly limits,
+        yearly amounts and history, and bills go, and it is monthly without
+        a limit again - see openspec/specs/budgets, "Remove a category's
+        budget"."""
+        category = self.get_object()
+        if category.is_tab_group or category.is_tab:
+            return Response({"detail": "Tabs aren't budgeted, so they have no budget to remove."}, status=400)
+        if category.id in loan_categories():
+            return Response({"detail": LOAN_SET}, status=400)
+        with transaction.atomic():
+            category.limits.all().delete()
+            category.yearly_budgets.all().delete()
+            category.bills.all().delete()
+            category.budget_kind = Category.BudgetKind.MONTHLY
+            category.save(update_fields=["budget_kind", "updated_at"])
+        return self._category_response(category)
+
+    def _category_response(self, category):
         return Response(CategorySerializer(self.get_queryset().get(pk=category.pk), context=self.get_serializer_context()).data)
 
     @action(detail=True, methods=["put"], url_path="bills")

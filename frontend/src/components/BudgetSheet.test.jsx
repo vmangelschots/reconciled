@@ -8,7 +8,7 @@ import * as transactionsApi from "../api/transactions";
 import * as budgetsApi from "../api/budgets";
 import * as categoriesApi from "../api/categories";
 import * as reportsApi from "../api/reports";
-import { formatMoney } from "../lib/money";
+import { formatMoney, formatMoneyWhole } from "../lib/money";
 
 vi.mock("../api/reports", () => ({ getSpendingCell: vi.fn() }));
 vi.mock("../api/transactions", () => ({ updateTransaction: vi.fn(), getReviewCount: vi.fn() }));
@@ -20,7 +20,16 @@ vi.mock("../api/budgets", async () => {
 
 vi.mock("../api/categories", async () => {
   const actual = await vi.importActual("../api/categories");
-  return { ...actual, listCategories: vi.fn(), setCategoryLimit: vi.fn(), setCategoryBudget: vi.fn(), setCategoryBills: vi.fn(), addBillFromPayment: vi.fn() };
+  return {
+    ...actual,
+    listCategories: vi.fn(),
+    setCategoryLimit: vi.fn(),
+    setCategoryBudget: vi.fn(),
+    setCategoryBills: vi.fn(),
+    addBillFromPayment: vi.fn(),
+    removeCategoryBudget: vi.fn(),
+    removeCategoryLimit: vi.fn(),
+  };
 });
 
 const YEARLY_CATEGORIES = [
@@ -137,6 +146,8 @@ beforeEach(() => {
   categoriesApi.setCategoryLimit.mockResolvedValue({});
   categoriesApi.setCategoryBills.mockResolvedValue({});
   categoriesApi.addBillFromPayment.mockResolvedValue({});
+  categoriesApi.removeCategoryBudget.mockResolvedValue({});
+  categoriesApi.removeCategoryLimit.mockResolvedValue({});
   reportsApi.getSpendingCell.mockResolvedValue(CELL);
 });
 afterEach(() => vi.useRealTimers());
@@ -595,3 +606,184 @@ describe("A Bills category without bills", () => {
   });
 });
 
+
+describe("Removing a budget", () => {
+  it("asks first, saying what goes, and removes nothing on cancel", async () => {
+    renderPage();
+    const form = await openEditor("Groceries");
+    await userEvent.click(within(form).getByRole("button", { name: "Remove budget" }));
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("Remove Groceries's budget?");
+    expect(dialog).toHaveTextContent(`The ${formatMoney(10000)} monthly limit and 1 month override will be removed.`);
+    await userEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(categoriesApi.removeCategoryBudget).not.toHaveBeenCalled();
+  });
+
+  it("describes the saved budget, not the one being edited", async () => {
+    renderPage();
+    const form = await openEditor("Groceries");
+    await userEvent.click(within(form).getByRole("button", { name: "Yearly" }));
+    await userEvent.click(within(form).getByRole("button", { name: "Remove budget" }));
+    expect(await screen.findByRole("dialog")).toHaveTextContent(`The ${formatMoney(10000)} monthly limit`);
+  });
+
+  it("closes the sheet and shows the row under No budget, opened and highlighted", async () => {
+    renderPage();
+    const form = await openEditor("Groceries");
+    budgetsApi.getBudgetSummary.mockResolvedValue(
+      summary({}, { categories: [{ ...GROCERIES_ROW, limit_cents: null, remaining_cents: null }, TRANSPORT_ROW] }),
+    );
+    await userEvent.click(within(form).getByRole("button", { name: "Remove budget" }));
+    await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Remove budget" }));
+
+    expect(categoriesApi.removeCategoryBudget).toHaveBeenCalledWith(1);
+    expect(await screen.findByText("Groceries has no budget now.")).toBeInTheDocument();
+    expect(screen.queryByRole("form", { name: "Budget for Groceries" })).toBeNull();
+    expect(screen.getByRole("button", { name: /No budget/ })).toHaveAttribute("aria-expanded", "true");
+    expect((await screen.findByRole("button", { name: "Open budget for Groceries" })).closest("li").className).toContain(
+      "bg-accent/5",
+    );
+  });
+
+  it("offers nothing to remove without a budget", async () => {
+    renderPage();
+    const form = await openEditor("Transport");
+    expect(within(form).queryByRole("button", { name: "Remove budget" })).toBeNull();
+  });
+
+  it("removes a yearly budget and its history", async () => {
+    renderPage();
+    const form = await openEditor("Clothing");
+    await userEvent.click(within(form).getByRole("button", { name: "Remove budget" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("Its yearly amount and history will be removed.");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Remove budget" }));
+    expect(categoriesApi.removeCategoryBudget).toHaveBeenCalledWith(3);
+  });
+
+  it("removes a Bills budget from the Bills header", async () => {
+    categoriesApi.listCategories.mockResolvedValue([...YEARLY_CATEGORIES, STREAMING]);
+    budgetsApi.getBudgetSummary.mockResolvedValue(summary({}, { categories: [GROCERIES_ROW, TRANSPORT_ROW, STREAMING_ROW] }));
+    renderPage();
+    await openRow("Streaming");
+    const bills = await screen.findByRole("region", { name: "Bills" });
+    await userEvent.click(within(bills).getByRole("button", { name: "Remove budget" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("Its 2 bills will be removed.");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Remove budget" }));
+    expect(categoriesApi.removeCategoryBudget).toHaveBeenCalledWith(7);
+    expect(await screen.findByText("Streaming has no budget now.")).toBeInTheDocument();
+  });
+
+  it("names the subcategories that keep their own budget", async () => {
+    categoriesApi.listCategories.mockResolvedValue([
+      ...YEARLY_CATEGORIES,
+      { ...YEARLY_CATEGORIES[1], id: 8, name: "Restaurant", parent: 1, monthly_limits: { default_cents: 10000, override_count: 0 } },
+      { ...YEARLY_CATEGORIES[1], id: 9, name: "Snacks", parent: 1 },
+    ]);
+    renderPage();
+    const form = await openEditor("Groceries");
+    await userEvent.click(within(form).getByRole("button", { name: "Remove budget" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("Restaurant keeps its own budget.");
+    expect(dialog).not.toHaveTextContent("Snacks");
+  });
+
+  it("still says what happens when a Bills category has no bills", async () => {
+    categoriesApi.listCategories.mockResolvedValue([...YEARLY_CATEGORIES, { ...STREAMING, bills: [] }]);
+    budgetsApi.getBudgetSummary.mockResolvedValue(summary({}, { categories: [GROCERIES_ROW, TRANSPORT_ROW, STREAMING_ROW] }));
+    renderPage();
+    const form = await openBillsEditor("Streaming");
+    await userEvent.click(within(form).getByRole("button", { name: "Remove budget" }));
+    expect(await screen.findByRole("dialog")).toHaveTextContent("Streaming will have no budget");
+  });
+});
+
+describe("Using the default for a month", () => {
+  it("drops the month's override and says the amount", async () => {
+    budgetsApi.getBudgetSummary.mockResolvedValue(
+      summary({}, { categories: [{ ...GROCERIES_ROW, limit_cents: 15000, overridden: true }, TRANSPORT_ROW] }),
+    );
+    renderPage();
+    const form = await openEditor("Groceries");
+    await userEvent.click(within(form).getByRole("button", { name: `Use default (${formatMoneyWhole(10000)})` }));
+
+    expect(categoriesApi.removeCategoryLimit).toHaveBeenCalledWith(1, "2026-10");
+    expect(await screen.findByText(`Groceries is back to ${formatMoneyWhole(10000)} for October.`)).toBeInTheDocument();
+    expect(screen.queryByRole("form", { name: "Budget for Groceries" })).toBeNull();
+  });
+
+  it("puts the month's own limit back with Undo", async () => {
+    budgetsApi.getBudgetSummary.mockResolvedValue(
+      summary({}, { categories: [{ ...GROCERIES_ROW, limit_cents: 15000, overridden: true }, TRANSPORT_ROW] }),
+    );
+    renderPage();
+    const form = await openEditor("Groceries");
+    await userEvent.click(within(form).getByRole("button", { name: `Use default (${formatMoneyWhole(10000)})` }));
+    await userEvent.click(await screen.findByRole("button", { name: "Undo" }));
+
+    expect(categoriesApi.setCategoryLimit).toHaveBeenCalledWith(1, { month: "2026-10", limit_cents: 15000 });
+    expect(await screen.findByText(`Groceries is ${formatMoneyWhole(15000)} for October again.`)).toBeInTheDocument();
+  });
+
+  it("offers to remove the month's limit when there is no default", async () => {
+    categoriesApi.listCategories.mockResolvedValue([
+      { ...YEARLY_CATEGORIES[0], monthly_limits: { default_cents: null, override_count: 1 } },
+      ...YEARLY_CATEGORIES.slice(1),
+    ]);
+    budgetsApi.getBudgetSummary.mockResolvedValue(
+      summary({}, { categories: [{ ...GROCERIES_ROW, overridden: true }, TRANSPORT_ROW] }),
+    );
+    renderPage();
+    const form = await openEditor("Groceries");
+    await userEvent.click(within(form).getByRole("button", { name: "Remove October's limit" }));
+    expect(await screen.findByText("Groceries has no limit in October.")).toBeInTheDocument();
+  });
+
+  it("isn't offered for a month without its own limit", async () => {
+    renderPage();
+    const form = await openEditor("Groceries");
+    expect(within(form).queryByRole("button", { name: /Use default/ })).toBeNull();
+  });
+});
+
+describe("Editing a month with its own limit", () => {
+  it("changes that month, not the default", async () => {
+    budgetsApi.getBudgetSummary.mockResolvedValue(
+      summary({}, { categories: [{ ...GROCERIES_ROW, limit_cents: 15000, overridden: true }, TRANSPORT_ROW] }),
+    );
+    renderPage();
+    const form = await openEditor("Groceries");
+    expect(within(form).getByLabelText("This month only")).toBeChecked();
+    await setAmount(form, "160");
+    await userEvent.click(within(form).getByRole("button", { name: "Save" }));
+    expect(categoriesApi.setCategoryLimit).toHaveBeenCalledWith(1, { month: "2026-10", limit_cents: 16000 });
+  });
+
+  it("changes the default from an ordinary month", async () => {
+    renderPage();
+    const form = await openEditor("Groceries");
+    expect(within(form).getByLabelText("This month only")).not.toBeChecked();
+    await setAmount(form, "450");
+    await userEvent.click(within(form).getByRole("button", { name: "Save" }));
+    expect(categoriesApi.setCategoryLimit).toHaveBeenCalledWith(1, { month: null, limit_cents: 45000 });
+  });
+});
+
+describe("A zero amount", () => {
+  it("says what 0 means and points to Remove budget", async () => {
+    renderPage();
+    const form = await openEditor("Groceries");
+    await setAmount(form, "0");
+    expect(form).toHaveTextContent("0 means nothing may be spent. To have no budget at all, use Remove budget.");
+  });
+
+  it("only says what 0 means without a budget", async () => {
+    renderPage();
+    const form = await openEditor("Transport");
+    await setAmount(form, "0");
+    expect(form).toHaveTextContent("0 means nothing may be spent.");
+    expect(form).not.toHaveTextContent("Remove budget");
+  });
+});

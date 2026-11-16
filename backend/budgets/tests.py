@@ -729,6 +729,106 @@ class BudgetKindTests(TestCase):
 
 
 @patch("budgets.utils.today", lambda: date(2026, 10, 24))
+class RemoveBudgetTests(TestCase):
+    """Removing a budget or a month's override - see specs/budgets."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(user=get_user_model().objects.create_user(username="b", password="x"))
+        self.groceries = Category.objects.create(name="Groceries")
+
+    def _remove(self, category):
+        return self.client.delete(reverse("category-set-budget", args=[category.id]))
+
+    def _remove_override(self, category, month=None):
+        url = reverse("category-set-limit", args=[category.id])
+        return self.client.delete(f"{url}?month={month}" if month else url)
+
+    def _rows(self, month):
+        return {row["category_name"]: row for row in budget_rows(month)}
+
+    def test_remove_a_monthly_budget(self):
+        CategoryLimit.objects.create(category=self.groceries, month=None, limit_cents=40000)
+        CategoryLimit.objects.create(category=self.groceries, month=date(2026, 12, 1), limit_cents=60000)
+
+        response = self._remove(self.groceries)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["budget_kind"], "monthly")
+        self.assertEqual(response.json()["monthly_limits"], {"default_cents": None, "override_count": 0})
+        self.assertIsNone(self._rows(date(2026, 12, 1))["Groceries"]["limit_cents"])
+
+    def test_remove_a_yearly_budget(self):
+        clothing = Category.objects.create(name="Clothing", budget_kind="yearly")
+        YearlyBudget.objects.create(category=clothing, from_year=2025, amount_cents=100000)
+        YearlyBudget.objects.create(category=clothing, from_year=2026, amount_cents=120000)
+
+        response = self._remove(clothing)
+
+        self.assertEqual(response.json()["budget_kind"], "monthly")
+        self.assertEqual(response.json()["yearly_history"], [])
+        self.assertFalse(YearlyBudget.objects.exists())
+
+    def test_remove_a_bills_budget(self):
+        streaming = Category.objects.create(name="Streaming", budget_kind="bills")
+        for name, day in (("Netflix", 5), ("Disney+", 8), ("Spotify", 21)):
+            Bill.objects.create(category=streaming, name=name, day=day, amount_cents=1000, from_month=date(2026, 1, 1))
+
+        response = self._remove(streaming)
+
+        self.assertEqual(response.json()["budget_kind"], "monthly")
+        self.assertEqual(response.json()["bills"], [])
+        self.assertFalse(Bill.objects.exists())
+
+    def test_a_parent_becomes_a_group(self):
+        food = Category.objects.create(name="Food")
+        restaurant = Category.objects.create(name="Restaurant", parent=food)
+        CategoryLimit.objects.create(category=food, month=None, limit_cents=100000)
+        CategoryLimit.objects.create(category=restaurant, month=None, limit_cents=10000)
+
+        self._remove(food)
+
+        rows = self._rows(date(2026, 10, 1))
+        self.assertIsNone(rows["Food"]["limit_cents"])
+        self.assertIsNotNone(rows["Food"]["group_spent_cents"])
+        self.assertEqual(rows["Restaurant"]["limit_cents"], 10000)
+        self.assertFalse(rows["Restaurant"]["covered_by_parent"])
+
+    def test_not_for_a_tab(self):
+        tabs = Category.objects.create(name="Tabs", is_tab_group=True)
+        jan = Category.objects.create(name="Jan", parent=tabs)
+        self.assertEqual(self._remove(tabs).status_code, 400)
+        self.assertEqual(self._remove(jan).status_code, 400)
+
+    def test_back_to_the_default(self):
+        CategoryLimit.objects.create(category=self.groceries, month=None, limit_cents=40000)
+        CategoryLimit.objects.create(category=self.groceries, month=date(2026, 12, 1), limit_cents=60000)
+        CategoryLimit.objects.create(category=self.groceries, month=date(2026, 11, 1), limit_cents=50000)
+
+        response = self._remove_override(self.groceries, "2026-12")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self._rows(date(2026, 12, 1))["Groceries"]["limit_cents"], 40000)
+        self.assertEqual(self._rows(date(2026, 11, 1))["Groceries"]["limit_cents"], 50000)
+
+    def test_no_default_to_fall_back_to(self):
+        gifts = Category.objects.create(name="Gifts")
+        CategoryLimit.objects.create(category=gifts, month=date(2026, 12, 1), limit_cents=5000)
+
+        self._remove_override(gifts, "2026-12")
+
+        self.assertIsNone(self._rows(date(2026, 12, 1))["Gifts"]["limit_cents"])
+
+    def test_no_override_that_month(self):
+        CategoryLimit.objects.create(category=self.groceries, month=None, limit_cents=40000)
+
+        self.assertEqual(self._remove_override(self.groceries, "2026-11").status_code, 404)
+        self.assertEqual(self._remove_override(self.groceries).status_code, 400)
+        self.assertEqual(self._remove_override(self.groceries, "nope").status_code, 400)
+        self.assertEqual(CategoryLimit.objects.count(), 1)
+
+
+@patch("budgets.utils.today", lambda: date(2026, 10, 24))
 class YearlySummaryTests(TestCase):
     def setUp(self):
         self.client = APIClient()

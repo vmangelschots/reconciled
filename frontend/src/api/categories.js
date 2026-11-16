@@ -39,6 +39,17 @@ export function setCategoryBudget(id, { kind, amount_cents, due }) {
   });
 }
 
+// Removes a category's budget, whatever its kind: it is monthly without a
+// limit again - see specs/budgets, "Remove a category's budget".
+export function removeCategoryBudget(id) {
+  return apiFetch(`/api/categories/${id}/budget/`, { method: "DELETE" });
+}
+
+// Removes one month's ("YYYY-MM") override, so it uses the default again.
+export function removeCategoryLimit(id, month) {
+  return apiFetch(`/api/categories/${id}/limit/?month=${encodeURIComponent(month)}`, { method: "DELETE" });
+}
+
 // Sets a Bills category's bills from `month` ("YYYY-MM", the viewed month)
 // on: [{ id?, name, day, amount_cents }]. Earlier months keep what they had
 // - see specs/bill-budgets.

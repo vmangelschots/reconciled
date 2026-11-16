@@ -108,6 +108,11 @@ class LoanCategoryApiTests(LoanTestCase):
             response = self.put(name, body)
             self.assertEqual(response.status_code, 400, name)
             self.assertEqual(response.json()["detail"], "Its loans set this budget. Change it on the loan.")
+        for name in ("category-set-budget", "category-set-limit"):
+            url = reverse(name, args=[self.mortgage_category.id])
+            response = self.client.delete(f"{url}?month=2026-12")
+            self.assertEqual(response.status_code, 400, name)
+            self.assertEqual(response.json()["detail"], "Its loans set this budget. Change it on the loan.")
         payment = Transaction.objects.create(account=self.crelan, date=date(2026, 11, 3), amount_cents=-3500, payee="x", category=self.mortgage_category)
         response = self.client.post(
             reverse("category-bill-from-payment", args=[self.mortgage_category.id]), {"transaction": payment.id, "name": "x"}, format="json"
