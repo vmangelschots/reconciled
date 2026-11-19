@@ -33,4 +33,5 @@ urlpatterns = [
     path("api/", include("reports.urls")),
     path("api/", include("backup.urls")),
     path("api/", include("banksync.urls")),
+    path("api/", include("mcpserver.urls")),
 ]
