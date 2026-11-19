@@ -155,9 +155,9 @@ class TransactionViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="review-groups")
     def review_groups(self, request):
-        """The Review page: unconfirmed guesses grouped by payee and guess,
-        how many transactions the backfill could still try, and whether it
-        would use AI."""
+        """The Review page: unconfirmed guesses and uncategorized rows
+        grouped by payee and guess, how many transactions the backfill
+        could still try, and whether it would use AI."""
         return Response(
             {
                 "groups": review_groups(),
@@ -169,7 +169,7 @@ class TransactionViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="review-count")
     def review_count(self, request):
-        return Response({"count": needs_review().count()})
+        return Response({"count": needs_review().count() + uncategorized().count()})
 
     @action(detail=False, methods=["post"], url_path="confirm-categories")
     def confirm_categories(self, request):

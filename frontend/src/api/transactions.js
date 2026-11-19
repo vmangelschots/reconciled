@@ -43,14 +43,14 @@ export function unsplit(id, keep = {}) {
   return apiFetch(`/api/transactions/${id}/split/`, { method: "DELETE", body: keep });
 }
 
-// The Review page: unconfirmed guesses grouped by payee and guessed
-// category. Returns { groups, uncategorized_count }.
+// The Review page: unconfirmed guesses and uncategorized rows, grouped by
+// payee, category and source. Returns { groups, uncategorized_count }.
 export function getReviewGroups() {
   return apiFetch("/api/transactions/review-groups/");
 }
 
-// How many transactions have a guessed category nobody confirmed yet.
-// Returns { count }.
+// How many transactions the Review page asks the user to act on:
+// unconfirmed guesses plus uncategorized rows. Returns { count }.
 export function getReviewCount() {
   return apiFetch("/api/transactions/review-count/");
 }

@@ -1,4 +1,4 @@
-import { Check, CheckCircle2, ChevronDown, History, Loader2, Sparkles, Tags } from "lucide-react";
+import { Check, CheckCircle2, ChevronDown, History, Loader2, Sparkles, Tag, Tags } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { listCategories } from "../api/categories";
@@ -29,10 +29,12 @@ const FAILED_HIGHLIGHT_MS = 1500;
 // When a running backfill starts saying it can take a while.
 const SLOW_HINT_MS = 4000;
 
-const SECTION_TITLES = { history: "From your history", ai: "AI guesses" };
+const SECTION_TITLES = { history: "From your history", ai: "AI guesses", none: "No category yet" };
 const SECTION_SUBLINES = {
   ai: "Guessed by AI for payees you haven't categorized before. Worth a closer look.",
+  none: "No guess covered these. Picking a category teaches the next import.",
 };
+const SOURCE_RANK = { history: 0, ai: 1, none: 2 };
 
 function errorMessage(e) {
   return e.data ? Object.values(e.data).flat().join(" ") : e.message;
@@ -68,10 +70,13 @@ function accountsLabel(accounts) {
   return `${accounts.slice(0, 2).join(", ")} +${accounts.length - 2}`;
 }
 
-// Where focus goes for a group: its Confirm, except for an AI guess, whose
-// category picker gets it so confirming one is always a deliberate step.
+// Where focus goes for a group: its Confirm, except when there is no
+// guess to confirm (an AI guess or no-category group), whose category
+// picker gets it so acting on one is always a deliberate step.
 function focusTarget(group) {
-  return group.source === "ai" ? { kind: "picker", key: group.key } : { kind: "confirm", key: group.key };
+  return group.source === "history"
+    ? { kind: "confirm", key: group.key }
+    : { kind: "picker", key: group.key };
 }
 
 function evidenceText({ matching, total }, direction) {
@@ -100,7 +105,6 @@ function Collapsible({ leaving, children }) {
 export function ReviewPage() {
   const toast = useToast();
   const [groups, setGroups] = useState(null);
-  const [uncategorizedCount, setUncategorizedCount] = useState(0);
   const [categories, setCategories] = useState([]);
   const [aiEnabled, setAiEnabled] = useState(false);
   const [aiOffered, setAiOffered] = useState(false);
@@ -132,7 +136,6 @@ export function ReviewPage() {
   function showGroups(data) {
     const next = data.groups.map(toGroupState);
     setGroups(next);
-    setUncategorizedCount(data.uncategorized_count);
     setAiEnabled(Boolean(data.ai_enabled));
     setAiOffered(Boolean(data.ai_available) && !data.ai_enabled);
     if (next.length) pendingFocus.current = focusTarget(next[0]);
@@ -182,6 +185,9 @@ export function ReviewPage() {
   }
 
   async function resolveGroup(group, categoryId) {
+    // A no-category group has nothing to confirm, and its picker's "leave
+    // uncategorized" would otherwise remove a group that is still empty.
+    if (group.source === "none" && categoryId == null) return;
     const ids = activeRows(group).map((t) => t.id);
     focusAfterGroup(group.key);
     updateGroup(group.key, (g) => ({ ...g, leaving: true, settled: false, animDone: false, failed: false }));
@@ -261,44 +267,53 @@ export function ReviewPage() {
   const visible = groups.filter((g) => !isLeaving(g));
   const pendingBySource = {};
   for (const g of visible) pendingBySource[g.source] = (pendingBySource[g.source] ?? 0) + activeRows(g).length;
-  const pendingCount = Object.values(pendingBySource).reduce((sum, n) => sum + n, 0);
-  const sources = [...new Set(groups.map((g) => g.source))];
+  const guessedCount = (pendingBySource.history ?? 0) + (pendingBySource.ai ?? 0);
+  const noneCount = pendingBySource.none ?? 0;
+  const sources = [...new Set(groups.map((g) => g.source))].sort(
+    (a, b) => (SOURCE_RANK[a] ?? 3) - (SOURCE_RANK[b] ?? 3),
+  );
 
   return (
     <section className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
         <PageHeader title="Review" />
-        {pendingCount > 0 && (
+        {guessedCount > 0 && (
           <p className="text-sm text-ink-secondary">
             {pendingBySource.ai > 0
-              ? `${plural(pendingCount, "transaction has", "transactions have")} a guessed category: ${sourceSplit(pendingBySource)}.`
-              : `${plural(pendingCount, "transaction", "transactions")} got a category from your history.`}{" "}
+              ? `${plural(guessedCount, "transaction has", "transactions have")} a guessed category: ${sourceSplit(pendingBySource)}.`
+              : `${plural(guessedCount, "transaction", "transactions")} got a category from your history.`}{" "}
             Confirm each group or pick the right category.
           </p>
         )}
-        {visible.length > 0 &&
-          backfill.aiLines.map((line) => (
-            <p key={line} className="text-sm text-ink-secondary">
-              {line}
-            </p>
-          ))}
+        {noneCount > 0 && (
+          <p className="text-sm text-ink-secondary">
+            {plural(noneCount, "transaction has", "transactions have")} no category yet.
+          </p>
+        )}
       </div>
 
-      {sources.map((source, index) => (
-        <div key={source} className={cn("flex flex-col", index > 0 && pendingBySource[sources[0]] > 0 && "mt-6")}>
-          {groups.some((g) => g.source === source && !isLeaving(g)) && (
-            <div className="mb-2">
-              <h2 className="text-xs font-medium tracking-wide text-ink-muted uppercase">
-                {SECTION_TITLES[source] ?? "Guesses"}
-              </h2>
-              {SECTION_SUBLINES[source] && (
-                <p className="text-xs text-ink-secondary">{SECTION_SUBLINES[source]}</p>
-              )}
-            </div>
-          )}
-          {groups
-            .filter((g) => g.source === source)
-            .map((group) => (
+      {sources.map((source, index) => {
+        const sourceGroups = groups.filter((g) => g.source === source);
+        const showing = sourceGroups.some((g) => !isLeaving(g));
+        return (
+          <div key={source} className={cn("flex flex-col", index > 0 && "mt-6")}>
+            {showing &&
+              (source === "none" ? (
+                <UncategorizedSectionHeader
+                  aiEnabled={aiEnabled}
+                  aiOffered={aiOffered}
+                  backfill={backfill}
+                  onBackfill={runBackfill}
+                />
+              ) : (
+                <div className="mb-2">
+                  <h2 className="text-xs font-medium tracking-wide text-ink-muted uppercase">
+                    {SECTION_TITLES[source] ?? "Guesses"}
+                  </h2>
+                  {SECTION_SUBLINES[source] && <p className="text-xs text-ink-secondary">{SECTION_SUBLINES[source]}</p>}
+                </div>
+              ))}
+            {sourceGroups.map((group) => (
               <ReviewGroup
                 key={group.key}
                 group={group}
@@ -319,20 +334,85 @@ export function ReviewPage() {
                 onToggle={() => toggleExpanded(group.key)}
               />
             ))}
-        </div>
-      ))}
+          </div>
+        );
+      })}
 
-      {visible.length === 0 && (
-        <EmptyState
-          headingRef={emptyHeadingRef}
-          uncategorizedCount={uncategorizedCount}
-          aiEnabled={aiEnabled}
-          aiOffered={aiOffered}
-          backfill={backfill}
-          onBackfill={runBackfill}
-        />
-      )}
+      {visible.length === 0 && <EmptyState headingRef={emptyHeadingRef} />}
     </section>
+  );
+}
+
+// The "No category yet" section's heading and its backfill action. It stays
+// with the section so the action is available while rows remain, unlike the
+// old empty state's offer.
+function UncategorizedSectionHeader({ aiEnabled, aiOffered, backfill, onBackfill }) {
+  const slow = useAfterDelay(backfill.running && aiEnabled, SLOW_HINT_MS);
+  const Icon = aiEnabled ? Tags : History;
+  const label =
+    backfill.noMatchOf != null ? "Try again" : aiEnabled ? "Guess categories" : "Guess categories from history";
+
+  return (
+    <div className="mb-2 flex flex-col gap-2">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-xs font-medium tracking-wide text-ink-muted uppercase">{SECTION_TITLES.none}</h2>
+          <p className="text-xs text-ink-secondary">{SECTION_SUBLINES.none}</p>
+        </div>
+        <div className="flex flex-col items-start gap-1">
+          <Button size="sm" onClick={onBackfill} disabled={backfill.running}>
+            {backfill.running ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                Guessing…
+              </>
+            ) : (
+              <>
+                <Icon className="h-4 w-4" aria-hidden="true" />
+                {label}
+              </>
+            )}
+          </Button>
+          {slow ? (
+            <p className="text-xs text-ink-secondary">This can take up to a minute.</p>
+          ) : (
+            <p className="text-xs text-ink-secondary">
+              {aiEnabled
+                ? "Uses your history first, then AI for new payees."
+                : "Only payees you've categorized before get a guess."}
+            </p>
+          )}
+          {aiOffered && (
+            <p className="text-xs text-ink-secondary">Using your history only. AI suggestions can be turned on in Settings.</p>
+          )}
+        </div>
+      </div>
+      {backfill.noMatchOf != null && (
+        <p className="text-sm text-ink-secondary">
+          {aiEnabled
+            ? `Couldn't guess a category for any of the ${plural(
+                backfill.noMatchOf,
+                "uncategorized transaction",
+                "uncategorized transactions",
+              )}.`
+            : `None of the ${plural(
+                backfill.noMatchOf,
+                "uncategorized transaction",
+                "uncategorized transactions",
+              )} match a payee you've categorized before.`}
+        </p>
+      )}
+      {backfill.aiLines.map((line) => (
+        <p key={line} className="text-sm text-ink-secondary">
+          {line}
+        </p>
+      ))}
+      {backfill.noMatchOf != null && (
+        <Link to="/transactions" className="text-sm font-medium text-accent hover:underline">
+          Categorize them in Transactions
+        </Link>
+      )}
+    </div>
   );
 }
 
@@ -357,6 +437,7 @@ function ReviewGroup({
   const meta = `${accountsLabel(group.accounts)} · ${formatDateSpan(dateFrom, dateTo)}`;
   const countLabel = plural(rows.length, "transaction", "transactions");
   const isAi = group.source === "ai";
+  const isNone = group.source === "none";
   const reason = isAi ? displayReason(group.reason) : "";
 
   return (
@@ -399,23 +480,34 @@ function ReviewGroup({
               </span>
             </p>
           )}
+          {isNone && (
+            <p className="mt-2 flex items-center gap-1.5 text-sm text-ink-secondary">
+              <Tag className="h-3.5 w-3.5 shrink-0 text-accent" aria-hidden="true" />
+              <span>
+                Pick a category to categorize{" "}
+                {rows.length === 1 ? "this transaction" : `all ${rows.length} transactions`}.
+              </span>
+            </p>
+          )}
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <Button
-              ref={confirmRef}
-              size="sm"
-              variant={isAi ? "outline" : "default"}
-              className="flex-1 sm:flex-none"
-              onClick={onConfirm}
-            >
-              <Check className="h-3.5 w-3.5" aria-hidden="true" />
-              Confirm {rows.length}
-            </Button>
+            {!isNone && (
+              <Button
+                ref={confirmRef}
+                size="sm"
+                variant={isAi ? "outline" : "default"}
+                className="flex-1 sm:flex-none"
+                onClick={onConfirm}
+              >
+                <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                Confirm {rows.length}
+              </Button>
+            )}
             <span ref={pickerRef} className="contents">
               <CategoryCombobox
                 categories={categories}
                 value={group.category}
                 onSelect={onPick}
-                suggestion={group.source}
+                suggestion={isNone ? null : group.source}
                 suggestionReason={group.reason}
                 clearLabel="Leave uncategorized"
                 restoreFocusOnSelect={false}
@@ -465,7 +557,7 @@ function ReviewGroup({
                           categories={categories}
                           value={group.category}
                           onSelect={(categoryId) => onPickRow(row, categoryId)}
-                          suggestion={group.source}
+                          suggestion={isNone ? null : group.source}
                           clearLabel="Leave uncategorized"
                           restoreFocusOnSelect={false}
                           className="w-full sm:w-40"
@@ -484,94 +576,14 @@ function ReviewGroup({
   );
 }
 
-function EmptyState({ headingRef, uncategorizedCount, aiEnabled, aiOffered, backfill, onBackfill }) {
-  const slow = useAfterDelay(backfill.running && aiEnabled, SLOW_HINT_MS);
-  const runningLabel = (
-    <>
-      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-      Guessing…
-    </>
-  );
-  const slowHint = slow && <p className="text-xs text-ink-secondary">This can take up to a minute.</p>;
-  const aiLines = backfill.aiLines.map((line) => (
-    <p key={line} className="text-sm text-ink-secondary">
-      {line}
-    </p>
-  ));
-  const transactionsLink = (
-    <Link to="/transactions" className="text-sm font-medium text-accent hover:underline">
-      Categorize them in Transactions
-    </Link>
-  );
-
-  let body;
-  if (backfill.noMatchOf != null && aiEnabled) {
-    body = (
-      <>
-        <p className="text-sm text-ink-secondary">
-          Couldn&apos;t guess a category for any of the{" "}
-          {plural(backfill.noMatchOf, "uncategorized transaction", "uncategorized transactions")}.
-        </p>
-        {aiLines}
-        {transactionsLink}
-        <Button variant="ghost" size="sm" onClick={onBackfill} disabled={backfill.running} className="mt-1">
-          {backfill.running ? runningLabel : "Try again"}
-        </Button>
-        {slowHint}
-      </>
-    );
-  } else if (backfill.noMatchOf != null) {
-    body = (
-      <>
-        <p className="text-sm text-ink-secondary">
-          None of the {plural(backfill.noMatchOf, "uncategorized transaction", "uncategorized transactions")} match a
-          payee you&apos;ve categorized before.
-        </p>
-        {transactionsLink}
-      </>
-    );
-  } else if (uncategorizedCount > 0) {
-    const Icon = aiEnabled ? Tags : History;
-    body = (
-      <>
-        <p className="text-sm text-ink-secondary">
-          {uncategorizedCount === 1
-            ? "1 transaction still has no category."
-            : `${uncategorizedCount} transactions still have no category.`}
-        </p>
-        <Button onClick={onBackfill} disabled={backfill.running} className="mt-2">
-          {backfill.running ? (
-            runningLabel
-          ) : (
-            <>
-              <Icon className="h-4 w-4" aria-hidden="true" />
-              {aiEnabled ? "Guess categories" : "Guess categories from history"}
-            </>
-          )}
-        </Button>
-        {slowHint || (
-          <p className="text-xs text-ink-secondary">
-            {aiEnabled
-              ? "Uses your history first, then AI for new payees."
-              : "Only payees you've categorized before get a guess."}
-          </p>
-        )}
-        {aiOffered && (
-          <p className="text-xs text-ink-secondary">Using your history only. AI suggestions can be turned on in Settings.</p>
-        )}
-      </>
-    );
-  } else {
-    body = <p className="text-sm text-ink-secondary">Every transaction has a category.</p>;
-  }
-
+function EmptyState({ headingRef }) {
   return (
     <Card className="flex flex-col items-center gap-2 px-6 py-10 text-center">
       <CheckCircle2 className="h-8 w-8 text-success" aria-hidden="true" />
       <h2 ref={headingRef} tabIndex={-1} className="text-base font-semibold text-ink-primary focus:outline-none">
         Nothing to review
       </h2>
-      {body}
+      <p className="text-sm text-ink-secondary">Every transaction has a category.</p>
     </Card>
   );
 }

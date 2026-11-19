@@ -87,6 +87,17 @@ const BISTRO = aiGroup(
 );
 const KINEPOLIS = aiGroup("kinepolis", "Kinepolis", 2, [row(51, "2026-10-06", "KINEPOLIS GENT", -1450)], "");
 
+function noCategoryGroup(key, payee, transactions) {
+  return { ...group(key, payee, null, transactions, null), source: "none", reason: null };
+}
+
+const DELHAIZE = noCategoryGroup("delhaize", "Delhaize", [
+  row(61, "2026-10-02", "DELHAIZE 1234", -2310),
+  row(62, "2026-10-03", "DELHAIZE 5678", -1890),
+  row(63, "2026-10-04", "Delhaize", -4520, "Joint"),
+]);
+const SHELL = noCategoryGroup("shell", "Shell", [row(71, "2026-10-06", "SHELL 42", -6000)]);
+
 function renderPage() {
   return render(
     <MemoryRouter>
@@ -358,46 +369,139 @@ describe("ReviewPage rows", () => {
   });
 });
 
-describe("ReviewPage empty state", () => {
-  it("offers to guess categories for uncategorized transactions and lists the new groups", async () => {
+describe("ReviewPage no category", () => {
+  it("lists unmatched payees last, with their rows and no Confirm", async () => {
+    transactionsApi.getReviewGroups.mockResolvedValue({
+      groups: [CARREFOUR, DELHAIZE, SHELL],
+      uncategorized_count: 4,
+    });
+    renderPage();
+
+    await screen.findByText("Delhaize", { selector: "span" });
+    expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual([
+      "From your history",
+      "No category yet",
+    ]);
+    expect(cards().map((c) => c.querySelector("span").textContent)).toEqual(["Carrefour Market", "Delhaize", "Shell"]);
+    expect(screen.getByText("4 transactions have no category yet.")).toBeInTheDocument();
+    expect(screen.getByText(/No guess covered these\./)).toBeInTheDocument();
+
+    const delhaize = within(card("Delhaize"));
+    expect(delhaize.getByText(formatMoney(-8720))).toBeInTheDocument();
+    expect(delhaize.getByText("3 transactions")).toBeInTheDocument();
+    expect(delhaize.getByText(/Pick a category to categorize all 3 transactions\./)).toBeInTheDocument();
+    expect(delhaize.queryByRole("button", { name: /Confirm/ })).toBeNull();
+    expect(delhaize.getByRole("button", { name: "Category for Delhaize" })).toBeInTheDocument();
+  });
+
+  it("starts focus on the picker when only unmatched rows wait", async () => {
+    transactionsApi.getReviewGroups.mockResolvedValue({ groups: [DELHAIZE, SHELL], uncategorized_count: 4 });
+    renderPage();
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Category for Delhaize" })).toHaveFocus());
+  });
+
+  it("picks a category for the whole payee, removes the group and drops the count", async () => {
+    transactionsApi.getReviewGroups.mockResolvedValue({ groups: [DELHAIZE, SHELL], uncategorized_count: 4 });
+    renderPage();
+    const picker = await screen.findByRole("button", { name: "Category for Delhaize" });
+
+    picker.focus();
+    await userEvent.keyboard("groc{Enter}");
+
+    expect(transactionsApi.confirmCategories).toHaveBeenCalledWith([61, 62, 63], 1);
+    expect(card("Delhaize")).toBeUndefined();
+    expect(screen.getByText("1 transaction has no category yet.")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Category for Shell" })).toHaveFocus());
+  });
+
+  it("leaving a row uncategorized does nothing", async () => {
+    transactionsApi.getReviewGroups.mockResolvedValue({ groups: [DELHAIZE], uncategorized_count: 3 });
+    renderPage();
+    const picker = await screen.findByRole("button", { name: "Category for Delhaize" });
+
+    picker.focus();
+    await userEvent.keyboard("{Enter}{Enter}");
+
+    expect(transactionsApi.confirmCategories).not.toHaveBeenCalled();
+    expect(card("Delhaize")).toBeDefined();
+  });
+
+  it("a failed save brings the group back with an error", async () => {
+    transactionsApi.getReviewGroups.mockResolvedValue({ groups: [DELHAIZE], uncategorized_count: 3 });
+    transactionsApi.confirmCategories.mockRejectedValue(new Error("Server said no"));
+    renderPage();
+    const picker = await screen.findByRole("button", { name: "Category for Delhaize" });
+
+    picker.focus();
+    await userEvent.keyboard("groc{Enter}");
+
+    await screen.findByText("Server said no");
+    expect(card("Delhaize")).toBeDefined();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Category for Delhaize" })).toHaveFocus());
+  });
+
+  it("fixes one row of an unmatched payee and keeps the rest", async () => {
+    transactionsApi.getReviewGroups.mockResolvedValue({ groups: [DELHAIZE], uncategorized_count: 3 });
+    renderPage();
+    await userEvent.click(await screen.findByRole("button", { name: "Show 3" }));
+
+    const picker = screen.getByRole("button", { name: "Category for DELHAIZE 5678 on 2026-10-03" });
+    picker.focus();
+    await userEvent.keyboard("house{Enter}");
+
+    expect(transactionsApi.updateTransaction).toHaveBeenCalledWith(62, { category: 3 });
+    expect(transactionsApi.confirmCategories).not.toHaveBeenCalled();
+    const delhaize = within(card("Delhaize"));
+    expect(delhaize.getByText("2 transactions")).toBeInTheDocument();
+    expect(delhaize.getByText(formatMoney(-8720 + 1890))).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Category for Delhaize on 2026-10-04" })).toHaveFocus(),
+    );
+  });
+});
+
+describe("ReviewPage backfill", () => {
+  it("guesses while unmatched rows remain and keeps the leftovers listed", async () => {
     transactionsApi.getReviewGroups
-      .mockResolvedValueOnce({ groups: [], uncategorized_count: 40 })
-      .mockResolvedValueOnce({ groups: [CARREFOUR, NMBS], uncategorized_count: 15 });
+      .mockResolvedValueOnce({ groups: [DELHAIZE], uncategorized_count: 3 })
+      .mockResolvedValueOnce({ groups: [CARREFOUR, SHELL], uncategorized_count: 1 });
     transactionsApi.categorizeUncategorized.mockResolvedValue({ categorized_count: 25, attempted_count: 40 });
     renderPage();
 
-    expect(await screen.findByRole("heading", { name: "Nothing to review" })).toBeInTheDocument();
-    expect(screen.getByText("40 transactions still have no category.")).toBeInTheDocument();
+    expect(await screen.findByText("No category yet")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Guess categories from history" }));
 
     expect(transactionsApi.categorizeUncategorized).toHaveBeenCalledWith();
     await screen.findByText("Guessed 25 of 40.");
     expect(card("Carrefour Market")).toBeDefined();
-    expect(screen.queryByRole("heading", { name: "Nothing to review" })).toBeNull();
+    expect(card("Shell")).toBeDefined();
+    expect(screen.getByRole("button", { name: "Guess categories from history" })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByRole("button", { name: "Confirm 5" })).toHaveFocus());
   });
 
-  it("says so when nothing matched, and points to Transactions instead", async () => {
-    transactionsApi.getReviewGroups.mockResolvedValue({ groups: [], uncategorized_count: 40 });
-    transactionsApi.categorizeUncategorized.mockResolvedValue({ categorized_count: 0, attempted_count: 40 });
+  it("says so when nothing matched, keeps the rows and offers to try again", async () => {
+    transactionsApi.getReviewGroups.mockResolvedValue({ groups: [DELHAIZE], uncategorized_count: 3 });
+    transactionsApi.categorizeUncategorized.mockResolvedValue({ categorized_count: 0, attempted_count: 3 });
     renderPage();
 
     await userEvent.click(await screen.findByRole("button", { name: "Guess categories from history" }));
 
     expect(
-      await screen.findByText(/None of the 40 uncategorized transactions match a payee you've categorized before/),
+      await screen.findByText(/None of the 3 uncategorized transactions match a payee you've categorized before/),
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Categorize them in Transactions" })).toHaveAttribute(
       "href",
       "/transactions",
     );
-    expect(screen.queryByRole("button", { name: "Guess categories from history" })).toBeNull();
+    expect(card("Delhaize")).toBeDefined();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
   });
 
   it("with AI on, guesses from history and AI and splits the result by source", async () => {
     transactionsApi.getReviewGroups
-      .mockResolvedValueOnce({ groups: [], uncategorized_count: 40, ai_enabled: true })
-      .mockResolvedValueOnce({ groups: [CARREFOUR, BISTRO], uncategorized_count: 5, ai_enabled: true });
+      .mockResolvedValueOnce({ groups: [DELHAIZE], uncategorized_count: 40, ai_enabled: true })
+      .mockResolvedValueOnce({ groups: [CARREFOUR, BISTRO, SHELL], uncategorized_count: 5, ai_enabled: true });
     transactionsApi.categorizeUncategorized.mockResolvedValue({
       categorized_count: 35,
       attempted_count: 40,
@@ -413,6 +517,7 @@ describe("ReviewPage empty state", () => {
     expect(screen.getByText("3 new payees couldn't be guessed.")).toBeInTheDocument();
     expect(card("Carrefour Market")).toBeDefined();
     expect(card("Bistro Lumiere")).toBeDefined();
+    expect(card("Shell")).toBeDefined();
   });
 
   it("says when AI didn't respond or the key was rejected", async () => {
@@ -421,8 +526,8 @@ describe("ReviewPage empty state", () => {
       ["key_rejected", "AI isn't working right now. Tell the person who runs Reconciled."],
     ]) {
       transactionsApi.getReviewGroups
-        .mockResolvedValueOnce({ groups: [], uncategorized_count: 40, ai_enabled: true })
-        .mockResolvedValueOnce({ groups: [CARREFOUR], uncategorized_count: 15, ai_enabled: true });
+        .mockResolvedValueOnce({ groups: [DELHAIZE], uncategorized_count: 40, ai_enabled: true })
+        .mockResolvedValueOnce({ groups: [CARREFOUR, SHELL], uncategorized_count: 15, ai_enabled: true });
       transactionsApi.categorizeUncategorized.mockResolvedValue({
         categorized_count: 25,
         attempted_count: 40,
@@ -443,7 +548,7 @@ describe("ReviewPage empty state", () => {
   it("shows that it's working, and that it can take a while", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
-      transactionsApi.getReviewGroups.mockResolvedValue({ groups: [], uncategorized_count: 40, ai_enabled: true });
+      transactionsApi.getReviewGroups.mockResolvedValue({ groups: [DELHAIZE], uncategorized_count: 40, ai_enabled: true });
       const run = pending();
       transactionsApi.categorizeUncategorized.mockReturnValue(run.promise);
       renderPage();
@@ -462,10 +567,10 @@ describe("ReviewPage empty state", () => {
   });
 
   it("with AI on and nothing guessed, offers to try again", async () => {
-    transactionsApi.getReviewGroups.mockResolvedValue({ groups: [], uncategorized_count: 40, ai_enabled: true });
+    transactionsApi.getReviewGroups.mockResolvedValue({ groups: [DELHAIZE], uncategorized_count: 3, ai_enabled: true });
     transactionsApi.categorizeUncategorized.mockResolvedValue({
       categorized_count: 0,
-      attempted_count: 40,
+      attempted_count: 3,
       categorized_by_source: { history: 0, ai: 0 },
       ai: { status: "failed", declined_count: 0 },
     });
@@ -474,10 +579,11 @@ describe("ReviewPage empty state", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Guess categories" }));
 
     expect(
-      await screen.findByText("Couldn't guess a category for any of the 40 uncategorized transactions."),
+      await screen.findByText("Couldn't guess a category for any of the 3 uncategorized transactions."),
     ).toBeInTheDocument();
     expect(screen.getByText("AI guessing didn't respond.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Categorize them in Transactions" })).toBeInTheDocument();
+    expect(card("Delhaize")).toBeDefined();
 
     await userEvent.click(screen.getByRole("button", { name: "Try again" }));
 
@@ -489,6 +595,7 @@ describe("ReviewPage empty state", () => {
     renderPage();
 
     expect(await screen.findByText("Every transaction has a category.")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "No category yet" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Guess categories from history" })).toBeNull();
   });
 });

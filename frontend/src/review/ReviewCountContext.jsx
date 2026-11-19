@@ -4,10 +4,11 @@ import { onDataChanged } from "../lib/dataChanged";
 import { useCoalescedRefresh } from "../lib/useCoalescedRefresh";
 import { useOnVisible } from "../lib/useOnVisible";
 
-// How many transactions have a guessed category nobody confirmed yet, for
-// the nav's Review pill. Layout provides it. It reloads on every route
-// change, after any save the API client announces, and when the tab is shown
-// again. See specs/auto-categorization and specs/ui-shell.
+// How many transactions the Review page asks the user to act on
+// (unconfirmed guesses plus uncategorized rows), for the nav's Review pill.
+// Layout provides it. It reloads on every route change, after any save the
+// API client announces, and when the tab is shown again. See
+// specs/auto-categorization and specs/ui-shell.
 const ReviewCountContext = createContext({ count: 0, refresh: () => {} });
 
 export function ReviewCountProvider({ refreshKey, children }) {

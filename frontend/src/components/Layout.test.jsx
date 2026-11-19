@@ -135,7 +135,7 @@ describe('Layout navigation', () => {
 })
 
 describe('Review count in the navigation', () => {
-  it('shows how many guesses wait for review, in the sidebar and the tab bar', async () => {
+  it('shows how many transactions need review, in the sidebar and the tab bar', async () => {
     transactionsApi.getReviewCount.mockResolvedValue({ count: 14 })
     for (const wide of [true, false]) {
       mockViewport(wide)
