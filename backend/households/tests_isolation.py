@@ -29,6 +29,7 @@ from banksync.models import BankAccountLink, BankConnection, BankCredentials, Se
 from budgets.models import BudgetSettings, Category, CategoryLimit, IncomeLine, PlanBill, PlanBudget, YearlyBudget, YearPlan
 from forecasting.models import ExpectedItem
 from imports.models import AccountImportSettings, ImportSession
+from mcpserver.models import AccessToken
 from transactions.models import Transaction
 
 from .context import household_context
@@ -51,6 +52,7 @@ NO_FOREIGN_IDS = {
     ("put", "api/household/ai/"),  # the active household's
     ("post", "api/household/leave/"),  # the active household's
     ("post", "api/household/invites/"),  # the active household's
+    ("post", "api/mcp-tokens/"),  # the caller's, in the active household
     ("post", "api/household/switch/"),  # tests_api: SwitchTests
     ("post", "api/^accounts/$"),  # no links in the body
     ("put", "api/budgets/settings/"),  # no links in the body
@@ -259,11 +261,18 @@ class ForeignIdTests(Case):
             "line_id": self.theirs["income"].pk if source != MISSING else MISSING,
         }
 
+    def their_token(self):
+        # pk_for builds its whole table on every call, so the owner is made once.
+        owner, _ = get_user_model().objects.get_or_create(username=f"{MARKER} owner")
+        Membership.objects.get_or_create(user=owner, household=self.b)
+        return AccessToken.issue(owner, self.b, MARKER)[0]
+
     def pk_for(self, route):
         """Household B's id for a route; a new route has to be added here."""
         theirs = self.theirs
         table = [
             ("api/household/invites/", Invite.issue(self.b)[0]),
+            ("api/mcp-tokens/", self.their_token()),
             ("api/^accounts/(?P<pk>[^/.]+)/loan", theirs["loan_account"]),
             ("api/^accounts/", theirs["account"]),
             ("api/^categories/", theirs["category"]),

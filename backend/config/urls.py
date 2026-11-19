@@ -19,10 +19,12 @@ from django.contrib import admin
 from django.urls import include, path
 
 from core.views import health
+from mcpserver.server import mcp
 
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("health", health, name="health"),
+    path("mcp", mcp, name="mcp"),
     path("api/", include("core.urls")),
     path("api/", include("households.urls")),
     path("api/", include("accounts.urls")),
@@ -33,4 +35,5 @@ urlpatterns = [
     path("api/", include("reports.urls")),
     path("api/", include("backup.urls")),
     path("api/", include("banksync.urls")),
+    path("api/", include("mcpserver.urls")),
 ]
