@@ -38,7 +38,7 @@
 
 ## 6. Deployment and end-to-end check
 
-- [ ] 6.1 Route `/mcp` to the backend in `k8s/50-ingress.yaml`, and note the endpoint in `k8s/README.md`. Verify with the CI kubeconform command (`-strict -summary`).
+- [x] 6.1 Route `/mcp` to the backend in `k8s/50-ingress.yaml`, and note the endpoint in `k8s/README.md`. Verify with the CI kubeconform command (`-strict -summary`).
 - [x] 6.2 In the running app (run-reconciled skill), create a token in Settings and connect a real MCP client (verified with the official `mcp` Python SDK client, so the user's Claude Code config wasn't touched; `claude mcp add --transport http reconciled <url>/mcp --header "Authorization: Bearer <token>"` is the documented way). List the tools, and check `get_budget`, `search_transactions` and `get_overview` against the Budgets, Transactions and Overview pages. Revoke the token and confirm the client is refused. Also run backend `python manage.py test`, and frontend `npm test`, `npm run lint` and `npm run build`.
 
 ## Workflow follow-up
