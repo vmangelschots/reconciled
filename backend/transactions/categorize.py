@@ -232,47 +232,77 @@ def uncategorized():
     )
 
 
-def review_groups():
-    """The Review page's groups: unconfirmed transactions that share a
-    normalized payee, a direction, a guessed category and a source. History
-    groups come before AI groups, each largest first (most recent first on a
-    tie). History evidence is worked out from the current confirmed history;
-    an AI group carries the model's reason instead."""
-    rows = needs_review().select_related("account").order_by("date", "id")
-    groups = {}
-    for txn in rows:
-        normalized, outflow = payee_key(txn.payee, txn.amount_cents)
-        key = (normalized, outflow, txn.category_id, txn.category_source)
-        group = groups.setdefault(
-            key,
-            {
-                "key": "|".join([normalized, "out" if outflow else "in", str(txn.category_id), txn.category_source]),
-                "direction": "out" if outflow else "in",
-                "category": txn.category_id,
-                "source": txn.category_source,
-                "count": 0,
-                "total_cents": 0,
-                "accounts": [],
-                "transactions": [],
-            },
-        )
-        group["count"] += 1
-        group["total_cents"] += txn.amount_cents
-        group["latest_reason"] = txn.category_reason
-        if txn.account.name not in group["accounts"]:
-            group["accounts"].append(txn.account.name)
-        group["transactions"].append(
-            {
-                "id": txn.id,
-                "date": txn.date.isoformat(),
-                "account": txn.account.name,
-                "payee": txn.payee,
-                "amount_cents": txn.amount_cents,
-                "notes": txn.notes,
-            }
-        )
+# The Review page's third section: rows no guess covered. Not a
+# Transaction.CategorySource, since there is no category at all.
+NO_CATEGORY = "none"
 
-    history = confirmed_history() if groups else {}
+# The order the Review page shows its sections in.
+SOURCE_ORDER = {
+    Transaction.CategorySource.HISTORY: 0,
+    Transaction.CategorySource.AI: 1,
+    NO_CATEGORY: 2,
+}
+
+
+def _add_to_group(groups, txn, normalized, outflow, category_id, source):
+    """Add `txn` to the Review group for its payee, direction, category and
+    source, creating the group first. See review_groups()."""
+    key = (normalized, outflow, category_id, source)
+    group = groups.setdefault(
+        key,
+        {
+            "key": "|".join(
+                [
+                    normalized,
+                    "out" if outflow else "in",
+                    str(category_id) if category_id is not None else NO_CATEGORY,
+                    source,
+                ]
+            ),
+            "direction": "out" if outflow else "in",
+            "category": category_id,
+            "source": source,
+            "count": 0,
+            "total_cents": 0,
+            "accounts": [],
+            "transactions": [],
+        },
+    )
+    group["count"] += 1
+    group["total_cents"] += txn.amount_cents
+    group["latest_reason"] = txn.category_reason
+    if txn.account.name not in group["accounts"]:
+        group["accounts"].append(txn.account.name)
+    group["transactions"].append(
+        {
+            "id": txn.id,
+            "date": txn.date.isoformat(),
+            "account": txn.account.name,
+            "payee": txn.payee,
+            "amount_cents": txn.amount_cents,
+            "notes": txn.notes,
+        }
+    )
+
+
+def review_groups():
+    """The Review page's groups: unconfirmed guesses and rows with no
+    category, each sharing a normalized payee, a direction, a category and
+    a source. History groups come first, AI groups after them and rows with
+    no category last, each largest first (most recent first on a tie).
+    History evidence is worked out from the current confirmed history; an
+    AI group carries the model's reason instead; a no-category group has
+    neither."""
+    groups = {}
+    for txn in needs_review().select_related("account").order_by("date", "id"):
+        normalized, outflow = payee_key(txn.payee, txn.amount_cents)
+        _add_to_group(groups, txn, normalized, outflow, txn.category_id, txn.category_source)
+    for txn in uncategorized().select_related("account").order_by("date", "id"):
+        normalized, outflow = payee_key(txn.payee, txn.amount_cents)
+        _add_to_group(groups, txn, normalized, outflow, None, NO_CATEGORY)
+
+    has_history = any(g["source"] == Transaction.CategorySource.HISTORY for g in groups.values())
+    history = confirmed_history() if has_history else {}
     result = []
     for (normalized, outflow, category_id, source), group in groups.items():
         txns = group["transactions"]
@@ -291,8 +321,8 @@ def review_groups():
             }
         result.append(group)
     # Stable sorts: most recent first, then largest first on top of that,
-    # then history guesses before AI ones.
+    # then history guesses, AI guesses and no-category rows in that order.
     result.sort(key=lambda g: g["date_to"], reverse=True)
     result.sort(key=lambda g: g["count"], reverse=True)
-    result.sort(key=lambda g: g["source"] == Transaction.CategorySource.AI)
+    result.sort(key=lambda g: SOURCE_ORDER[g["source"]])
     return result

@@ -109,11 +109,48 @@ class ReviewApiTests(TestCase):
 
         self.assertEqual(sorted(g["direction"] for g in self.groups()["groups"]), ["in", "out"])
 
+    def test_uncategorized_groups_are_listed_last_by_payee_and_direction(self):
+        self.txn("Carrefour", category=self.groceries, guessed=True)
+        Transaction.objects.create(
+            account=self.checking, date="2026-10-07", amount_cents=-4800, payee="Bistro Lumiere",
+            category=self.household, category_confirmed=False, category_source=AI, category_reason="Restaurant",
+        )
+        for day in (2, 3):
+            self.txn("Delhaize 1234", day=day)
+        self.txn("Delhaize 5678", day=4, account=self.joint)
+        self.txn("DELHAIZE 9999", amount_cents=500, day=5)
+        self.txn("Shell", day=6)
+
+        groups = self.groups()["groups"]
+
+        self.assertEqual([g["source"] for g in groups], ["history", "ai", "none", "none", "none"])
+        self.assertEqual(
+            [(g["payee"], g["count"]) for g in groups[2:]],
+            [("Delhaize 5678", 3), ("Shell", 1), ("DELHAIZE 9999", 1)],
+        )
+        delhaize = groups[2]
+        self.assertEqual(delhaize["direction"], "out")
+        self.assertIsNone(delhaize["category"])
+        self.assertIsNone(delhaize["evidence"])
+        self.assertIsNone(delhaize["reason"])
+        self.assertEqual(delhaize["total_cents"], -3000)
+        self.assertEqual((delhaize["date_from"], delhaize["date_to"]), ("2026-10-02", "2026-10-04"))
+        self.assertEqual(delhaize["accounts"], ["Checking", "Joint"])
+        self.assertEqual(len(delhaize["transactions"]), 3)
+        self.assertEqual(
+            set(delhaize["transactions"][0]), {"id", "date", "account", "payee", "amount_cents", "notes"}
+        )
+        self.assertEqual(groups[4]["direction"], "in")
+
     def test_confirmed_rows_are_not_listed(self):
         self.txn("Carrefour", category=self.groceries)
-        self.txn("Shop")
+        shop = self.txn("Shop")
 
-        self.assertEqual(self.groups()["groups"], [])
+        groups = self.groups()["groups"]
+
+        self.assertEqual(len(groups), 1)
+        self.assertEqual((groups[0]["source"], groups[0]["category"]), ("none", None))
+        self.assertEqual([t["id"] for t in groups[0]["transactions"]], [shop.id])
 
     def test_uncategorized_count_excludes_transfers(self):
         self.txn("Shop")
@@ -130,6 +167,13 @@ class ReviewApiTests(TestCase):
         self.txn("NMBS", category=self.transport, guessed=True)
         self.txn("Bakery", category=self.groceries)
         self.txn("Shop")
+
+        response = self.client.get(reverse("transaction-review-count"))
+        self.assertEqual(response.json(), {"count": 3})
+
+    def test_review_count_with_only_uncategorized_rows(self):
+        self.txn("Shop")
+        self.txn("Bakery")
 
         response = self.client.get(reverse("transaction-review-count"))
         self.assertEqual(response.json(), {"count": 2})
@@ -169,6 +213,17 @@ class ReviewApiTests(TestCase):
             self.assertEqual(txn.category_source, "manual")
         untouched.refresh_from_db()
         self.assertFalse(untouched.category_confirmed)
+
+    def test_confirm_with_a_category_categorizes_uncategorized_rows(self):
+        rows = [self.txn("Delhaize", day=day) for day in (1, 2)]
+
+        response = self.confirm({"ids": [r.id for r in rows], "category": self.groceries.id})
+
+        self.assertEqual(response.json(), {"confirmed_count": 2})
+        for txn in rows:
+            txn.refresh_from_db()
+            self.assertEqual((txn.category, txn.category_confirmed), (self.groceries, True))
+            self.assertEqual(txn.category_source, "manual")
 
     def test_confirm_with_the_guessed_category_keeps_the_source(self):
         guess = self.txn("Carrefour", category=self.groceries, guessed=True)
@@ -256,7 +311,7 @@ class ReviewApiTests(TestCase):
         self.assertEqual(body["categorized_by_source"], {"history": 25, "ai": 10})
         self.assertEqual(body["ai"], {"status": "ok", "declined_count": 5})
         groups = self.groups()["groups"]
-        self.assertEqual([g["source"] for g in groups], ["history"] + ["ai"] * 10)
+        self.assertEqual([g["source"] for g in groups], ["history"] + ["ai"] * 10 + ["none"] * 5)
 
     def test_backfill_reports_a_rejected_key(self):
         body = self.backfill_40(FakeGuesser(status="key_rejected"))
