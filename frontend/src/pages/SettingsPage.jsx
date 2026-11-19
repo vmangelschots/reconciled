@@ -7,6 +7,7 @@ import { AboutSection } from "../components/AboutSection";
 import { AiSection } from "../components/AiSection";
 import { BankConnections } from "../components/BankConnections";
 import { HouseholdSection } from "../components/HouseholdSection";
+import { McpAccessSection } from "../components/McpAccessSection";
 import { Button } from "../components/ui/Button";
 import {
   Dialog,
@@ -85,6 +86,7 @@ export function SettingsPage() {
       <HouseholdSection />
       <BankConnections />
       <AiSection />
+      <McpAccessSection />
 
       <Panel id="backup" title="Backup">
         <div className="divide-y divide-border">

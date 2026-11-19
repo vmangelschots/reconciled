@@ -5,6 +5,13 @@ import { notifyDataChanged } from "../lib/dataChanged";
 // development default.
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 
+/** The absolute URL of a backend path, as another program (an MCP client)
+ * would reach it: the configured API base, or this page's own origin when
+ * the API is same-origin. */
+export function apiUrl(path) {
+  return `${API_BASE_URL || window.location.origin}${path}`;
+}
+
 // The household this page loaded, sent with every request so a tab left on
 // another household can't change this one. See specs/households.
 let household = null;
