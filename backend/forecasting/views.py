@@ -5,7 +5,7 @@ from rest_framework.views import APIView
 
 from accounts.models import Account, tier_position
 from budgets import utils as budget_utils
-from reports.views import import_freshness
+from reports.overview import import_freshness
 
 from .expected import allowed_accounts, allowed_categories, blocked_category_ids, pot_tier
 from .forecast import HORIZONS, NET_WORTH_YEARS, everyday_forecast, net_worth_forecast

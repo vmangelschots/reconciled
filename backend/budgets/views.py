@@ -5,19 +5,16 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from reports.spending import month_spending
 from transactions.loans import sync_loans
 from transactions.models import Transaction
 
 from . import utils
-from .attention import attention_bills, attention_categories, attention_yearly
 from .bill_changes import apply_bills
 from .defaults import set_default
 from .loan_categories import active_loans, loan_categories
 from .models import Bill, BudgetSettings, Category, CategoryLimit, YearlyBudget
 from .serializers import CategorySerializer
-from .summary import budget_rows, budget_totals, uncategorized_spent, yearly_spent_cents
-from .yearly import yearly_rows
+from .month import month_budget
 from .utils import parse_due, parse_month
 
 YEARLY_KINDS = {Category.BudgetKind.YEARLY, Category.BudgetKind.TARGET}
@@ -309,35 +306,7 @@ class BudgetSummaryView(APIView):
         # Loan bills are paid when their installment is matched, so bring
         # the matches up to date first - see openspec/specs/loan-schedules.
         sync_loans(today)
-        current = period_start == today.replace(day=1)
-        days_in_month = (utils.month_range(period_start) - period_start).days
-        pace = today.day / days_in_month if current else None
-        rows = budget_rows(period_start, today)
-        yearly = yearly_rows(period_start, today)
-        yearly_spent = yearly_spent_cents(period_start)
-        _, uncategorized_cents = month_spending(period_start)
-        return Response(
-            {
-                "month": month_param,
-                "categories": rows,
-                "uncategorized_spent_cents": uncategorized_spent(period_start),
-                "yearly_spent_cents": yearly_spent,
-                "yearly": yearly,
-                # The same figures and warnings as the overview's budget tile.
-                "totals": {
-                    **budget_totals(rows, pace),
-                    "yearly_spent_cents": yearly_spent,
-                    "uncategorized_cents": uncategorized_cents,
-                },
-                "pace": pace,
-                "days_left": days_in_month - today.day + 1 if current else None,
-                "attention": {
-                    "categories": attention_categories(rows, pace),
-                    "yearly": attention_yearly(yearly, current),
-                    "bills": attention_bills(rows),
-                },
-            }
-        )
+        return Response({"month": month_param, **month_budget(period_start, today)})
 
 
 def _format_month(value):

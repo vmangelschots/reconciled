@@ -54,3 +54,23 @@ def parse_amount(text):
     if not value.is_finite():
         raise ValueError("must be an amount in euro, for example -42.50")
     return int((value * 100).to_integral_value())
+
+
+def present(value):
+    """A service result as tools return it: every `x_cents` field becomes `x`
+    as a money string, dates become ISO, recursively. So every tool shows
+    money the same way without restating each service's fields."""
+    if isinstance(value, dict):
+        out = {}
+        for key, item in value.items():
+            key = str(key)
+            if key.endswith("_cents") and (item is None or isinstance(item, int)) and not isinstance(item, bool):
+                out[key[: -len("_cents")]] = money(item)
+            else:
+                out[key] = present(item)
+        return out
+    if isinstance(value, (list, tuple)):
+        return [present(item) for item in value]
+    if isinstance(value, date):
+        return value.isoformat()
+    return value
