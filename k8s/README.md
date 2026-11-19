@@ -11,7 +11,7 @@ Everything runs in the `reconciled` namespace, behind one HTTPS hostname.
 | `20-postgres.yaml` | PostgreSQL 16 StatefulSet with a 5Gi volume |
 | `30-backend.yaml` | Django API; migrates and creates your user on startup |
 | `40-frontend.yaml` | The web app (nginx) |
-| `50-ingress.yaml` | HTTPS routing: `/api`, `/admin`, `/static` to the backend, everything else to the frontend |
+| `50-ingress.yaml` | HTTPS routing: `/api`, `/mcp`, `/admin`, `/static` to the backend, everything else to the frontend |
 
 ## Prerequisites
 
@@ -99,6 +99,20 @@ Remove someone from a household in Django admin. To delete a household and all
 its data, for good: `manage.py delete_household <id>`. Run
 `manage.py check_household_integrity` after an upgrade to confirm nothing links
 across households.
+
+### AI assistants (MCP)
+
+`https://<your hostname>/mcp` is a read-only [MCP](https://modelcontextprotocol.io)
+endpoint. Members create a personal access token under **Settings → MCP access**,
+which also shows a configuration to paste into a client. For Claude Code:
+
+```sh
+claude mcp add --transport http reconciled https://<your hostname>/mcp \
+  --header "Authorization: Bearer <token>"
+```
+
+A token reads one household only, for as long as its creator is a member, and
+can't change anything or use the rest of the API.
 
 ### Optional: bank sync
 

@@ -21,25 +21,25 @@
 
 ## 4. Budget and report tools
 
-- [ ] 4.1 `get_budget(month?)` from `budget_rows`/`budget_totals` (with pace for the current month) and the yearly rows. Tests check per-category figures and totals match `/api/budgets/summary/` for the same month, including a parent covering its subcategories and a Bills category.
-- [ ] 4.2 Move the overview's assembly out of `OverviewView.get` into a `reports` service function that the view calls (design D4). Verify the existing `reports/tests_overview.py` passes unchanged.
-- [ ] 4.3 `get_overview(month?)` on that function. A test checks its figures match `/api/reports/overview/` for the same month.
-- [ ] 4.4 `get_spending_report(start, end)` on `spending_report`, with the same 24-month cap and range errors as the API. Tests cover a normal range matching `/api/reports/spending/` and a too-long range error.
-- [ ] 4.5 `get_forecast(days?)` (90 by default) on `everyday_forecast`: daily projected balances and coming-up items with their late state. A test checks it matches `/api/forecast/` for the same horizon.
-- [ ] 4.6 `get_year_plan(year?)` on `year_view` for the Current plan only: year totals, actual spending, income lines and where the year is heading, with drafts left out. A test checks it matches the Current plan API and that an existing draft doesn't appear.
-- [ ] 4.7 `get_net_worth_history(months?)` (12 by default) on `month_end_balances`, total and per tier. Tests cover the default, and less history than asked for.
-- [ ] 4.8 `list_loans` (account, principal, rate, installment, balance owed, next and last installment dates) and `list_tabs` (worded balance such as "owes you 30.00 EUR", open since). Tests check both against the loan schedule and tab APIs.
-- [ ] 4.9 Add an isolation test with two households, each with its own token, calling every registered tool. It asserts no row from the other household appears in any result, and it fails when a new tool isn't covered.
+- [x] 4.1 `get_budget(month?)` from `budget_rows`/`budget_totals` (with pace for the current month) and the yearly rows. Tests check per-category figures and totals match `/api/budgets/summary/` for the same month, including a parent covering its subcategories and a Bills category.
+- [x] 4.2 Move the overview's assembly out of `OverviewView.get` into a `reports` service function that the view calls (design D4). Verify the existing `reports/tests_overview.py` passes unchanged.
+- [x] 4.3 `get_overview(month?)` on that function. A test checks its figures match `/api/reports/overview/` for the same month.
+- [x] 4.4 `get_spending_report(start, end)` on `spending_report`, with the same 24-month cap and range errors as the API. Tests cover a normal range matching `/api/reports/spending/` and a too-long range error.
+- [x] 4.5 `get_forecast(days?)` (90 by default) on `everyday_forecast`: daily projected balances and coming-up items with their late state. A test checks it matches `/api/forecast/` for the same horizon.
+- [x] 4.6 `get_year_plan(year?)` on `year_view` for the Current plan only: year totals, actual spending, income lines and where the year is heading, with drafts left out. A test checks it matches the Current plan API and that an existing draft doesn't appear.
+- [x] 4.7 `get_net_worth_history(months?)` (12 by default) on `month_end_balances`, total and per tier. Tests cover the default, and less history than asked for.
+- [x] 4.8 `list_loans` (account, principal, rate, installment, balance owed, next and last installment dates) and `list_tabs` (worded balance such as "owes you 30.00 EUR", open since). Tests check both against the loan schedule and tab APIs.
+- [x] 4.9 Add an isolation test with two households, each with its own token, calling every registered tool. It asserts no row from the other household appears in any result, and it fails when a new tool isn't covered.
 
 ## 5. Settings: MCP access (frontend)
 
-- [ ] 5.1 Add API helpers in `frontend/src/api/mcpTokens.js` (list, create, revoke) with tests in the style of `client.test.js`.
-- [ ] 5.2 Add `McpAccessSection` to `SettingsPage`, styled like the other Settings panels: the data warning, a name field and Create, a one-time display of the full token with Copy and "won't be shown again", the endpoint URL and client config snippet with Copy (token included right after creation, placeholder otherwise), and a list with name, prefix, created and last used ("Never used"), plus Revoke with confirmation. Component tests cover create, an empty name, copy, the snippet with and without the token, and revoke. Verify `npm test` and `npm run lint` pass.
+- [x] 5.1 Add API helpers in `frontend/src/api/mcpTokens.js` (list, create, revoke) with tests in the style of `client.test.js`.
+- [x] 5.2 Add `McpAccessSection` to `SettingsPage`, styled like the other Settings panels: the data warning, a name field and Create, a one-time display of the full token with Copy and "won't be shown again", the endpoint URL and client config snippet with Copy (token included right after creation, placeholder otherwise), and a list with name, prefix, created and last used ("Never used"), plus Revoke with confirmation. Component tests cover create, an empty name, copy, the snippet with and without the token, and revoke. Verify `npm test` and `npm run lint` pass.
 
 ## 6. Deployment and end-to-end check
 
 - [ ] 6.1 Route `/mcp` to the backend in `k8s/50-ingress.yaml`, and note the endpoint in `k8s/README.md`. Verify with the CI kubeconform command (`-strict -summary`).
-- [ ] 6.2 In the running app (run-reconciled skill), create a token in Settings and connect a real MCP client (e.g. `claude mcp add --transport http reconciled <url>/mcp --header "Authorization: Bearer <token>"`). List the tools, and check `get_budget`, `search_transactions` and `get_overview` against the Budgets, Transactions and Overview pages. Revoke the token and confirm the client is refused. Also run backend `python manage.py test`, and frontend `npm test`, `npm run lint` and `npm run build`.
+- [x] 6.2 In the running app (run-reconciled skill), create a token in Settings and connect a real MCP client (verified with the official `mcp` Python SDK client, so the user's Claude Code config wasn't touched; `claude mcp add --transport http reconciled <url>/mcp --header "Authorization: Bearer <token>"` is the documented way). List the tools, and check `get_budget`, `search_transactions` and `get_overview` against the Budgets, Transactions and Overview pages. Revoke the token and confirm the client is refused. Also run backend `python manage.py test`, and frontend `npm test`, `npm run lint` and `npm run build`.
 
 ## Workflow follow-up
 
