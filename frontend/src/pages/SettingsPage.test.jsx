@@ -31,6 +31,13 @@ vi.mock("../api/household", () => ({
   }),
 }));
 
+vi.mock("../api/mcpTokens", () => ({
+  listTokens: vi.fn().mockResolvedValue([]),
+  createToken: vi.fn(),
+  revokeToken: vi.fn(),
+  mcpEndpoint: vi.fn().mockReturnValue("https://budget.example.com/mcp"),
+}));
+
 vi.mock("../api/version", () => ({
   fetchServerVersion: vi.fn().mockResolvedValue({ version: "dev", commit: null, built: null }),
 }));
