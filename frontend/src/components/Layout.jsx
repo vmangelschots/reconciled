@@ -42,7 +42,8 @@ const NAV_ITEMS = [
   { to: '/settings', label: 'Settings', icon: Settings, group: 'more' },
 ]
 
-// How many guessed categories wait on the Review page; hidden at 0.
+// How many transactions need a category on the Review page (unconfirmed
+// guesses plus uncategorized rows); hidden at 0.
 function ReviewCountPill({ isActive, className }) {
   const { count } = useReviewCount()
   if (!count) return null
