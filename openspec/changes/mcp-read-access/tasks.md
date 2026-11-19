@@ -15,9 +15,9 @@
 
 ## 3. Reference tools
 
-- [ ] 3.1 `list_accounts` (optional `include_archived`) and `list_categories` (tree with parent, budget kind and tab/tab-group flags). Tests check balances match the Accounts API, archived accounts appear only when asked for, and subcategories sit under their parent.
-- [ ] 3.2 `search_transactions`: date range, account ids, category id including subcategories, uncategorized only, case-insensitive payee or notes text, and amount range. Newest first, page size 50 by default and 200 at most, opaque `next_cursor` and `total`; each result is marked when split or a transfer. Tests cover each filter, paging over 320 rows with no cursor on the last page, and a bad cursor returning an error.
-- [ ] 3.3 `get_transaction` with split parts, transfer counterpart account and category confirmed/guessed. Tests cover a split transaction, and an id from another household answering "not found" exactly like an id that never existed.
+- [x] 3.1 `list_accounts` (optional `include_archived`) and `list_categories` (tree with parent, budget kind and tab/tab-group flags). Tests check balances match the Accounts API, archived accounts appear only when asked for, and subcategories sit under their parent.
+- [x] 3.2 `search_transactions`: date range, account ids, category id including subcategories, uncategorized only, case-insensitive payee or notes text, and amount range. Newest first, page size 50 by default and 200 at most, opaque `next_cursor` and `total`; each result is marked when split or a transfer. Tests cover each filter, paging over 320 rows with no cursor on the last page, and a bad cursor returning an error.
+- [x] 3.3 `get_transaction` with split parts, transfer counterpart account and category confirmed/guessed. Tests cover a split transaction, and an id from another household answering "not found" exactly like an id that never existed.
 
 ## 4. Budget and report tools
 
