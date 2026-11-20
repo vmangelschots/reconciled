@@ -2,10 +2,10 @@
 
 ## 1. Demo data command
 
-- [ ] 1.1 Add `backend/*/management/commands/seed_demo.py` with default, `--if-empty` and `--reset` modes as described in design.md, and verify `python manage.py seed_demo --help` lists all three and `manage.py check` passes.
-- [ ] 1.2 Add tests covering: a fresh seed creates the demo user, accounts, bills, budgets, target and loan with dates relative to today; a second default run creates nothing new; `--reset` deletes a visitor-added transaction and restores the demo password; verify with `python manage.py test`.
-- [ ] 1.3 Replace `.claude/skills/run-reconciled/seed.py` with the command: delete the script, point the skill's demo-database section at `manage.py seed_demo`, and verify seeding the local `reconciled_demo` database still produces the household the driver logs into.
-- [ ] 1.4 Make sure the `run-reconciled` skill's demo description still matches what the command creates (accounts, bills, budgets, loan, login); verify by reading the skill against the command output.
+- [x] 1.1 Add `backend/*/management/commands/seed_demo.py` with default, `--if-empty` and `--reset` modes as described in design.md, and verify `python manage.py seed_demo --help` lists all three and `manage.py check` passes.
+- [x] 1.2 Add tests covering: a fresh seed creates the demo user, accounts, bills, budgets, target and loan with dates relative to today; a second default run creates nothing new; `--reset` deletes a visitor-added transaction and restores the demo password; verify with `python manage.py test`.
+- [x] 1.3 Replace `.claude/skills/run-reconciled/seed.py` with the command: delete the script, point the skill's demo-database section at `manage.py seed_demo`, and verify seeding the local `reconciled_demo` database still produces the household the driver logs into.
+- [x] 1.4 Make sure the `run-reconciled` skill's demo description still matches what the command creates (accounts, bills, budgets, loan, login); verify by reading the skill against the command output.
 
 ## 2. Test environment manifests
 
