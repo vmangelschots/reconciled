@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: reconciled-test
+  labels:
+    app.kubernetes.io/name: reconciled
+    app.kubernetes.io/instance: reconciled-test

@@ -38,14 +38,15 @@ migrations. Then it seeds user `demo` / `demo-pass-123` with:
 - a monthly and a yearly budget, and a yearly target;
 - a loan paid from Crelan.
 
-Dates follow today.
+Dates follow today. The same `seed_demo` command seeds the public demo
+environment, so what you see here matches it.
 
 ```bash
 cd backend
 export DJANGO_SECRET_KEY=local-dev DB_HOST=localhost DB_PORT=55432 DB_NAME=reconciled_demo DB_USER=reconciled DB_PASSWORD=reconciled
 docker exec reconciled-test-db psql -U reconciled -d reconciled -c "DROP DATABASE IF EXISTS reconciled_demo" -c "CREATE DATABASE reconciled_demo"
 /tmp/reconciled-venv/bin/python manage.py migrate -v 0
-/tmp/reconciled-venv/bin/python manage.py shell < ../.claude/skills/run-reconciled/seed.py
+/tmp/reconciled-venv/bin/python manage.py seed_demo
 ```
 
 ## Start the servers
