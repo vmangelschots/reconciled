@@ -18,22 +18,22 @@
 ## 3. Update script
 
 - [x] 3.1 Add `k8s/test/update.sh`: resolve the `latest` digest anonymously, compare with `reconciled.dev/rolled-digest` and `reconciled.dev/failed-digest`, restart the backend and frontend, wait for readiness, and record the outcome; verify `sh -n` passes and a `--dry-run` run against the current production digest reports no change.
-- [ ] 3.2 Document the crontab line in `k8s/test/README.md` and the jumpbox note, then verify on the jumpbox that one scheduled run logs "no change".
+- [x] 3.2 Document the crontab line in `k8s/test/README.md` and the jumpbox note, then verify on the jumpbox that one scheduled run logs "no change".
 
 ## 4. Deploy the environment
 
-- [ ] 4.1 Add the Cloudflare record `reconciled-test` → `olympus` (DNS only) and verify `getent hosts reconciled-test.mangelschots.org` resolves.
-- [ ] 4.2 Create `/root/cluster/argo/reconciled-test/` on the jumpbox from `k8s/test/` with its own `secret.yaml` (new Django key and database password, no bank or OpenAI values), run `deploy.sh`, and verify all pods are Ready.
-- [ ] 4.3 Verify the certificate is Ready, `https://reconciled-test.mangelschots.org/` is 200, `/api/auth/me/` is 401, and `/mcp` is routed to the backend.
-- [ ] 4.4 Sign in as the demo user and verify the Overview, Budgets and Forecast pages show the seeded current-month data; compare the reported version with the newest `main` build.
-- [ ] 4.5 Install the `update.sh` crontab entry, verify a no-op run, then verify one automatic rollout after the next image is published to `main`, including the digest annotations.
-- [ ] 4.6 Trigger the reset CronJob by hand, verify visitor-added data is gone, the demo login still works and the pages show today-relative data again.
+- [x] 4.1 Add the Cloudflare record `reconciled-test` → `olympus` (DNS only) and verify `getent hosts reconciled-test.mangelschots.org` resolves.
+- [x] 4.2 Create `/root/cluster/argo/reconciled-test/` on the jumpbox from `k8s/test/` with its own `secret.yaml` (new Django key and database password, no bank or OpenAI values), run `deploy.sh`, and verify all pods are Ready.
+- [x] 4.3 Verify the certificate is Ready, `https://reconciled-test.mangelschots.org/` is 200, `/api/auth/me/` is 401, and `/mcp` is routed to the backend.
+- [x] 4.4 Sign in as the demo user and verify the Overview, Budgets and Forecast pages show the seeded current-month data; compare the reported version with the newest `main` build.
+- [x] 4.5 Install the `update.sh` crontab entry, verify a no-op run, then verify one automatic rollout after the next image is published to `main`, including the digest annotations.
+- [x] 4.6 Trigger the reset CronJob by hand, verify visitor-added data is gone, the demo login still works and the pages show today-relative data again.
 
 ## 5. Integration checks
 
-- [ ] 5.1 Run the CI checks locally (frontend tests/lint/build, backend tests, kubeconform on `k8s/`) and verify all pass.
-- [ ] 5.2 Run the `check-deployment` skill and verify production is unchanged and healthy after the test environment is deployed.
-- [ ] 5.3 Add a pointer in `k8s/README.md` and the `check-deployment` skill to the demo environment, its URL, login and reset time; verify the linked files and hostnames are correct.
+- [x] 5.1 Run the CI checks locally (frontend tests/lint/build, backend tests, kubeconform on `k8s/`) and verify all pass.
+- [x] 5.2 Run the `check-deployment` skill and verify production is unchanged and healthy after the test environment is deployed.
+- [x] 5.3 Add a pointer in `k8s/README.md` and the `check-deployment` skill to the demo environment, its URL, login and reset time; verify the linked files and hostnames are correct.
 
 ## Workflow follow-up
 

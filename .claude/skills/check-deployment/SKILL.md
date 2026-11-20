@@ -66,6 +66,16 @@ Expected healthy state: three pods `Running` and `1/1` (`reconciled-backend-*`,
 `reconciled-frontend-*`, `postgres-*`), plus old `bank-sync-*` pods in
 `Completed`. The backend and frontend log the same version at startup.
 
+## The demo environment
+
+A second, public demo runs on the same cluster in the `reconciled-test`
+namespace: https://reconciled-test.mangelschots.org, login
+`demo` / `demo-pass-123`. Its data is disposable and replaced daily at 04:00 UTC
+by the `reset-demo` CronJob, and `update.sh` rolls it onto each new `latest`
+image every 5 minutes. It shares no database, Secret or storage with production,
+so it is not part of this check. Its manifests and README are in the repository
+at `k8s/test/`; the jumpbox copy is `/root/cluster/argo/reconciled-test/`.
+
 ## Gotchas
 
 - **Public `/health` is not the backend health check.** The ingress sends
