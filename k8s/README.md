@@ -3,6 +3,11 @@
 Plain manifests, applied in filename order with `kubectl apply -f k8s/`.
 Everything runs in the `reconciled` namespace, behind one HTTPS hostname.
 
+The maintainer's cluster also runs a permanent public demo at
+**https://reconciled-test.mangelschots.org** (`demo` / `demo-pass-123`, data
+reset daily). It is a separate namespace with its own manifests in
+[`k8s/test/`](test/README.md), not part of a self-hosted install.
+
 | File | What it creates |
 |---|---|
 | `00-namespace.yaml` | The `reconciled` namespace |
