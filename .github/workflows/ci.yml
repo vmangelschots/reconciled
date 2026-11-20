@@ -75,9 +75,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Validate Kubernetes manifests
+        # The demo environment uses Traefik's Middleware CRD for its HTTP to
+        # HTTPS redirect; kubeconform has no schema for CRDs, so skip unknown
+        # kinds while still validating everything built in.
         run: >-
           docker run --rm -v "$PWD/k8s:/k8s:ro" ghcr.io/yannh/kubeconform:v0.6.7
-          -strict -summary /k8s
+          -strict -ignore-missing-schemas -summary /k8s
 
   images:
     needs: [frontend, backend, manifests]

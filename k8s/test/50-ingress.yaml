@@ -1,0 +1,88 @@
+# One hostname for the whole demo app: the API, the MCP endpoint, Django admin
+# and its static files go to the backend, everything else to the frontend.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: reconciled-test
+  namespace: reconciled-test
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-dns01
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - reconciled-test.mangelschots.org
+      secretName: reconciled-test-mangelschots-org-tls
+  rules:
+    - host: reconciled-test.mangelschots.org
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: reconciled-backend-svc
+                port:
+                  number: 8000
+          - path: /mcp
+            pathType: Prefix
+            backend:
+              service:
+                name: reconciled-backend-svc
+                port:
+                  number: 8000
+          - path: /admin
+            pathType: Prefix
+            backend:
+              service:
+                name: reconciled-backend-svc
+                port:
+                  number: 8000
+          - path: /static
+            pathType: Prefix
+            backend:
+              service:
+                name: reconciled-backend-svc
+                port:
+                  number: 8000
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: reconciled-frontend-svc
+                port:
+                  number: 80
+---
+# Traefik has no global http->https redirect; send plain-http requests to https.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: redirect-https
+  namespace: reconciled-test
+spec:
+  redirectScheme:
+    scheme: https
+    permanent: true
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: reconciled-test-http
+  namespace: reconciled-test
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+    traefik.ingress.kubernetes.io/router.middlewares: reconciled-test-redirect-https@kubernetescrd
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: reconciled-test.mangelschots.org
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: reconciled-frontend-svc
+                port:
+                  number: 80

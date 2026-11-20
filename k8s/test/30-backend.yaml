@@ -1,0 +1,108 @@
+# Django API for the demo environment. The init container applies migrations
+# and seeds the demo household when the database has none. It deliberately
+# does not run bootstrap_user: that would create a second, empty household
+# next to the seeded one, and the demo login comes from the seed.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reconciled-backend
+  namespace: reconciled-test
+  labels:
+    app.kubernetes.io/name: reconciled-backend
+    app.kubernetes.io/instance: reconciled-test
+spec:
+  replicas: 1
+  # Never run an old and a new backend against a just-migrated database.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: reconciled-backend
+  template:
+    metadata:
+      labels:
+        app: reconciled-backend
+    spec:
+      initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z postgres-svc 5432; do
+                echo "Waiting for PostgreSQL to be ready..."
+                sleep 2
+              done
+              echo "PostgreSQL is ready!"
+        - name: migrate
+          image: ghcr.io/vmangelschots/reconciled-backend:latest
+          imagePullPolicy: Always
+          command:
+            - sh
+            - -c
+            - python manage.py migrate --noinput && python manage.py seed_demo --if-empty
+          envFrom:
+            - configMapRef:
+                name: reconciled-config
+            - secretRef:
+                name: reconciled-secrets
+      containers:
+        - name: backend
+          image: ghcr.io/vmangelschots/reconciled-backend:latest
+          imagePullPolicy: Always
+          # Overrides the image entrypoint, which would migrate again.
+          command: ["gunicorn", "config.wsgi:application", "--bind", "0.0.0.0:8000"]
+          ports:
+            - containerPort: 8000
+              name: http
+          envFrom:
+            - configMapRef:
+                name: reconciled-config
+            - secretRef:
+                name: reconciled-secrets
+          # Host: localhost, otherwise Django rejects the pod IP as Host.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+              httpHeaders:
+                - name: Host
+                  value: localhost
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+              httpHeaders:
+                - name: Host
+                  value: localhost
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 50m
+              memory: 192Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: reconciled-backend-svc
+  namespace: reconciled-test
+  labels:
+    app.kubernetes.io/name: reconciled-backend
+spec:
+  type: ClusterIP
+  selector:
+    app: reconciled-backend
+  ports:
+    - name: http
+      protocol: TCP
+      port: 8000
+      targetPort: 8000

@@ -9,11 +9,11 @@
 
 ## 2. Test environment manifests
 
-- [ ] 2.1 Add `k8s/test/00-namespace.yaml`, `10-config.yaml`, `20-postgres.yaml` and a 2Gi PVC for `reconciled-test`, with the hostname, `AI_CATEGORIZATION_ENABLED=false` and no `BANK_SYNC_TIMES`; verify `kubeconform -strict` passes on `k8s/test/`.
-- [ ] 2.2 Add `k8s/test/30-backend.yaml` and `40-frontend.yaml`: init container runs `migrate` then `seed_demo --if-empty` (no `bootstrap_user`), `Recreate` strategy, same probes and resource requests as production; verify kubeconform and that no manifest references `bootstrap_user`.
-- [ ] 2.3 Add `k8s/test/50-ingress.yaml` with the traefik ingress class, `letsencrypt-dns01` issuer, the same path split as production and the HTTP→HTTPS redirect; verify kubeconform and that the hostname appears in exactly the TLS, rule and redirect entries.
-- [ ] 2.4 Add `k8s/test/60-reset.yaml`, a CronJob at `0 4 * * *` UTC running `seed_demo --reset` with the namespace's config and secret, `concurrencyPolicy: Forbid`; verify kubeconform and `kubectl create job --dry-run=client -f k8s/test/60-reset.yaml` renders.
-- [ ] 2.5 Add `k8s/test/README.md` covering the Secret, the Cloudflare record, `deploy.sh`, the update cron and a manual reset; verify every command in it matches a manifest or script that exists.
+- [x] 2.1 Add `k8s/test/00-namespace.yaml`, `10-config.yaml`, `20-postgres.yaml` and a 2Gi PVC for `reconciled-test`, with the hostname, `AI_CATEGORIZATION_ENABLED=false` and no `BANK_SYNC_TIMES`; verify `kubeconform -strict` passes on `k8s/test/`.
+- [x] 2.2 Add `k8s/test/30-backend.yaml` and `40-frontend.yaml`: init container runs `migrate` then `seed_demo --if-empty` (no `bootstrap_user`), `Recreate` strategy, same probes and resource requests as production; verify kubeconform and that no manifest references `bootstrap_user`.
+- [x] 2.3 Add `k8s/test/50-ingress.yaml` with the traefik ingress class, `letsencrypt-dns01` issuer, the same path split as production and the HTTP→HTTPS redirect; verify kubeconform and that the hostname appears in exactly the TLS, rule and redirect entries.
+- [x] 2.4 Add `k8s/test/60-reset.yaml`, a CronJob at `0 4 * * *` UTC running `seed_demo --reset` with the namespace's config and secret, `concurrencyPolicy: Forbid`; verify kubeconform and `kubectl create job --dry-run=client -f k8s/test/60-reset.yaml` renders.
+- [x] 2.5 Add `k8s/test/README.md` covering the Secret, the Cloudflare record, `deploy.sh`, the update cron and a manual reset; verify every command in it matches a manifest or script that exists.
 
 ## 3. Update script
 

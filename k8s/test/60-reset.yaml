@@ -1,0 +1,44 @@
+# Replace the demo data once a day, so the dates the seed creates stay current
+# and anything a visitor entered disappears. The app keeps serving throughout:
+# the command replaces the household in a single transaction.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: reset-demo
+  namespace: reconciled-test
+  labels:
+    app.kubernetes.io/name: reconciled-reset-demo
+    app.kubernetes.io/instance: reconciled-test
+spec:
+  schedule: "0 4 * * *"
+  timeZone: Etc/UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 900
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: reconciled-reset-demo
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: seed
+              image: ghcr.io/vmangelschots/reconciled-backend:latest
+              imagePullPolicy: Always
+              command: ["python", "manage.py", "seed_demo", "--reset"]
+              envFrom:
+                - configMapRef:
+                    name: reconciled-config
+                - secretRef:
+                    name: reconciled-secrets
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 64Mi
+                limits:
+                  cpu: 500m
+                  memory: 256Mi
