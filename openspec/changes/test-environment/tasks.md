@@ -17,7 +17,7 @@
 
 ## 3. Update script
 
-- [ ] 3.1 Add `k8s/test/update.sh`: resolve the `latest` digest anonymously, compare with `reconciled.dev/rolled-digest` and `reconciled.dev/failed-digest`, restart the backend and frontend, wait for readiness, and record the outcome; verify `sh -n` passes and a `--dry-run` run against the current production digest reports no change.
+- [x] 3.1 Add `k8s/test/update.sh`: resolve the `latest` digest anonymously, compare with `reconciled.dev/rolled-digest` and `reconciled.dev/failed-digest`, restart the backend and frontend, wait for readiness, and record the outcome; verify `sh -n` passes and a `--dry-run` run against the current production digest reports no change.
 - [ ] 3.2 Document the crontab line in `k8s/test/README.md` and the jumpbox note, then verify on the jumpbox that one scheduled run logs "no change".
 
 ## 4. Deploy the environment
